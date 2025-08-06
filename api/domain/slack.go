@@ -14,3 +14,7 @@ type SlackMessage struct {
 type SlackRepository interface {
 	GetMessage(ctx context.Context, id string) (*SlackMessage, error)
 }
+
+type SlackService interface {
+	GetMessage(ctx context.Context, id string) (*SlackMessage, error)
+}
