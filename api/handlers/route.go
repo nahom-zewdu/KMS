@@ -9,6 +9,9 @@ func SetupRoutes(router *gin.Engine, service domain.SlackService) {
 	slackHandler := NewSlackHandler(service)
 
 	// Define the route for getting a Slack message by ID
+	router.GET("/", func(c *gin.Context) {
+		c.JSON(200, gin.H{"message": "Welcome to the Slack API!"})
+	})
 
 	router.GET("/slack/message/:id", slackHandler.GetMessage)
 }
