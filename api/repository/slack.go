@@ -16,7 +16,7 @@ func NewSlackRepo(message domain.SlackMessage) domain.SlackRepository {
 	}
 }
 
-func (sr SlackRepo) GetMessage(ctx context.Context, id string) (*domain.SlackMessage, error) {
+func (sr *SlackRepo) GetMessage(ctx context.Context, id string) (*domain.SlackMessage, error) {
 
 	if sr.message.ID == id {
 		return &sr.message, nil
