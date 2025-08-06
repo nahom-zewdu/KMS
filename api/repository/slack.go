@@ -17,9 +17,15 @@ func NewSlackRepo(message domain.SlackMessage) domain.SlackRepository {
 }
 
 func (sr *SlackRepo) GetMessage(ctx context.Context, id string) (*domain.SlackMessage, error) {
+	message := domain.SlackMessage{
+		ID:      id,
+		UserID:  "user123",
+		Text:    "This is a sample message",
+		Channel: "general",
+	}
 
 	if sr.message.ID == id {
-		return &sr.message, nil
+		return &message, nil
 	}
 
 	return nil, nil
