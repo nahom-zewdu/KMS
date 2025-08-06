@@ -24,9 +24,6 @@ func (sr *SlackRepo) GetMessage(ctx context.Context, id string) (*domain.SlackMe
 		Channel: "general",
 	}
 
-	if sr.message.ID == id {
-		return &message, nil
-	}
+	return &message, nil
 
-	return nil, nil
 }
