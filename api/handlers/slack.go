@@ -4,14 +4,14 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/nahom-zewdu/kMS/api/services"
+	"github.com/nahom-zewdu/kMS/api/domain"
 )
 
 type SlackHandler struct {
-	service services.SlackService
+	service domain.SlackService
 }
 
-func NewSlackHandler(service services.SlackService) *SlackHandler {
+func NewSlackHandler(service domain.SlackService) *SlackHandler {
 	return &SlackHandler{
 		service: service,
 	}
