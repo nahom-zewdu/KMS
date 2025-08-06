@@ -1,0 +1,17 @@
+
+
+# Ignore environment files
+.env
+
+
+# ignore go build artifacts
+*.exe
+go.sum
+*.out
+*.test
+*.log
+*.prof
+*.tmp
+*.cache
+*.pid
+*.db
