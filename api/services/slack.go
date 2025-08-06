@@ -4,14 +4,13 @@ import (
 	"context"
 
 	"github.com/nahom-zewdu/kMS/api/domain"
-	"github.com/nahom-zewdu/kMS/api/repository"
 )
 
 type SlackService struct {
-	repo repository.SlackRepo
+	repo domain.SlackRepository
 }
 
-func NewSlackService(repo repository.SlackRepo) domain.SlackService {
+func NewSlackService(repo domain.SlackRepository) domain.SlackService {
 	return &SlackService{
 		repo: repo,
 	}
