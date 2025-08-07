@@ -17,10 +17,17 @@ func NewSupabaseRepo(url, key string) domain.StoragePort {
 	if err != nil {
 		log.Fatalf("Failed to initialize Supabase client: %v", err)
 	}
+
+	log.Println("Supabase client initialized successfully")
 	return &SupabaseClient{client: client}
 }
 
 func (sc *SupabaseClient) Insert(ctx context.Context, table string, data map[string]interface{}) error {
 	_, _, err := sc.client.From(table).Insert(data, false, "", "", "").Execute()
-	return err
+	if err != nil {
+		log.Printf("Error inserting data into table %s: %v", table, err)
+		return err
+	}
+
+	return nil
 }
