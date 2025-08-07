@@ -16,15 +16,12 @@ func NewSlackService(repo domain.SlackRepository) domain.SlackService {
 	}
 }
 
-func (ss *SlackService) GetMessage(ctx context.Context, id string) (*domain.SlackMessage, error) {
+func (ss *SlackService) IngestService(ctx context.Context, data domain.IngestRequest) error {
 
-	message, err := ss.repo.GetMessage(ctx, id)
+	err := ss.repo.IngestRepo(ctx, data)
 	if err != nil {
-		return nil, err
-	}
-	if message != nil {
-		return message, nil
+		return err
 	}
 
-	return nil, nil
+	return nil
 }
