@@ -21,10 +21,15 @@ func (sr *SlackRepo) IngestRepo(ctx context.Context, data domain.IngestRequest) 
 	now := time.Now().UTC()
 
 	insertPayload := map[string]interface{}{
-		"id":         id,
-		"source":     data.Source,
-		"content":    data.Content,
-		"entity_id":  data.EntityID,
+		"id":      id,
+		"source":  data.Source,
+		"content": data.Content,
+		"entity_id": func() interface{} {
+			if data.EntityID == "" {
+				return nil
+			}
+			return data.EntityID
+		}(),
 		"created_at": now,
 	}
 
