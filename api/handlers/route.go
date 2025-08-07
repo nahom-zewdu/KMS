@@ -13,5 +13,5 @@ func SetupRoutes(router *gin.Engine, service domain.SlackService) {
 		c.JSON(200, gin.H{"message": "Welcome to the Slack API!"})
 	})
 
-	router.GET("/slack/message/:id", slackHandler.GetMessage)
+	router.POST("/slack/ingest/", slackHandler.IngestHandler)
 }
