@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -17,19 +18,21 @@ func NewSlackHandler(service domain.SlackService) *SlackHandler {
 	}
 }
 
-func (sh *SlackHandler) GetMessage(c *gin.Context) {
-	id := c.Param("id")
+func (sh *SlackHandler) IngestHandler(c *gin.Context) {
+	var req domain.IngestRequest
 
-	message, err := sh.service.GetMessage(c.Request.Context(), id)
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	ctx := c.Request.Context()
+	err := sh.service.IngestService(ctx, req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve message"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return
 	}
 
-	if message == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Message not found"})
-		return
-	}
-
-	c.JSON(http.StatusOK, message)
+	log.Printf("Received Slack data: %+v", req)
+	c.JSON(http.StatusOK, gin.H{"message": "Message received successfully", "data": req})
 }
