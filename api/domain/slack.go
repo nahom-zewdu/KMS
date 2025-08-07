@@ -4,17 +4,36 @@ import (
 	"context"
 )
 
+type SlackEvent struct {
+	Token     string       `json:"token"`
+	TeamID    string       `json:"team_id"`
+	APIAppID  string       `json:"api_app_id"`
+	Event     SlackMessage `json:"event"`
+	Type      string       `json:"type"`
+	EventID   string       `json:"event_id"`
+	EventTime int64        `json:"event_time"`
+}
+
 type SlackMessage struct {
-	ID      string `json:"id"`
-	UserID  string `json:"user_id"`
-	Text    string `json:"text"`
-	Channel string `json:"channel"`
+	ClientMsgID string `json:"client_msg_id"`
+	Type        string `json:"type"`
+	Text        string `json:"text"`
+	User        string `json:"user"`
+	Ts          string `json:"ts"`
+	Channel     string `json:"channel"`
+	EventTs     string `json:"event_ts"`
+}
+
+type IngestRequest struct {
+	Source   string `json:"source" binding:"required,oneof=slack"`
+	Content  string `json:"content" binding:"required"`
+	EntityID string `json:"entity_id,omitempty"`
 }
 
 type SlackRepository interface {
-	GetMessage(ctx context.Context, id string) (*SlackMessage, error)
+	IngestRepo(ctx context.Context, data IngestRequest) error
 }
 
 type SlackService interface {
-	GetMessage(ctx context.Context, id string) (*SlackMessage, error)
+	IngestService(ctx context.Context, data IngestRequest) error
 }
