@@ -29,7 +29,7 @@ func (sh *SlackHandler) IngestHandler(c *gin.Context) {
 	ctx := c.Request.Context()
 	err := sh.service.IngestService(ctx, req)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
