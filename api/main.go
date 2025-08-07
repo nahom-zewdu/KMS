@@ -7,7 +7,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
-	"github.com/nahom-zewdu/kMS/api/domain"
 	"github.com/nahom-zewdu/kMS/api/handlers"
 	"github.com/nahom-zewdu/kMS/api/repository"
 	"github.com/nahom-zewdu/kMS/api/services"
@@ -21,13 +20,11 @@ func main() {
 		log.Println("No .env file found, proceeding with defaults")
 	}
 
-	message := domain.SlackMessage{
-		ID:      "1",
-		UserID:  "user123",
-		Text:    "This is a sample message",
-		Channel: "general",
-	}
-	repo := repository.NewSlackRepo(message)
+	url := os.Getenv("SUPABASE_URL")
+	key := os.Getenv("SUPABASE_KEY")
+
+	storage := repository.NewSupabaseRepo(url, key)
+	repo := repository.NewSlackRepo(storage)
 	service := services.NewSlackService(repo)
 	handlers.SetupRoutes(r, service)
 
