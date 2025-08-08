@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -33,6 +32,5 @@ func (sh *SlackHandler) IngestHandler(c *gin.Context) {
 		return
 	}
 
-	log.Printf("Received Slack data: %+v", req)
 	c.JSON(http.StatusOK, gin.H{"message": "Message received successfully", "data": req})
 }
