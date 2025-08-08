@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/nahom-zewdu/kMS/api/domain"
 )
 
@@ -29,15 +28,14 @@ func NewRedisStreamPublisher(baseURL, token string) domain.Publisher {
 
 func (rp *RedisStreamPublisher) Publish(ctx context.Context, stream string, job domain.JobPayload) error {
 	id := "*"
-	recordID := uuid.New().String()
 	now := time.Now().UTC().Format(time.RFC3339)
 
 	// Build path-based URL
-	path := fmt.Sprintf("%s/xadd/%s/%s/source/%s/content/%s/created_at/%s/record_id/%s",
+	path := fmt.Sprintf("%s/xadd/%s/%s/record_id/%s/source/%s/content/%s/created_at/%s/",
 		rp.BaseURL,
 		stream,
 		id,
-		recordID,
+		url.PathEscape(job.RecordID),
 		url.PathEscape(job.Source),
 		url.PathEscape(job.Content),
 		url.PathEscape(now),
