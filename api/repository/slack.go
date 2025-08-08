@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/nahom-zewdu/kMS/api/domain"
@@ -16,21 +15,20 @@ func NewSlackRepo(storage domain.StoragePort) domain.SlackRepository {
 	return &SlackRepo{storage: storage}
 }
 
-func (sr *SlackRepo) IngestRepo(ctx context.Context, data domain.IngestRequest) error {
-	id := uuid.New().String()
-	now := time.Now().UTC()
+func (sr *SlackRepo) IngestRepo(ctx context.Context, job domain.JobPayload) error {
 
 	insertPayload := map[string]interface{}{
-		"id":      id,
-		"source":  data.Source,
-		"content": data.Content,
+		"id":        uuid.New().String(),
+		"source":    job.Source,
+		"content":   job.Content,
+		"record_id": job.RecordID,
 		"entity_id": func() interface{} {
-			if data.EntityID == "" {
+			if job.EntityID == "" {
 				return nil
 			}
-			return data.EntityID
+			return job.EntityID
 		}(),
-		"created_at": now,
+		"created_at": job.CreatedAt,
 	}
 
 	return sr.storage.Insert(ctx, "raw_data", insertPayload)
