@@ -31,7 +31,7 @@ type IngestRequest struct {
 }
 
 type SlackRepository interface {
-	IngestRepo(ctx context.Context, data IngestRequest) error
+	IngestRepo(ctx context.Context, data JobPayload) error
 }
 
 type SlackService interface {
