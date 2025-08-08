@@ -20,12 +20,19 @@ func main() {
 		log.Println("No .env file found, proceeding with defaults")
 	}
 
-	url := os.Getenv("SUPABASE_URL")
-	key := os.Getenv("SUPABASE_KEY")
+	supabase_url := os.Getenv("SUPABASE_URL")
+	supabase_key := os.Getenv("SUPABASE_KEY")
 
-	storage := repository.NewSupabaseRepo(url, key)
+	upstash_url := os.Getenv("UPSTASH_REDIS_REST_URL")
+	upstash_token := os.Getenv("UPSTASH_REDIS_REST_TOKEN")
+
+	// Initialize storage and publisher
+	storage := repository.NewSupabaseRepo(supabase_url, supabase_key)
+	publisher := repository.NewRedisStreamPublisher(upstash_url, upstash_token)
+
+	// Initialize repositories and services
 	repo := repository.NewSlackRepo(storage)
-	service := services.NewSlackService(repo)
+	service := services.NewSlackService(repo, publisher)
 	handlers.SetupRoutes(r, service)
 
 	port := os.Getenv("PORT")
