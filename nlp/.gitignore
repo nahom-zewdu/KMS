@@ -1,3 +1,7 @@
 
 
 *.csv
+
+
+# model directories
+ner_model/
