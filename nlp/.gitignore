@@ -1,7 +1,86 @@
 
-
+# Python bytecode files
 *.csv
-
 
 # model directories
 ner_model/
+
+# virtual environment
+venv/
+env/
+__pycache__/
+*.pyc
+.DS_Store
+.idea/
+.vscode/
+.ipynb_checkpoints
+output/
+logs/
+checkpoints/
+results/
+*.log
+*.ckpt
+*.h5
+*.pth
+*.pt
+*.bin
+*.zip
+*.tar.gz
+*.egg-info/
+dist/
+build/
+*.egg
+*.sqlite3
+*.db
+*.sqlite
+*.iml
+*.class
+*.war
+*.jar
+*.swp
+*.swo
+*.out
+*.orig
+*.rej
+*.bak
+*.tmp
+*.old
+*.backup
+*.~*
+*.log
+*.aux
+*.toc
+*.lof
+*.lot
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.blg
+*.bbl
+
+# Environment variables file
+.env
+.env.local
+.env.*.local
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+# Spyder project settings
+.spyderproject
+.spyproject
+# Rope project settings
+.ropeproject
+# mkdocs documentation
+/site
+# mypy
+.mypy_cache/
+.dmypy.json
+# Pyre type checker
+.pyre/
+# pytype static type analyzer
+.pytype/
+# Cython debug symbols
+cython_debug/
+# PyCharm
+.idea/
+# VS Code
+.vscode/
