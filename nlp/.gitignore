@@ -6,6 +6,7 @@
 ner_model/
 
 # virtual environment
+.venv/
 venv/
 env/
 __pycache__/
@@ -57,6 +58,7 @@ build/
 *.synctex.gz
 *.blg
 *.bbl
+uv.lock
 
 # Environment variables file
 .env
