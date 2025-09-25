@@ -28,12 +28,17 @@ func main() {
 
 	// Initialize storage and publisher
 	storage := repository.NewSupabaseRepo(supabase_url, supabase_key)
-	publisher := repository.NewRedisStreamPublisher(upstash_url, upstash_token)
+	publisher := repository.NewRedisStream(upstash_url, upstash_token)
 
 	// Initialize repositories and services
-	repo := repository.NewSlackRepo(storage)
-	service := services.NewSlackService(repo, publisher)
-	handlers.SetupRoutes(r, service)
+	slackRepo := repository.NewSlackRepo(storage)
+	slackService := services.NewSlackService(slackRepo, publisher)
+
+	queryRepo := repository.NewQueryRepository(publisher, storage)
+	queryService := services.NewQueryService(queryRepo)
+
+	// Setup routes
+	handlers.SetupRoutes(r, slackService, queryService)
 
 	port := os.Getenv("PORT")
 	if port == "" {
