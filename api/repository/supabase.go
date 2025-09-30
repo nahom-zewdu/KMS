@@ -2,7 +2,9 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"strings"
 
 	"github.com/nahom-zewdu/kMS/api/domain"
 	"github.com/supabase-community/supabase-go"
@@ -30,4 +32,68 @@ func (sc *SupabaseClient) Insert(ctx context.Context, table string, data map[str
 	}
 
 	return nil
+}
+
+func (sc *SupabaseClient) QueryKnowledgeGraphSupabase(ctx context.Context, query string) (string, error) {
+	// Normalize query for tsvector search
+	normalized := strings.ToLower(strings.TrimSpace(query))
+	queryStr := strings.ReplaceAll(normalized, " ", " & ")
+
+	type EntityResult struct {
+		ID       string                 `json:"id"`
+		Type     string                 `json:"type"`
+		Name     string                 `json:"name"`
+		Metadata map[string]interface{} `json:"metadata"`
+	}
+	var results []EntityResult
+	_, err := sc.client.From("entities").
+		Select("id, type, name, metadata", "", false).
+		TextSearch("search_vector", queryStr, "plain", "english").
+		ExecuteTo(&results)
+	if err != nil {
+		log.Printf("Supabase query error: %v", err)
+		return "", fmt.Errorf("supabase query error: %v", err)
+	}
+
+	// Simple logic: Find person or project, check edges for relationships
+	answer := "No answer found."
+	for _, result := range results {
+		if strings.Contains(normalized, "who owns") && result.Type == "project" {
+			type EdgeResult struct {
+				SourceID string                 `json:"source_id"`
+				TargetID string                 `json:"target_id"`
+				Type     string                 `json:"type"`
+				Metadata map[string]interface{} `json:"metadata"`
+			}
+			var edges []EdgeResult
+			_, err := sc.client.From("edges").
+				Select("source_id, target_id, type, metadata", "", false).
+				Eq("target_id", result.ID).
+				Eq("type", "owns").
+				ExecuteTo(&edges)
+			if err != nil {
+				log.Printf("Error querying edges: %v", err)
+				continue
+			}
+			for _, edge := range edges {
+				var owner EntityResult
+				_, err := sc.client.From("entities").
+					Select("id, type, name, metadata", "", false).
+					Eq("id", edge.SourceID).
+					Single().
+					ExecuteTo(&owner)
+				if err == nil && owner.Name != "" {
+					answer = fmt.Sprintf("%s owns %s", owner.Name, result.Name)
+					if edge.Metadata != nil {
+						if ticket, ok := edge.Metadata["ticket"].(string); ok {
+							answer += fmt.Sprintf(", %s", ticket)
+						}
+					}
+					break
+				}
+			}
+		}
+	}
+
+	return answer, nil
 }

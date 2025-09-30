@@ -9,14 +9,14 @@ import (
 )
 
 type SlackService struct {
-	repo      domain.SlackRepository
-	publisher domain.Publisher
+	repo  domain.SlackRepository
+	redis domain.RedisStream
 }
 
-func NewSlackService(repo domain.SlackRepository, publisher domain.Publisher) domain.SlackService {
+func NewSlackService(repo domain.SlackRepository, redis domain.RedisStream) domain.SlackService {
 	return &SlackService{
-		repo:      repo,
-		publisher: publisher,
+		repo:  repo,
+		redis: redis,
 	}
 }
 
@@ -38,7 +38,7 @@ func (ss *SlackService) IngestService(ctx context.Context, data domain.IngestReq
 		return err
 	}
 
-	err = ss.publisher.Publish(ctx, "slack_jobs", job)
+	err = ss.redis.Publish(ctx, "slack_jobs", job)
 	if err != nil {
 		return err
 	}

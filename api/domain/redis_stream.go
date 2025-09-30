@@ -1,6 +1,9 @@
 package domain
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 type JobPayload struct {
 	ID        string `json:"id"`
@@ -11,6 +14,8 @@ type JobPayload struct {
 	CreatedAt string `json:"created_at" binding:"required"`
 }
 
-type Publisher interface {
+type RedisStream interface {
 	Publish(ctx context.Context, stream string, payload JobPayload) error
+	CacheGet(ctx context.Context, key string) (string, error)
+	CacheSet(ctx context.Context, key, value string, ttl time.Duration) error
 }
