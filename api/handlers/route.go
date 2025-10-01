@@ -5,9 +5,10 @@ import (
 	"github.com/nahom-zewdu/kMS/api/domain"
 )
 
-func SetupRoutes(router *gin.Engine, service domain.SlackService, queryService domain.QueryService) {
+func SetupRoutes(router *gin.Engine, service domain.SlackService, queryService domain.QueryService, slackBot domain.SlackBotService, signingKey string) {
 	slackHandler := NewSlackHandler(service)
 	queryHandler := NewQueryHandler(queryService)
+	slackEventHandler := NewSlackEventHandler(slackBot, signingKey)
 
 	// Define the route for getting a Slack message by ID
 	router.GET("/", func(c *gin.Context) {
@@ -16,4 +17,5 @@ func SetupRoutes(router *gin.Engine, service domain.SlackService, queryService d
 
 	router.POST("/slack/ingest/", slackHandler.IngestHandler)
 	router.POST("/slack/query/", queryHandler.QueryHandler)
+	router.POST("/slack/events/", slackEventHandler.EventHandler)
 }
