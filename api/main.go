@@ -26,19 +26,23 @@ func main() {
 	upstash_url := os.Getenv("UPSTASH_REDIS_REST_URL")
 	upstash_token := os.Getenv("UPSTASH_REDIS_REST_TOKEN")
 
+	slackBotToken := os.Getenv("SLACK_BOT_TOKEN")
+	slackSigningKey := os.Getenv("SLACK_SIGNING_SECRET")
+
 	// Initialize storage and publisher
 	storage := repository.NewSupabaseRepo(supabase_url, supabase_key)
 	publisher := repository.NewRedisStream(upstash_url, upstash_token)
 
 	// Initialize repositories and services
-	slackRepo := repository.NewSlackRepo(storage)
-	slackService := services.NewSlackService(slackRepo, publisher)
-
 	queryRepo := repository.NewQueryRepository(publisher, storage)
 	queryService := services.NewQueryService(queryRepo)
 
+	slackRepo := repository.NewSlackRepo(storage)
+	slackService := services.NewSlackService(slackRepo, publisher)
+	slackBotService := services.NewSlackBot(slackBotToken, slackSigningKey, queryService)
+
 	// Setup routes
-	handlers.SetupRoutes(r, slackService, queryService)
+	handlers.SetupRoutes(r, slackService, queryService, slackBotService, slackSigningKey)
 
 	port := os.Getenv("PORT")
 	if port == "" {
