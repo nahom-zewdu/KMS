@@ -38,6 +38,7 @@ type SlackService interface {
 	IngestService(ctx context.Context, data IngestRequest) error
 }
 
+// New interface for Slack Bot Service
 type SlackBotService interface {
 	HandleEvent(ctx context.Context, teamID, channel, threadTs, query string) error
 }
