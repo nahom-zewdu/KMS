@@ -1,0 +1,99 @@
+package handlers
+
+import (
+	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/nahom-zewdu/kMS/api/domain"
+	"github.com/slack-go/slack/slackevents"
+)
+
+type SlackEventHandler struct {
+	botService domain.SlackBotService
+	signKey    string
+}
+
+func NewSlackEventHandler(botService domain.SlackBotService, signKey string) *SlackEventHandler {
+	return &SlackEventHandler{
+		botService: botService,
+		signKey:    signKey,
+	}
+}
+
+func (seh *SlackEventHandler) EventHandler(c *gin.Context) {
+	body, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read request body"})
+		return
+	}
+
+	// Restore the io.ReadCloser to its original state
+	c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
+
+	// Verify request signature
+	slackSignature := c.GetHeader("X-Slack-Signature")
+	slackRequestTimestamp := c.GetHeader("X-Slack-Request-Timestamp")
+	if !verifySlackSignature(seh.signKey, slackRequestTimestamp, body, slackSignature) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid request signature"})
+		return
+	}
+
+	// Parse the event
+	eventsAPIEvent, err := slackevents.ParseEvent(json.RawMessage(body), slackevents.OptionNoVerifyToken())
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid event payload"})
+		return
+	}
+
+	if eventsAPIEvent.Type == slackevents.URLVerification {
+		var r *slackevents.ChallengeResponse
+		err := json.Unmarshal(body, &r)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse challenge"})
+			return
+		}
+		c.String(http.StatusOK, r.Challenge)
+		return
+	}
+
+	if eventsAPIEvent.Type == slackevents.CallbackEvent {
+		innerEvent := eventsAPIEvent.InnerEvent
+		switch ev := innerEvent.Data.(type) {
+		case *slackevents.AppMentionEvent:
+			go func() {
+				err := seh.botService.HandleEvent(c.Request.Context(), eventsAPIEvent.TeamID, ev.Channel, ev.ThreadTimeStamp, ev.Text)
+				if err != nil {
+					log.Printf("Error handling Slack event: %v", err)
+				}
+			}()
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "event received"})
+}
+
+func verifySlackSignature(signingKey, timestamp string, body []byte, signature string) bool {
+	// Check timestamp to prevent replay attacks (within 5 minutes)
+	ts, err := strconv.ParseInt(timestamp, 10, 64)
+	if err != nil || time.Now().Unix()-ts > 5*60 {
+		return false
+	}
+
+	// Compute HMAC-SHA256
+	sigBase := fmt.Sprintf("v0:%s:%s", timestamp, string(body))
+	h := hmac.New(sha256.New, []byte(signingKey))
+	h.Write([]byte(sigBase))
+	computedSig := "v0=" + hex.EncodeToString(h.Sum(nil))
+
+	return computedSig == signature
+}
