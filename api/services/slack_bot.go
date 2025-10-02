@@ -55,6 +55,7 @@ func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, 
 		return fmt.Errorf("failed to post Slack message: %v", err)
 	}
 
+	log.Printf("Successfully answered query '%s' in channel %s, thread %s", cleanQuery, channel, threadTs)
 	return nil
 }
 
