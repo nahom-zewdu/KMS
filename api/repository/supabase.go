@@ -19,7 +19,6 @@ func NewSupabaseRepo(url, key string) domain.StoragePort {
 	if err != nil {
 		log.Fatalf("Failed to initialize Supabase client: %v", err)
 	}
-
 	log.Println("Supabase client initialized successfully")
 	return &SupabaseClient{client: client}
 }
@@ -30,14 +29,18 @@ func (sc *SupabaseClient) Insert(ctx context.Context, table string, data map[str
 		log.Printf("Error inserting data into table %s: %v", table, err)
 		return err
 	}
-
 	return nil
 }
 
 func (sc *SupabaseClient) QueryKnowledgeGraphSupabase(ctx context.Context, query string) (string, error) {
 	// Normalize query for tsvector search
 	normalized := strings.ToLower(strings.TrimSpace(query))
+	if normalized == "" {
+		log.Printf("Empty query provided")
+		return "No answer found.", nil
+	}
 	queryStr := strings.ReplaceAll(normalized, " ", " & ")
+	log.Printf("Executing TextSearch with query: %s", queryStr)
 
 	type EntityResult struct {
 		ID       string                 `json:"id"`
@@ -46,14 +49,30 @@ func (sc *SupabaseClient) QueryKnowledgeGraphSupabase(ctx context.Context, query
 		Metadata map[string]interface{} `json:"metadata"`
 	}
 	var results []EntityResult
+
+	// Try TextSearch
 	_, err := sc.client.From("entities").
 		Select("id, type, name, metadata", "", false).
 		TextSearch("search_vector", queryStr, "plain", "english").
 		ExecuteTo(&results)
 	if err != nil {
-		log.Printf("Supabase query error: %v", err)
-		return "", fmt.Errorf("supabase query error: %v", err)
+		log.Printf("Supabase TextSearch error: %v, raw: %+v", err, err)
+		// Fallback to ILIKE query
+		log.Printf("Falling back to ILIKE query for: %s", normalized)
+		// Split query to handle multi-word searches
+		words := strings.Fields(normalized)
+		queryBuilder := sc.client.From("entities").Select("id, type, name, metadata", "", false)
+		for _, word := range words {
+			queryBuilder = queryBuilder.Ilike("name", "%"+word+"%")
+		}
+		_, err = queryBuilder.ExecuteTo(&results)
+		if err != nil {
+			log.Printf("Supabase ILIKE query error: %v, raw: %+v", err, err)
+			return "", fmt.Errorf("supabase query error: %v", err)
+		}
 	}
+
+	log.Printf("Supabase query '%s' returned %d results", queryStr, len(results))
 
 	// Simple logic: Find person or project, check edges for relationships
 	answer := "No answer found."
