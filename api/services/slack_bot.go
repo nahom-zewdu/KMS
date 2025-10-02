@@ -60,7 +60,7 @@ func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, 
 
 func removeBotMention(query string) string {
 	// Remove bot mention and Slack user IDs (e.g., <@U09HQ4SH58E>)
-	re := regexp.MustCompile(`<@U[0-9A-Z]+>|@knowsphere`)
+	re := regexp.MustCompile(`<@U[0-9A-Z]+>|@kms`)
 	cleaned := re.ReplaceAllString(query, "")
 	return strings.TrimSpace(cleaned)
 }
