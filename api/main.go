@@ -39,7 +39,7 @@ func main() {
 
 	slackRepo := repository.NewSlackRepo(storage)
 	slackService := services.NewSlackService(slackRepo, publisher)
-	slackBotService := services.NewSlackBot(slackBotToken, slackSigningKey, queryService)
+	slackBotService := services.NewSlackBot(slackBotToken, slackSigningKey, slackService)
 
 	// Setup routes
 	handlers.SetupRoutes(r, slackService, queryService, slackBotService, slackSigningKey)
