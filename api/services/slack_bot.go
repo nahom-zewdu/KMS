@@ -6,6 +6,7 @@ import (
 	"log"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/nahom-zewdu/kMS/api/domain"
 	"github.com/slack-go/slack"
@@ -13,7 +14,7 @@ import (
 
 type SlackBot struct {
 	client       *slack.Client
-	slackService domain.SlackService // For ingestion
+	slackService domain.SlackService
 	signingKey   string
 }
 
@@ -26,6 +27,10 @@ func NewSlackBot(botToken, signingKey string, slackService domain.SlackService) 
 }
 
 func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, query string) error {
+	// Add timeout to context (15s)
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
 	cleanQuery := removeBotMention(query)
 	if cleanQuery == "" {
 		log.Printf("Empty query after cleaning for channel %s, thread %s", channel, threadTs)
@@ -35,13 +40,11 @@ func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, 
 		return err
 	}
 
-	// Determine if it's a query (e.g., contains "who", "what", or "?")
 	isQuery := strings.Contains(strings.ToLower(cleanQuery), "who") ||
 		strings.Contains(strings.ToLower(cleanQuery), "what") ||
 		strings.Contains(cleanQuery, "?")
 
 	if isQuery {
-		// Placeholder: Send query to NLP worker (to be implemented)
 		answer, err := sb.queryNLP(ctx, cleanQuery)
 		if err != nil {
 			log.Printf("NLP query error for '%s': %v", cleanQuery, err)
@@ -58,13 +61,15 @@ func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, 
 			return fmt.Errorf("failed to post Slack message: %v", err)
 		}
 	} else {
-		// Ingest non-query message
 		err := sb.slackService.IngestService(ctx, domain.IngestRequest{
 			Source:  "slack",
 			Content: cleanQuery,
 		})
 		if err != nil {
 			log.Printf("Ingest error for '%s': %v", cleanQuery, err)
+			_, _, err = sb.client.PostMessage(channel,
+				slack.MsgOptionText("Failed to record message. Try again?", false),
+				slack.MsgOptionTS(threadTs))
 			return err
 		}
 		_, _, err = sb.client.PostMessage(channel,
@@ -80,9 +85,7 @@ func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, 
 	return nil
 }
 
-// Placeholder for NLP worker communication (to be replaced in Step 4)
 func (sb *SlackBot) queryNLP(ctx context.Context, query string) (string, error) {
-	// Simulate NLP response until worker is implemented
 	log.Printf("Simulating NLP query for: %s", query)
 	if strings.Contains(strings.ToLower(query), "who owns github") {
 		return "Nahom owns github, Jira #435", nil
@@ -91,10 +94,8 @@ func (sb *SlackBot) queryNLP(ctx context.Context, query string) (string, error) 
 }
 
 func removeBotMention(query string) string {
-	// Remove @KnowSphere and Slack user IDs (case-insensitive)
-	re := regexp.MustCompile(`(?i)<@U[0-9A-Z]+>|@KnowSphere`)
+	re := regexp.MustCompile(`(?i)<@U[0-9A-Z]+>|@kms`)
 	cleaned := re.ReplaceAllString(query, "")
-	// Remove invalid characters
 	reInvalid := regexp.MustCompile(`[^a-zA-Z0-9\s\?\.,#]`)
 	cleaned = reInvalid.ReplaceAllString(cleaned, "")
 	return strings.TrimSpace(cleaned)
