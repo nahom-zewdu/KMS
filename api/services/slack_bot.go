@@ -27,8 +27,7 @@ func NewSlackBot(botToken, signingKey string, slackService domain.SlackService) 
 }
 
 func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, query string) error {
-	// Add timeout to context (15s)
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second) // Extended timeout
 	defer cancel()
 
 	cleanQuery := removeBotMention(query)
@@ -65,15 +64,17 @@ func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, 
 			Source:  "slack",
 			Content: cleanQuery,
 		})
+		msg := "Message recorded."
 		if err != nil {
 			log.Printf("Ingest error for '%s': %v", cleanQuery, err)
-			_, _, err = sb.client.PostMessage(channel,
-				slack.MsgOptionText("Failed to record message. Try again?", false),
-				slack.MsgOptionTS(threadTs))
-			return err
+			if strings.Contains(err.Error(), "failed to publish to Redis stream") {
+				msg = "Message recorded in database, but failed to queue for processing. Try again later."
+			} else {
+				msg = "Failed to record message. Try again?"
+			}
 		}
 		_, _, err = sb.client.PostMessage(channel,
-			slack.MsgOptionText("Message recorded.", false),
+			slack.MsgOptionText(msg, false),
 			slack.MsgOptionTS(threadTs))
 		if err != nil {
 			log.Printf("Failed to post Slack message: %v", err)
