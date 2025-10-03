@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -40,6 +41,7 @@ func (ss *SlackService) IngestService(ctx context.Context, data domain.IngestReq
 
 	err = ss.redis.Publish(ctx, "slack_jobs", job)
 	if err != nil {
+		log.Printf("Redis publish failed, but data stored in Supabase: %v", err)
 		return err
 	}
 
