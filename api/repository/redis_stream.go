@@ -23,7 +23,7 @@ func NewRedisStream(baseURL, token string) domain.RedisStream {
 	return &RedisStream{
 		BaseURL: baseURL,
 		Token:   token,
-		Client:  &http.Client{Timeout: 10 * time.Second}, // Add client timeout
+		Client:  &http.Client{Timeout: 10 * time.Second},
 	}
 }
 
@@ -31,7 +31,6 @@ func (rs *RedisStream) Publish(ctx context.Context, stream string, job domain.Jo
 	id := "*"
 	now := time.Now().UTC().Format(time.RFC3339)
 
-	// Build path-based URL
 	path := fmt.Sprintf("%s/xadd/%s/%s/record_id/%s/source/%s/content/%s/created_at/%s/",
 		rs.BaseURL,
 		stream,
@@ -46,10 +45,15 @@ func (rs *RedisStream) Publish(ctx context.Context, stream string, job domain.Jo
 		path += fmt.Sprintf("/entity_id/%s", url.PathEscape(job.EntityID))
 	}
 
-	// Retry logic (3 attempts, 500ms backoff)
 	maxRetries := 3
 	backoff := 500 * time.Millisecond
 	for attempt := 1; attempt <= maxRetries; attempt++ {
+		// Check if context is canceled
+		if ctx.Err() != nil {
+			log.Printf("Attempt %d: Context canceled before request: %v", attempt, ctx.Err())
+			return fmt.Errorf("publish canceled: %v", ctx.Err())
+		}
+
 		req, err := http.NewRequestWithContext(ctx, "POST", path, nil)
 		if err != nil {
 			log.Printf("Attempt %d: Failed to create Redis request: %v", attempt, err)
@@ -62,11 +66,11 @@ func (rs *RedisStream) Publish(ctx context.Context, stream string, job domain.Jo
 		resp, err := rs.Client.Do(req)
 		if err != nil {
 			log.Printf("Attempt %d: Redis publish error: %v, URL: %s", attempt, err, path)
-			if attempt == maxRetries {
+			if attempt == maxRetries || ctx.Err() != nil {
 				return fmt.Errorf("failed to publish to Redis stream after %d attempts: %v", maxRetries, err)
 			}
 			time.Sleep(backoff)
-			backoff *= 2 // Exponential backoff
+			backoff *= 2
 			continue
 		}
 		defer resp.Body.Close()
