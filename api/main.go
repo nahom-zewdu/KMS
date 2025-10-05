@@ -1,56 +1,62 @@
-// main.go
 package main
 
 import (
-	"log"
-	"os"
+    "log"
+    "os"
 
-	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
-	"github.com/nahom-zewdu/kMS/api/handlers"
-	"github.com/nahom-zewdu/kMS/api/repository"
-	"github.com/nahom-zewdu/kMS/api/services"
+    "github.com/gin-gonic/gin"
+    "github.com/go-redis/redis/v9"
+    "github.com/joho/godotenv"
+    "github.com/nahom-zewdu/kMS/api/handlers"
+    "github.com/nahom-zewdu/kMS/api/repository"
+    "github.com/nahom-zewdu/kMS/api/services"
 )
 
 func main() {
-	r := gin.Default()
+    r := gin.Default()
 
-	// Load environment variables from .env file
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, proceeding with defaults")
-	}
+    if err := godotenv.Load(); err != nil {
+        log.Println("No .env file found, proceeding with defaults")
+    }
 
-	supabase_url := os.Getenv("SUPABASE_URL")
-	supabase_key := os.Getenv("SUPABASE_KEY")
+    supabaseURL := os.Getenv("SUPABASE_URL")
+    supabaseKey := os.Getenv("SUPABASE_KEY")
+    upstashURL := os.Getenv("UPSTASH_REDIS_REST_URL")
+    upstashToken := os.Getenv("UPSTASH_REDIS_REST_TOKEN")
+    slackBotToken := os.Getenv("SLACK_BOT_TOKEN")
+    slackSigningKey := os.Getenv("SLACK_SIGNING_SECRET")
 
-	upstash_url := os.Getenv("UPSTASH_REDIS_REST_URL")
-	upstash_token := os.Getenv("UPSTASH_REDIS_REST_TOKEN")
+    // Initialize storage and publisher
+    storage := repository.NewSupabaseRepo(supabaseURL, supabaseKey)
+    publisher := repository.NewRedisStream(upstashURL, upstashToken)
 
-	slackBotToken := os.Getenv("SLACK_BOT_TOKEN")
-	slackSigningKey := os.Getenv("SLACK_SIGNING_SECRET")
+    // Initialize Redis for Pub/Sub
+    redisClient := redis.NewClient(&redis.Options{
+        Addr:     upstashURL,  # Use your Upstash Redis URL
+        Password: upstashToken,
+        DB:       0,
+    })
+    if err := redisClient.Ping(context.Background()).Err(); err != nil {
+        log.Fatalf("Failed to initialize Redis client: %v", err)
+    }
 
-	// Initialize storage and publisher
-	storage := repository.NewSupabaseRepo(supabase_url, supabase_key)
-	publisher := repository.NewRedisStream(upstash_url, upstash_token)
+    // Initialize repositories and services
+    slackRepo := repository.NewSlackRepo(storage)
+    queryRepo := repository.NewQueryRepo(storage, publisher)  # Assuming QueryRepo uses publisher for cache
+    slackService := services.NewSlackService(slackRepo, publisher)
+    queryService := services.NewQueryService(queryRepo)
+    slackBotService := services.NewSlackBot(slackBotToken, slackSigningKey, slackService, redisClient)
 
-	// Initialize repositories and services
-	queryRepo := repository.NewQueryRepository(publisher, storage)
-	queryService := services.NewQueryService(queryRepo)
+    // Setup routes
+    handlers.SetupRoutes(r, slackService, queryService, slackBotService, slackSigningKey)
 
-	slackRepo := repository.NewSlackRepo(storage)
-	slackService := services.NewSlackService(slackRepo, publisher)
-	slackBotService := services.NewSlackBot(slackBotToken, slackSigningKey, slackService)
+    port := os.Getenv("PORT")
+    if port == "" {
+        port = "8080"
+    }
 
-	// Setup routes
-	handlers.SetupRoutes(r, slackService, queryService, slackBotService, slackSigningKey)
-
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-
-	log.Printf("Starting server on port %s\n", port)
-	if err := r.Run(":" + port); err != nil {
-		log.Fatalf("Server failed to start: %v", err)
-	}
+    log.Printf("Starting server on port %s\n", port)
+    if err := r.Run(":" + port); err != nil {
+        log.Fatalf("Server failed to start: %v", err)
+    }
 }
