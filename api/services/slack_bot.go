@@ -21,10 +21,10 @@ type SlackBot struct {
 	signingKey    string
 }
 
-func NewSlackBot(botToken, signingKey string, slackService domain.IngestService, redis *redis.Client) domain.SlackBotService {
+func NewSlackBot(botToken, signingKey string, ingestService domain.IngestService, redis *redis.Client) domain.SlackBotService {
 	return &SlackBot{
 		client:        slack.New(botToken),
-		ingestService: slackService,
+		ingestService: ingestService,
 		redis:         redis,
 		signingKey:    signingKey,
 	}
@@ -43,19 +43,33 @@ func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, 
 		return err
 	}
 
-	isQuery := strings.Contains(strings.ToLower(cleanQuery), "who") ||
-		strings.Contains(strings.ToLower(cleanQuery), "what") ||
-		strings.Contains(cleanQuery, "?")
-
-	if isQuery {
+	// All @KMS mentions are queries
+	if strings.Contains(query, "<@") { // Check raw query for mention
 		queryID := uuid.New().String()
-		// Publish query to Redis Streams
-		err := sb.ingestService.IngestService(ctx, domain.IngestRequest{
-			Source:  "slack",
-			Content: cleanQuery,
-		})
+		job := domain.JobPayload{
+			RecordID:  queryID,
+			Source:    "slack",
+			Content:   cleanQuery,
+			CreatedAt: time.Now().UTC().Format(time.RFC3339),
+		}
+
+		// Publish to query_jobs
+		err := sb.redis.XAdd(ctx, &redis.XAddArgs{
+			Stream: "query_jobs",
+			ID:     "*",
+			Values: map[string]interface{}{
+				"record_id":  job.RecordID,
+				"source":     job.Source,
+				"content":    job.Content,
+				"created_at": job.CreatedAt,
+			},
+		}).Err()
 		if err != nil {
-			log.Printf("Ingest error for query '%s': %v", cleanQuery, err)
+			log.Printf("Failed to publish to query_jobs: %v", err)
+			_, _, err = sb.client.PostMessage(channel,
+				slack.MsgOptionText("Sorry, I couldn't process that query. Try again?", false),
+				slack.MsgOptionTS(threadTs))
+			return err
 		}
 
 		// Subscribe to Pub/Sub for answer
@@ -79,6 +93,7 @@ func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, 
 			return fmt.Errorf("failed to post Slack message: %v", err)
 		}
 	} else {
+		// Ingest normal messages
 		err := sb.ingestService.IngestService(ctx, domain.IngestRequest{
 			Source:  "slack",
 			Content: cleanQuery,
@@ -86,7 +101,11 @@ func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, 
 		msg := "Message recorded."
 		if err != nil {
 			log.Printf("Ingest error for '%s': %v", cleanQuery, err)
-			msg = "Failed to record message. Try again?"
+			if strings.Contains(err.Error(), "failed to publish to Redis stream") {
+				msg = "Message recorded in database, but failed to queue for processing."
+			} else {
+				msg = "Failed to record message. Try again?"
+			}
 		}
 		_, _, err = sb.client.PostMessage(channel,
 			slack.MsgOptionText(msg, false),
@@ -106,7 +125,7 @@ func (sb *SlackBot) GetBotID() string {
 }
 
 func removeBotMention(query string) string {
-	re := regexp.MustCompile(`(?i)<@U[0-9A-Z]+>|@KnowSphere`)
+	re := regexp.MustCompile(`(?i)<@U[0-9A-Z]+>|@kms`)
 	cleaned := re.ReplaceAllString(query, "")
 	reInvalid := regexp.MustCompile(`[^a-zA-Z0-9\s\?\.,#]`)
 	cleaned = reInvalid.ReplaceAllString(cleaned, "")
