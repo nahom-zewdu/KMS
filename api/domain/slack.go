@@ -30,7 +30,7 @@ type IngestRequest struct {
 	EntityID string `json:"entity_id,omitempty"`
 }
 
-type SlackRepository interface {
+type IngestRepository interface {
 	IngestRepo(ctx context.Context, data JobPayload) error
 }
 
