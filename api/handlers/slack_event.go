@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -70,8 +71,11 @@ func (seh *SlackEventHandler) EventHandler(c *gin.Context) {
 		switch ev := innerEvent.Data.(type) {
 		case *slackevents.AppMentionEvent:
 			log.Printf("Handling app_mention event: %s", ev.Text)
+			// Use new context to avoid HTTP request cancellation
 			go func() {
-				err := seh.botService.HandleEvent(c.Request.Context(), eventsAPIEvent.TeamID, ev.Channel, ev.ThreadTimeStamp, ev.Text)
+				ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+				defer cancel()
+				err := seh.botService.HandleEvent(ctx, eventsAPIEvent.TeamID, ev.Channel, ev.ThreadTimeStamp, ev.Text)
 				if err != nil {
 					log.Printf("Error handling app_mention event: %v", err)
 				}
