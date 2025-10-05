@@ -39,11 +39,8 @@ func (seh *SlackEventHandler) EventHandler(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read request body"})
 		return
 	}
-
-	// Restore the io.ReadCloser to its original state
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
 
-	// Verify request signature
 	slackSignature := c.GetHeader("X-Slack-Signature")
 	slackRequestTimestamp := c.GetHeader("X-Slack-Request-Timestamp")
 	if !verifySlackSignature(seh.signKey, slackRequestTimestamp, body, slackSignature) {
@@ -51,7 +48,6 @@ func (seh *SlackEventHandler) EventHandler(c *gin.Context) {
 		return
 	}
 
-	// Parse the event
 	eventsAPIEvent, err := slackevents.ParseEvent(json.RawMessage(body), slackevents.OptionNoVerifyToken())
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid event payload"})
@@ -73,15 +69,17 @@ func (seh *SlackEventHandler) EventHandler(c *gin.Context) {
 		innerEvent := eventsAPIEvent.InnerEvent
 		switch ev := innerEvent.Data.(type) {
 		case *slackevents.AppMentionEvent:
+			log.Printf("Handling app_mention event: %s", ev.Text)
 			go func() {
 				err := seh.botService.HandleEvent(c.Request.Context(), eventsAPIEvent.TeamID, ev.Channel, ev.ThreadTimeStamp, ev.Text)
 				if err != nil {
-					log.Printf("Error handling Slack event: %v", err)
+					log.Printf("Error handling app_mention event: %v", err)
 				}
 			}()
 		case *slackevents.MessageEvent:
-			// Treat as normal message ingestion if not a mention
-			if !strings.Contains(ev.Text, "<@"+seh.botService.GetBotID()+">") {
+			// Ingest only non-mention, non-bot messages
+			if !strings.Contains(ev.Text, "<@") && ev.User != "" && ev.BotID == "" {
+				log.Printf("Handling message event: %s", ev.Text)
 				err := seh.ingestService.IngestService(c.Request.Context(), domain.IngestRequest{
 					Source:  "slack",
 					Content: ev.Text,
@@ -90,7 +88,6 @@ func (seh *SlackEventHandler) EventHandler(c *gin.Context) {
 					log.Printf("Failed to ingest normal message: %v", err)
 				}
 			}
-
 		}
 	}
 
@@ -98,17 +95,13 @@ func (seh *SlackEventHandler) EventHandler(c *gin.Context) {
 }
 
 func verifySlackSignature(signingKey, timestamp string, body []byte, signature string) bool {
-	// Check timestamp to prevent replay attacks (within 5 minutes)
 	ts, err := strconv.ParseInt(timestamp, 10, 64)
 	if err != nil || time.Now().Unix()-ts > 5*60 {
 		return false
 	}
-
-	// Compute HMAC-SHA256
 	sigBase := fmt.Sprintf("v0:%s:%s", timestamp, string(body))
 	h := hmac.New(sha256.New, []byte(signingKey))
 	h.Write([]byte(sigBase))
 	computedSig := "v0=" + hex.EncodeToString(h.Sum(nil))
-
 	return computedSig == signature
 }
