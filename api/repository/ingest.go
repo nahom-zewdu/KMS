@@ -11,7 +11,7 @@ type IngestRepository struct {
 	storage domain.StoragePort
 }
 
-func NewSlackRepo(storage domain.StoragePort) domain.IngestRepository {
+func NewIngestRepository(storage domain.StoragePort) domain.IngestRepository {
 	return &IngestRepository{storage: storage}
 }
 
