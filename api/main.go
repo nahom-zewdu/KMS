@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"log"
 	"os"
 
@@ -22,44 +23,38 @@ func main() {
 
 	supabaseURL := os.Getenv("SUPABASE_URL")
 	supabaseKey := os.Getenv("SUPABASE_KEY")
-
-	upstashRestURL := os.Getenv("UPSTASH_REDIS_REST_URL")
-	upstashRestToken := os.Getenv("UPSTASH_REDIS_REST_TOKEN")
-	upstashRedisURL := os.Getenv("UPSTASH_REDIS_URL")
-	// upstashRedisToken := os.Getenv("UPSTASH_REDIS_TOKEN")
-
+	upstashRedisURL := os.Getenv("UPSTASH_REDIS_URL") // e.g., sought-perch-5675.upstash.io:6379
+	upstashRedisToken := os.Getenv("UPSTASH_REDIS_TOKEN")
 	slackBotToken := os.Getenv("SLACK_BOT_TOKEN")
 	slackSigningKey := os.Getenv("SLACK_SIGNING_SECRET")
 
-	// Initialize storage and publisher
+	// Initialize storage
 	storage := repository.NewSupabaseRepo(supabaseURL, supabaseKey)
-	publisher := repository.NewRedisStream(upstashRestURL, upstashRestToken)
 
-	// Initialize Redis for Pub/Sub
-	opt, err := redis.ParseURL(upstashRedisURL)
-	if err != nil {
-		log.Fatalf("Failed to parse Redis URL: %v", err)
-	}
-	// opt.Password = upstashRedisToken // Set the password from the environment variable
-
-	redisClient := redis.NewClient(opt)
+	// Initialize Redis for Streams, Pub/Sub, caching
+	redisClient := redis.NewClient(&redis.Options{
+		Addr:      upstashRedisURL,
+		Password:  upstashRedisToken,
+		DB:        0,
+		TLSConfig: &tls.Config{InsecureSkipVerify: true}, // Upstash requires TLS
+	})
 	if err := redisClient.Ping(context.Background()).Err(); err != nil {
 		log.Fatalf("Failed to initialize Redis client: %v", err)
 	}
 
 	// Initialize repositories and services
-	slackRepo := repository.NewIngestRepository(storage)
-	queryRepo := repository.NewQueryRepository(publisher, storage)
-	slackService := services.NewIngestService(slackRepo, publisher)
+	ingestRepo := repository.NewIngestRepository(storage)
+	queryRepo := repository.NewQueryRepository(redisClient, storage)
+	ingestService := services.NewIngestService(ingestRepo, redisClient)
 	queryService := services.NewQueryService(queryRepo)
-	slackBotService := services.NewSlackBot(slackBotToken, slackSigningKey, slackService, redisClient)
+	slackBotService := services.NewSlackBot(slackBotToken, slackSigningKey, ingestService, redisClient)
 
 	// Setup routes
-	handlers.SetupRoutes(r, slackService, queryService, slackBotService, slackSigningKey)
+	handlers.SetupRoutes(r, ingestService, queryService, slackBotService, slackSigningKey)
 
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8080"
+		port = "9090"
 	}
 
 	log.Printf("Starting server on port %s\n", port)
