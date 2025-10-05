@@ -101,6 +101,10 @@ func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, 
 	return nil
 }
 
+func (sb *SlackBot) GetBotID() string {
+	return sb.signingKey
+}
+
 func removeBotMention(query string) string {
 	re := regexp.MustCompile(`(?i)<@U[0-9A-Z]+>|@KnowSphere`)
 	cleaned := re.ReplaceAllString(query, "")
