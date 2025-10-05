@@ -42,9 +42,12 @@ func main() {
 		log.Fatalf("Failed to initialize Redis client: %v", err)
 	}
 
+	// Initialize RedisStream
+	redisStream := repository.NewRedisStream(redisClient)
+
 	// Initialize repositories and services
 	ingestRepo := repository.NewIngestRepository(storage)
-	queryRepo := repository.NewQueryRepository(redisClient, storage)
+	queryRepo := repository.NewQueryRepository(redisStream, storage) // Use redisStream
 	ingestService := services.NewIngestService(ingestRepo, redisClient)
 	queryService := services.NewQueryService(queryRepo)
 	slackBotService := services.NewSlackBot(slackBotToken, slackSigningKey, ingestService, redisClient)
