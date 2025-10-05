@@ -5,10 +5,10 @@ import (
 	"github.com/nahom-zewdu/kMS/api/domain"
 )
 
-func SetupRoutes(router *gin.Engine, slackService domain.SlackService, queryService domain.QueryService, slackBot domain.SlackBotService, signingKey string) {
-	slackHandler := NewSlackHandler(slackService)
+func SetupRoutes(router *gin.Engine, ingestService domain.IngestService, queryService domain.QueryService, slackBot domain.SlackBotService, signingKey string) {
+	slackHandler := NewSlackHandler(ingestService)
 	queryHandler := NewQueryHandler(queryService)
-	eventHandler := NewSlackEventHandler(slackBot, signingKey)
+	eventHandler := NewSlackEventHandler(slackBot, ingestService, signingKey)
 
 	router.GET("/", func(c *gin.Context) {
 		c.JSON(200, gin.H{"message": "Welcome to the Slack API!"})
