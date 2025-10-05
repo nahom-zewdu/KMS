@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -19,14 +20,16 @@ import (
 )
 
 type SlackEventHandler struct {
-	botService domain.SlackBotService
-	signKey    string
+	botService    domain.SlackBotService
+	ingestService domain.IngestService
+	signKey       string
 }
 
-func NewSlackEventHandler(botService domain.SlackBotService, signKey string) *SlackEventHandler {
+func NewSlackEventHandler(botService domain.SlackBotService, ingestService domain.IngestService, signKey string) *SlackEventHandler {
 	return &SlackEventHandler{
-		botService: botService,
-		signKey:    signKey,
+		botService:    botService,
+		ingestService: ingestService,
+		signKey:       signKey,
 	}
 }
 
@@ -76,6 +79,18 @@ func (seh *SlackEventHandler) EventHandler(c *gin.Context) {
 					log.Printf("Error handling Slack event: %v", err)
 				}
 			}()
+		case *slackevents.MessageEvent:
+			// Treat as normal message ingestion if not a mention
+			if !strings.Contains(ev.Text, "<@"+seh.botService.GetBotID()+">") {
+				err := seh.ingestService.IngestService(c.Request.Context(), domain.IngestRequest{
+					Source:  "slack",
+					Content: ev.Text,
+				})
+				if err != nil {
+					log.Printf("Failed to ingest normal message: %v", err)
+				}
+			}
+
 		}
 	}
 
