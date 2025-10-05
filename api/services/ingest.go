@@ -14,7 +14,7 @@ type IngestService struct {
 	redis domain.RedisStream
 }
 
-func NewSlackService(repo domain.IngestRepository, redis domain.RedisStream) domain.IngestService {
+func NewIngestService(repo domain.IngestRepository, redis domain.RedisStream) domain.IngestService {
 	return &IngestService{
 		repo:  repo,
 		redis: redis,
