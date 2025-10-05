@@ -42,9 +42,9 @@ func main() {
 	}
 
 	// Initialize repositories and services
-	slackRepo := repository.NewSlackRepo(storage)
+	slackRepo := repository.NewIngestRepository(storage)
 	queryRepo := repository.NewQueryRepository(publisher, storage)
-	slackService := services.NewSlackService(slackRepo, publisher)
+	slackService := services.NewIngestService(slackRepo, publisher)
 	queryService := services.NewQueryService(queryRepo)
 	slackBotService := services.NewSlackBot(slackBotToken, slackSigningKey, slackService, redisClient)
 
