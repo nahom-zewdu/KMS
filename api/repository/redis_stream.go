@@ -2,153 +2,79 @@ package repository
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/nahom-zewdu/kMS/api/domain"
+	"github.com/redis/go-redis/v9"
 )
 
 type RedisStream struct {
-	BaseURL string
-	Token   string
-	Client  *http.Client
+	client *redis.Client
 }
 
-func NewRedisStream(baseURL, token string) domain.RedisStream {
-	return &RedisStream{
-		BaseURL: baseURL,
-		Token:   token,
-		Client:  &http.Client{Timeout: 10 * time.Second},
-	}
+func NewRedisStream(client *redis.Client) domain.RedisStream {
+	return &RedisStream{client: client}
 }
 
 func (rs *RedisStream) Publish(ctx context.Context, stream string, job domain.JobPayload) error {
-	id := "*"
-	now := time.Now().UTC().Format(time.RFC3339)
-
-	path := fmt.Sprintf("%s/xadd/%s/%s/record_id/%s/source/%s/content/%s/created_at/%s/",
-		rs.BaseURL,
-		stream,
-		id,
-		url.PathEscape(job.RecordID),
-		url.PathEscape(job.Source),
-		url.PathEscape(job.Content),
-		url.PathEscape(now),
-	)
-
+	values := map[string]interface{}{
+		"record_id":  job.RecordID,
+		"source":     job.Source,
+		"content":    job.Content,
+		"created_at": job.CreatedAt,
+	}
 	if job.EntityID != "" {
-		path += fmt.Sprintf("/entity_id/%s", url.PathEscape(job.EntityID))
+		values["entity_id"] = job.EntityID
 	}
 
 	maxRetries := 3
 	backoff := 500 * time.Millisecond
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		// Check if context is canceled
 		if ctx.Err() != nil {
-			log.Printf("Attempt %d: Context canceled before request: %v", attempt, ctx.Err())
-			return fmt.Errorf("publish canceled: %v", ctx.Err())
+			log.Printf("Attempt %d: Context canceled before publishing to %s: %v", attempt, stream, ctx.Err())
+			return ctx.Err()
 		}
 
-		req, err := http.NewRequestWithContext(ctx, "POST", path, nil)
-		if err != nil {
-			log.Printf("Attempt %d: Failed to create Redis request: %v", attempt, err)
-			return err
+		err := rs.client.XAdd(ctx, &redis.XAddArgs{
+			Stream: stream,
+			ID:     "*",
+			Values: values,
+		}).Err()
+		if err == nil {
+			log.Printf("Successfully published to Redis stream %s", stream)
+			return nil
 		}
 
-		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", rs.Token))
-		req.Header.Set("Content-Type", "application/json")
-
-		resp, err := rs.Client.Do(req)
-		if err != nil {
-			log.Printf("Attempt %d: Redis publish error: %v, URL: %s", attempt, err, path)
-			if attempt == maxRetries || ctx.Err() != nil {
-				return fmt.Errorf("failed to publish to Redis stream after %d attempts: %v", maxRetries, err)
-			}
-			time.Sleep(backoff)
-			backoff *= 2
-			continue
+		log.Printf("Attempt %d: Failed to publish to %s: %v", attempt, stream, err)
+		if attempt == maxRetries {
+			return fmt.Errorf("failed to publish to Redis stream %s after %d attempts: %v", stream, maxRetries, err)
 		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode >= 300 {
-			bodyBytes, _ := io.ReadAll(resp.Body)
-			log.Printf("Attempt %d: Failed to publish to Redis stream: %s, response: %s", attempt, resp.Status, string(bodyBytes))
-			if attempt == maxRetries {
-				return fmt.Errorf("failed to publish to Redis stream: %s, response: %s", resp.Status, string(bodyBytes))
-			}
-			time.Sleep(backoff)
-			backoff *= 2
-			continue
-		}
-
-		log.Printf("Successfully published to Redis stream %s", stream)
-		return nil
+		time.Sleep(backoff)
+		backoff *= 2
 	}
-	return fmt.Errorf("failed to publish to Redis stream after %d attempts", maxRetries)
+	return fmt.Errorf("failed to publish to Redis stream %s after %d attempts", stream, maxRetries)
 }
 
 func (rs *RedisStream) CacheGet(ctx context.Context, key string) (string, error) {
-	path := fmt.Sprintf("%s/get/%s", rs.BaseURL, url.PathEscape(key))
-
-	req, err := http.NewRequestWithContext(ctx, "GET", path, nil)
+	val, err := rs.client.Get(ctx, key).Result()
+	if err == redis.Nil {
+		return "", nil
+	}
 	if err != nil {
+		log.Printf("Failed to get cache key %s: %v", key, err)
 		return "", err
 	}
-
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", rs.Token))
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := rs.Client.Do(req)
-	if err != nil {
-		log.Printf("Redis cache get error: %v, key: %s", err, key)
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 300 {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("failed to get from Redis cache: %s, response: %s", resp.Status, string(bodyBytes))
-	}
-
-	bodyBytes, _ := io.ReadAll(resp.Body)
-	var result struct {
-		Result string `json:"result"`
-	}
-	if err := json.Unmarshal(bodyBytes, &result); err != nil {
-		return "", err
-	}
-	return result.Result, nil
+	return val, nil
 }
 
 func (rs *RedisStream) CacheSet(ctx context.Context, key, value string, ttl time.Duration) error {
-	seconds := int(ttl.Seconds())
-	path := fmt.Sprintf("%s/set/%s/%s/%d", rs.BaseURL, url.PathEscape(key), url.PathEscape(value), seconds)
-
-	req, err := http.NewRequestWithContext(ctx, "POST", path, nil)
+	err := rs.client.Set(ctx, key, value, ttl).Err()
 	if err != nil {
+		log.Printf("Failed to set cache key %s: %v", key, err)
 		return err
 	}
-
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", rs.Token))
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := rs.Client.Do(req)
-	if err != nil {
-		log.Printf("Redis cache set error: %v, key: %s", err, key)
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 300 {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("failed to set in Redis cache: %s, response: %s", resp.Status, string(bodyBytes))
-	}
-
-	log.Printf("Successfully set cache key %s in Redis", key)
+	log.Printf("Successfully set cache key %s", key)
 	return nil
 }
