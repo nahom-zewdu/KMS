@@ -32,7 +32,7 @@ func main() {
 
     // Initialize Redis for Pub/Sub
     redisClient := redis.NewClient(&redis.Options{
-        Addr:     upstashURL,  # Use your Upstash Redis URL
+        Addr:     upstashURL,
         Password: upstashToken,
         DB:       0,
     })
