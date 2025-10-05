@@ -9,19 +9,19 @@ import (
 	"github.com/nahom-zewdu/kMS/api/domain"
 )
 
-type SlackService struct {
-	repo  domain.SlackRepository
+type IngestService struct {
+	repo  domain.IngestRepository
 	redis domain.RedisStream
 }
 
-func NewSlackService(repo domain.SlackRepository, redis domain.RedisStream) domain.SlackService {
-	return &SlackService{
+func NewSlackService(repo domain.IngestRepository, redis domain.RedisStream) domain.IngestService {
+	return &IngestService{
 		repo:  repo,
 		redis: redis,
 	}
 }
 
-func (ss *SlackService) IngestService(ctx context.Context, data domain.IngestRequest) error {
+func (ss *IngestService) IngestService(ctx context.Context, data domain.IngestRequest) error {
 	var job domain.JobPayload
 
 	job.ID = "*"
