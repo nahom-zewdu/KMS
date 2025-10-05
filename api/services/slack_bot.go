@@ -15,18 +15,18 @@ import (
 )
 
 type SlackBot struct {
-	client       *slack.Client
-	slackService domain.SlackService
-	redis        *redis.Client
-	signingKey   string
+	client        *slack.Client
+	ingestService domain.IngestService
+	redis         *redis.Client
+	signingKey    string
 }
 
-func NewSlackBot(botToken, signingKey string, slackService domain.SlackService, redis *redis.Client) domain.SlackBotService {
+func NewSlackBot(botToken, signingKey string, slackService domain.IngestService, redis *redis.Client) domain.SlackBotService {
 	return &SlackBot{
-		client:       slack.New(botToken),
-		slackService: slackService,
-		redis:        redis,
-		signingKey:   signingKey,
+		client:        slack.New(botToken),
+		ingestService: slackService,
+		redis:         redis,
+		signingKey:    signingKey,
 	}
 }
 
@@ -50,7 +50,7 @@ func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, 
 	if isQuery {
 		queryID := uuid.New().String()
 		// Publish query to Redis Streams
-		err := sb.slackService.IngestService(ctx, domain.IngestRequest{
+		err := sb.ingestService.IngestService(ctx, domain.IngestRequest{
 			Source:  "slack",
 			Content: cleanQuery,
 		})
@@ -79,7 +79,7 @@ func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, 
 			return fmt.Errorf("failed to post Slack message: %v", err)
 		}
 	} else {
-		err := sb.slackService.IngestService(ctx, domain.IngestRequest{
+		err := sb.ingestService.IngestService(ctx, domain.IngestRequest{
 			Source:  "slack",
 			Content: cleanQuery,
 		})
