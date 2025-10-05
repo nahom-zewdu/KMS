@@ -22,21 +22,27 @@ func main() {
 
 	supabaseURL := os.Getenv("SUPABASE_URL")
 	supabaseKey := os.Getenv("SUPABASE_KEY")
-	upstashURL := os.Getenv("UPSTASH_REDIS_REST_URL")
-	upstashToken := os.Getenv("UPSTASH_REDIS_REST_TOKEN")
+
+	upstashRestURL := os.Getenv("UPSTASH_REDIS_REST_URL")
+	upstashRestToken := os.Getenv("UPSTASH_REDIS_REST_TOKEN")
+	upstashRedisURL := os.Getenv("UPSTASH_REDIS_URL")
+	// upstashRedisToken := os.Getenv("UPSTASH_REDIS_TOKEN")
+
 	slackBotToken := os.Getenv("SLACK_BOT_TOKEN")
 	slackSigningKey := os.Getenv("SLACK_SIGNING_SECRET")
 
 	// Initialize storage and publisher
 	storage := repository.NewSupabaseRepo(supabaseURL, supabaseKey)
-	publisher := repository.NewRedisStream(upstashURL, upstashToken)
+	publisher := repository.NewRedisStream(upstashRestURL, upstashRestToken)
 
 	// Initialize Redis for Pub/Sub
-	redisClient := redis.NewClient(&redis.Options{
-		Addr:     upstashURL,
-		Password: upstashToken,
-		DB:       0,
-	})
+	opt, err := redis.ParseURL(upstashRedisURL)
+	if err != nil {
+		log.Fatalf("Failed to parse Redis URL: %v", err)
+	}
+	// opt.Password = upstashRedisToken // Set the password from the environment variable
+
+	redisClient := redis.NewClient(opt)
 	if err := redisClient.Ping(context.Background()).Err(); err != nil {
 		log.Fatalf("Failed to initialize Redis client: %v", err)
 	}
