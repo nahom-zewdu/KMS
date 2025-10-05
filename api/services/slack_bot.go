@@ -50,13 +50,6 @@ func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, 
 	if isQuery {
 		queryID := uuid.New().String()
 		// Publish query to Redis Streams
-		job := domain.JobPayload{
-			ID:        "*",
-			RecordID:  queryID,
-			Source:    "slack",
-			Content:   cleanQuery,
-			CreatedAt: time.Now().UTC().Format(time.RFC3339),
-		}
 		err := sb.slackService.IngestService(ctx, domain.IngestRequest{
 			Source:  "slack",
 			Content: cleanQuery,
