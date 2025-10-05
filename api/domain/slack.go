@@ -41,4 +41,5 @@ type IngestService interface {
 // New interface for Slack Bot Service
 type SlackBotService interface {
 	HandleEvent(ctx context.Context, teamID, channel, threadTs, query string) error
+	GetBotID() string
 }
