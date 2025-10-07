@@ -5,7 +5,7 @@ This script runs a Python worker on Heroku to process Redis Streams (`query_jobs
 - Queries (`query_jobs`): Processes `@KMS` mentions, generates answers using LLM (distilgpt2) with Supabase context, publishes to `query_results:{query_id}`.
 - Ingestion (`slack_jobs`): Extracts entities (PERSON, PROJECT, TICKET) using NER (distilbert-base-cased), populates Supabase `entities`/`edges`, caches results.
 - Goals: <100ms query latency, 1K QPS, 99.9% uptime, free-tier (Upstash 10K ops/day, Supabase 500MB).
-- Integrates with Go backend using Upstash Redis TCP (sought-perch-5675.upstash.io:6379).
+- Integrates with Go backend using Upstash Redis TCP (e.g., sought-perch-5675.upstash.io:6379).
 """
 
 import os
@@ -20,6 +20,10 @@ from langchain.prompts import PromptTemplate
 from langchain.chains import LLMChain
 from supabase import create_client
 from transformers import pipeline
+from dotenv import load_dotenv
+
+# Load environment variables from .env
+load_dotenv()
 
 # Configure logging with detailed format
 logging.basicConfig(
@@ -36,11 +40,24 @@ UPSTASH_REDIS_URL = os.getenv("UPSTASH_REDIS_URL")  # e.g., sought-perch-5675.up
 UPSTASH_REDIS_TOKEN = os.getenv("UPSTASH_REDIS_TOKEN")
 HF_API_TOKEN = os.getenv("HF_API_TOKEN")
 
+# Validate environment variables
+if not all([SUPABASE_URL, SUPABASE_KEY, UPSTASH_REDIS_URL, UPSTASH_REDIS_TOKEN, HF_API_TOKEN]):
+    missing = [k for k, v in {
+        "SUPABASE_URL": SUPABASE_URL,
+        "SUPABASE_KEY": SUPABASE_KEY,
+        "UPSTASH_REDIS_URL": UPSTASH_REDIS_URL,
+        "UPSTASH_REDIS_TOKEN": UPSTASH_REDIS_TOKEN,
+        "HF_API_TOKEN": HF_API_TOKEN
+    }.items() if not v]
+    logger.error("Missing environment variables: %s", missing)
+    raise ValueError(f"Missing environment variables: {missing}")
+
 # Initialize Redis client (TCP connection)
 try:
+    host, port = UPSTASH_REDIS_URL.split(":")
     redis_client = redis.Redis(
-        host=UPSTASH_REDIS_URL.split(":")[0],  # Extract host
-        port=int(UPSTASH_REDIS_URL.split(":")[1]),  # Extract port
+        host=host,
+        port=int(port),
         password=UPSTASH_REDIS_TOKEN,
         ssl=True,
         decode_responses=True  # Auto-decode strings
@@ -48,7 +65,7 @@ try:
     redis_client.ping()
     logger.info("Successfully connected to Redis at %s", UPSTASH_REDIS_URL)
 except Exception as e:
-    logger.error("Failed to connect to Redis: %s", e)
+    logger.error("Failed to connect to Redis at %s: %s", UPSTASH_REDIS_URL, e)
     raise
 
 # Initialize Supabase client
@@ -60,20 +77,30 @@ except Exception as e:
     raise
 
 # Initialize LLMs
-# NER for entity extraction (ingestion)
-ner_pipeline = pipeline(
-    "ner",
-    model="distilbert-base-cased",
-    tokenizer="distilbert-base-cased",
-    aggregation_strategy="simple"
-)
+try:
+    # NER for entity extraction (ingestion)
+    ner_pipeline = pipeline(
+        "ner",
+        model="distilbert-base-cased",
+        tokenizer="distilbert-base-cased",
+        aggregation_strategy="simple"
+    )
+    logger.info("Successfully initialized NER pipeline (distilbert-base-cased)")
+except Exception as e:
+    logger.error("Failed to initialize NER pipeline: %s", e)
+    raise
 
-# LLM for query answering
-query_llm = HuggingFacePipeline.from_model_id(
-    model_id="distilgpt2",
-    task="text-generation",
-    pipeline_kwargs={"max_new_tokens": 100, "temperature": 0.7}
-)
+try:
+    # LLM for query answering
+    query_llm = HuggingFacePipeline.from_model_id(
+        model_id="distilgpt2",
+        task="text-generation",
+        pipeline_kwargs={"max_new_tokens": 100, "temperature": 0.7}
+    )
+    logger.info("Successfully initialized query LLM (distilgpt2)")
+except Exception as e:
+    logger.error("Failed to initialize query LLM: %s", e)
+    raise
 
 # Prompt templates
 ner_prompt = PromptTemplate(
@@ -114,16 +141,16 @@ def extract_entities(text: str, record_id: str) -> list:
         cache_key = f"nlp:{record_id}"
         cached = redis_client.get(cache_key)
         if cached:
-            logger.info("RecordID: %s - Cache hit for entities in %s", record_id, time.time() - start)
+            logger.info("RecordID: %s - Cache hit for entities in %.3fs", record_id, time.time() - start)
             return json.loads(cached)
 
         output = ner_chain.run(text)
         entities = json.loads(output).get("entities", [])
         redis_client.setex(cache_key, 86400, json.dumps(entities))  # Cache 24 hours
-        logger.info("RecordID: %s - Extracted %d entities in %s: %s", record_id, len(entities), time.time() - start, entities)
+        logger.info("RecordID: %s - Extracted %d entities in %.3fs: %s", record_id, len(entities), time.time() - start, entities)
         return entities
     except Exception as e:
-        logger.error("RecordID: %s - NER extraction failed in %s: %s", record_id, time.time() - start, e)
+        logger.error("RecordID: %s - NER extraction failed in %.3fs: %s", record_id, time.time() - start, e)
         raise
 
 @retry(tries=3, delay=1, backoff=2, logger=logger)
@@ -146,7 +173,7 @@ def query_knowledge_graph(query: str, record_id: str) -> str:
     try:
         cached = redis_client.get(cache_key)
         if cached:
-            logger.info("RecordID: %s - Cache hit for query '%s' in %s", record_id, query, time.time() - start)
+            logger.info("RecordID: %s - Cache hit for query '%s' in %.3fs", record_id, query, time.time() - start)
             return cached
 
         # Query Supabase for context
@@ -156,18 +183,18 @@ def query_knowledge_graph(query: str, record_id: str) -> str:
             relationships = supabase.table("edges").select("source_id, target_id, type, metadata").execute().data
             context["entities"] = entities
             context["relationships"] = relationships
-            logger.info("RecordID: %s - Fetched Supabase context in %s: %d entities, %d relationships",
+            logger.info("RecordID: %s - Fetched Supabase context in %.3fs: %d entities, %d relationships",
                         record_id, time.time() - start, len(entities), len(relationships))
         except Exception as e:
-            logger.warning("RecordID: %s - Supabase query failed in %s: %s", record_id, time.time() - start, e)
+            logger.warning("RecordID: %s - Supabase query failed in %.3fs: %s", record_id, time.time() - start, e)
 
         # Generate answer with LLM
         answer = query_chain.run(query=query, context=json.dumps(context))
         redis_client.setex(cache_key, 300, answer)  # Cache 5 minutes
-        logger.info("RecordID: %s - Generated answer for query '%s' in %s: %s", record_id, query, time.time() - start, answer)
+        logger.info("RecordID: %s - Generated answer for query '%s' in %.3fs: %s", record_id, query, time.time() - start, answer)
         return answer
     except Exception as e:
-        logger.error("RecordID: %s - Query processing failed in %s: %s", record_id, time.time() - start, e)
+        logger.error("RecordID: %s - Query processing failed in %.3fs: %s", record_id, time.time() - start, e)
         return "Unable to process query."
 
 @retry(tries=3, delay=1, backoff=2, logger=logger)
@@ -195,7 +222,7 @@ def store_entities_and_relationships(entities: list, record_id: str, text: str) 
                 "metadata": {}
             }).execute()
             entity_ids[entity["name"]] = entity_id
-            logger.info("RecordID: %s - Stored entity %s (ID: %s) in %s", record_id, entity["name"], entity_id, time.time() - start)
+            logger.info("RecordID: %s - Stored entity %s (ID: %s) in %.3fs", record_id, entity["name"], entity_id, time.time() - start)
 
         relationships = infer_relationships(entities)
         for rel in relationships:
@@ -206,14 +233,14 @@ def store_entities_and_relationships(entities: list, record_id: str, text: str) 
                 "type": rel["type"],
                 "metadata": rel["metadata"]
             }).execute()
-            logger.info("RecordID: %s - Stored relationship %s -> %s (%s) in %s",
+            logger.info("RecordID: %s - Stored relationship %s -> %s (%s) in %.3fs",
                         record_id, rel["source_name"], rel["target_name"], rel["type"], time.time() - start)
 
         if entities:
             supabase.table("raw_data").update({"entity_id": entity_ids[entities[0]["name"]]}).eq("id", record_id).execute()
-            logger.info("RecordID: %s - Updated raw_data with entity_id %s in %s", record_id, entity_ids[entities[0]["name"]], time.time() - start)
+            logger.info("RecordID: %s - Updated raw_data with entity_id %s in %.3fs", record_id, entity_ids[entities[0]["name"]], time.time() - start)
     except Exception as e:
-        logger.error("RecordID: %s - Failed to store entities/relationships for '%s' in %s: %s", record_id, text, time.time() - start, e)
+        logger.error("RecordID: %s - Failed to store entities/relationships for '%s' in %.3fs: %s", record_id, text, time.time() - start, e)
         raise
 
 def infer_relationships(entities: list) -> list:
@@ -253,36 +280,26 @@ def main():
         try:
             start = time.time()
             response = redis_client.xread(streams={stream: "0" for stream in streams}, count=10, block=10000)
-            # xread returns a list of (stream, messages) tuples
             for stream, messages in response:
                 stream_name = stream
                 for message_id, message in messages:
-                    # If message is a list of two elements (id, dict), unpack accordingly
-                    if isinstance(message, dict):
-                        msg_data = message
-                    elif isinstance(message, (list, tuple)) and len(message) == 2:
-                        msg_data = message[1]
-                        message_id = message[0]
-                    else:
-                        msg_data = {}
-
-                    record_id = msg_data.get("record_id", "")
-                    text = msg_data.get("content", "")
-                    source = msg_data.get("source", "")
+                    record_id = message.get("record_id", "")
+                    text = message.get("content", "")
+                    source = message.get("source", "")
                     logger.info("RecordID: %s - Processing %s message: %s", record_id, stream_name, text)
 
                     if stream_name == "query_jobs":
                         answer = query_knowledge_graph(text, record_id)
                         redis_client.publish(f"query_results:{record_id}", answer)
-                        logger.info("RecordID: %s - Published answer to query_results:%s in %s", record_id, record_id, time.time() - start)
+                        logger.info("RecordID: %s - Published answer to query_results:%s in %.3fs", record_id, record_id, time.time() - start)
                     elif stream_name == "slack_jobs":
                         entities = extract_entities(text, record_id)
                         store_entities_and_relationships(entities, record_id, text)
 
                     redis_client.xdel(stream_name, message_id)
-                    logger.info("RecordID: %s - Deleted message %s from %s in %s", record_id, message_id, stream_name, time.time() - start)
+                    logger.info("RecordID: %s - Deleted message %s from %s in %.3fs", record_id, message_id, stream_name, time.time() - start)
         except Exception as e:
-            logger.error("Redis stream error in %s: %s", time.time() - start, e)
+            logger.error("Redis stream error in %.3fs: %s", time.time() - start, e)
             time.sleep(5)  # Backoff on error
         time.sleep(0.1)  # Avoid tight loop
 
