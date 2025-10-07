@@ -1,7 +1,8 @@
-// main.go
 package main
 
 import (
+	"context"
+	"crypto/tls"
 	"log"
 	"os"
 
@@ -10,39 +11,53 @@ import (
 	"github.com/nahom-zewdu/kMS/api/handlers"
 	"github.com/nahom-zewdu/kMS/api/repository"
 	"github.com/nahom-zewdu/kMS/api/services"
+	"github.com/redis/go-redis/v9"
 )
 
 func main() {
 	r := gin.Default()
 
-	// Load environment variables from .env file
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found, proceeding with defaults")
 	}
 
-	supabase_url := os.Getenv("SUPABASE_URL")
-	supabase_key := os.Getenv("SUPABASE_KEY")
+	supabaseURL := os.Getenv("SUPABASE_URL")
+	supabaseKey := os.Getenv("SUPABASE_KEY")
+	upstashRedisURL := os.Getenv("UPSTASH_REDIS_URL") // e.g., sought-perch-5675.upstash.io:6379
+	upstashRedisToken := os.Getenv("UPSTASH_REDIS_TOKEN")
+	slackBotToken := os.Getenv("SLACK_BOT_TOKEN")
+	slackSigningKey := os.Getenv("SLACK_SIGNING_SECRET")
 
-	upstash_url := os.Getenv("UPSTASH_REDIS_REST_URL")
-	upstash_token := os.Getenv("UPSTASH_REDIS_REST_TOKEN")
+	// Initialize storage
+	storage := repository.NewSupabaseRepo(supabaseURL, supabaseKey)
 
-	// Initialize storage and publisher
-	storage := repository.NewSupabaseRepo(supabase_url, supabase_key)
-	publisher := repository.NewRedisStream(upstash_url, upstash_token)
+	// Initialize Redis for Streams, Pub/Sub, caching
+	redisClient := redis.NewClient(&redis.Options{
+		Addr:      upstashRedisURL,
+		Password:  upstashRedisToken,
+		DB:        0,
+		TLSConfig: &tls.Config{InsecureSkipVerify: true}, // Upstash requires TLS
+	})
+	if err := redisClient.Ping(context.Background()).Err(); err != nil {
+		log.Fatalf("Failed to initialize Redis client: %v", err)
+	}
+
+	// Initialize RedisStream
+	redisStream := repository.NewRedisStream(redisClient)
 
 	// Initialize repositories and services
-	slackRepo := repository.NewSlackRepo(storage)
-	slackService := services.NewSlackService(slackRepo, publisher)
-
-	queryRepo := repository.NewQueryRepository(publisher, storage)
+	ingestRepo := repository.NewIngestRepository(storage)
+	queryRepo := repository.NewQueryRepository(redisStream, storage) // Use redisStream
+	ingestService := services.NewIngestService(ingestRepo, redisClient)
 	queryService := services.NewQueryService(queryRepo)
+	slackBotService := services.NewSlackBot(slackBotToken, slackSigningKey, ingestService, redisClient)
 
 	// Setup routes
-	handlers.SetupRoutes(r, slackService, queryService)
+	handlers.SetupRoutes(r, ingestService, queryService, slackBotService, slackSigningKey)
 
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8080"
+		port = "9090"
 	}
 
 	log.Printf("Starting server on port %s\n", port)

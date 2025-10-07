@@ -7,17 +7,17 @@ import (
 	"github.com/nahom-zewdu/kMS/api/domain"
 )
 
-type SlackHandler struct {
-	service domain.SlackService
+type IngestHandler struct {
+	service domain.IngestService
 }
 
-func NewSlackHandler(service domain.SlackService) *SlackHandler {
-	return &SlackHandler{
+func NewSlackHandler(service domain.IngestService) *IngestHandler {
+	return &IngestHandler{
 		service: service,
 	}
 }
 
-func (sh *SlackHandler) IngestHandler(c *gin.Context) {
+func (sh *IngestHandler) IngestHandler(c *gin.Context) {
 	var req domain.IngestRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {

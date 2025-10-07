@@ -30,10 +30,16 @@ type IngestRequest struct {
 	EntityID string `json:"entity_id,omitempty"`
 }
 
-type SlackRepository interface {
+type IngestRepository interface {
 	IngestRepo(ctx context.Context, data JobPayload) error
 }
 
-type SlackService interface {
+type IngestService interface {
 	IngestService(ctx context.Context, data IngestRequest) error
+}
+
+// New interface for Slack Bot Service
+type SlackBotService interface {
+	HandleEvent(ctx context.Context, teamID, channel, threadTs, query string) error
+	GetBotID() string
 }

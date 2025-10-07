@@ -7,15 +7,15 @@ import (
 	"github.com/nahom-zewdu/kMS/api/domain"
 )
 
-type SlackRepo struct {
+type IngestRepository struct {
 	storage domain.StoragePort
 }
 
-func NewSlackRepo(storage domain.StoragePort) domain.SlackRepository {
-	return &SlackRepo{storage: storage}
+func NewIngestRepository(storage domain.StoragePort) domain.IngestRepository {
+	return &IngestRepository{storage: storage}
 }
 
-func (sr *SlackRepo) IngestRepo(ctx context.Context, job domain.JobPayload) error {
+func (sr *IngestRepository) IngestRepo(ctx context.Context, job domain.JobPayload) error {
 
 	insertPayload := map[string]interface{}{
 		"id":        uuid.New().String(),
