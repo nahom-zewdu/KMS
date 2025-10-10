@@ -1,5 +1,5 @@
-package domain
 // domain/domain.go
+
 package domain
 
 import (
@@ -17,11 +17,11 @@ type IngestRequest struct {
 
 // JobPayload represents the data published to Redis streams.
 type JobPayload struct {
-	ID        string    `json:"id"`
-	RecordID  string    `json:"record_id" binding:"required"`
-	Source    string    `json:"source" binding:"required,oneof=slack github jira"`
-	Content   string    `json:"content" binding:"required"`
-	CreatedAt string    `json:"created_at" binding:"required"`
+	ID        string `json:"id"`
+	RecordID  string `json:"record_id" binding:"required"`
+	Source    string `json:"source" binding:"required,oneof=slack github jira"`
+	Content   string `json:"content" binding:"required"`
+	CreatedAt string `json:"created_at" binding:"required"`
 }
 
 // CoreIngestService defines the interface for shared ingestion logic (Supabase storage, Redis publishing).
