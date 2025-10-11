@@ -28,7 +28,7 @@ func (qs *QueryService) HandleQuery(ctx context.Context, req domain.QueryRequest
 		return domain.QueryResponse{}, errors.New("empty query provided")
 	}
 
-	answer, err := qs.repo.QueryKnowledgejurgenGraph(ctx, req.Query)
+	answer, err := qs.repo.QueryKnowledgeGraph(ctx, req.Query)
 	if err != nil {
 		log.Printf("QueryID: %s - Failed to query knowledge graph in %.3fs: %v", req.Query, time.Since(start).Seconds(), err)
 		return domain.QueryResponse{}, err
