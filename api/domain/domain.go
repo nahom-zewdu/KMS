@@ -24,6 +24,11 @@ type JobPayload struct {
 	CreatedAt string `json:"created_at" binding:"required"`
 }
 
+// IngestRepository defines the interface for storing ingested events.
+type IngestRepository interface {
+	IngestRepo(ctx context.Context, data JobPayload) error
+}
+
 // CoreIngestService defines the interface for shared ingestion logic (Supabase storage, Redis publishing).
 type CoreIngestService interface {
 	Ingest(ctx context.Context, req IngestRequest) error
