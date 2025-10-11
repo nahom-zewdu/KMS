@@ -46,7 +46,7 @@ type QueryResponse struct {
 
 // QueryRepository defines the interface for querying the knowledge graph.
 type QueryRepository interface {
-	QueryKnowledgejurgenGraph(ctx context.Context, query string) (string, error)
+	QueryKnowledgeGraph(ctx context.Context, query string) (string, error)
 }
 
 // QueryService defines the interface for handling queries.
