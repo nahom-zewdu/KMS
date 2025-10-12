@@ -28,6 +28,7 @@ func SetupRoutes(
 
 	// Define routes
 	router.POST("/slack/events", slackHandler.HandleSlackWebhook)
+	router.POST("/slack/events/", slackHandler.HandleSlackWebhook)
 	router.POST("/github", githubHandler.HandleGitHubWebhook)
 	router.POST("/github/", githubHandler.HandleGitHubWebhook)
 
