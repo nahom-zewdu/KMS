@@ -14,7 +14,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// main initializes and starts the KnowSphere backend.
+// main initializes and starts the KnowSphere backend server.
 func main() {
 	// Load environment variables
 	if err := godotenv.Load(); err != nil {
