@@ -33,10 +33,13 @@ func (c *CoreIngest) Ingest(ctx context.Context, req domain.IngestRequest) error
 	if recordID == "" {
 		recordID = uuid.New().String()
 	}
-	// Default to unknown source if not specified
-	if req.Source == "" {
-		req.Source = "unknown"
+
+	// Validate source
+	if req.Source != "slack" && req.Source != "github" && req.Source != "jira" {
+		log.Printf("RecordID: %s - Invalid source %s in %.3fs", recordID, req.Source, time.Since(start).Seconds())
+		return fmt.Errorf("invalid source: %s, must be 'slack', 'github' or 'jira'", req.Source)
 	}
+
 	// Default to current time if not provided
 	if req.CreatedAt.IsZero() {
 		req.CreatedAt = time.Now().UTC()
