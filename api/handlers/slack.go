@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/nahom-zewdu/kMS/api/domain"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
@@ -135,7 +136,7 @@ func (h *SlackHandler) HandleSlackWebhook(c *gin.Context) {
 				err := h.slackIngest.IngestSlackEvent(c.Request.Context(), domain.IngestRequest{
 					Source:    "slack",
 					Content:   ev.Text,
-					RecordID:  ev.TimeStamp + "-" + ev.Channel,
+					RecordID:  uuid.New().String(),
 					CreatedAt: slackTimestampToTime(ev.TimeStamp),
 				})
 				if err != nil {
