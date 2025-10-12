@@ -34,7 +34,7 @@ func (c *CoreIngest) Ingest(ctx context.Context, req domain.IngestRequest) error
 		recordID = uuid.New().String()
 	}
 
-	// Validate source
+	// Validate source field
 	if req.Source != "slack" && req.Source != "github" && req.Source != "jira" {
 		log.Printf("RecordID: %s - Invalid source %s in %.3fs", recordID, req.Source, time.Since(start).Seconds())
 		return fmt.Errorf("invalid source: %s, must be 'slack', 'github' or 'jira'", req.Source)
