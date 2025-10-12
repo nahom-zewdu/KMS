@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"log"
 	"os"
 
@@ -34,7 +35,8 @@ func main() {
 
 	// Validate environment variables
 	if supabaseURL == "" || supabaseKey == "" || redisAddr == "" || slackBotToken == "" || slackSignKey == "" || githubSecret == "" {
-		log.Fatal("Missing required environment variables")
+		log.Fatalf("Missing required environment variables: SUPABASE_URL=%v, SUPABASE_KEY=%v, REDIS_ADDR=%v, SLACK_BOT_TOKEN=%v, SLACK_SIGNING_SECRET=%v, GITHUB_WEBHOOK_SECRET=%v",
+			supabaseURL != "", supabaseKey != "", redisAddr != "", slackBotToken != "", slackSignKey != "", githubSecret != "")
 	}
 
 	// Initialize Supabase client
@@ -42,13 +44,17 @@ func main() {
 
 	// Initialize Redis client (Upstash)
 	redisClient := redis.NewClient(&redis.Options{
-		Addr:     redisAddr,
-		Password: redisPassword,
-		DB:       0,
+		Addr:      redisAddr,
+		Password:  redisPassword,
+		DB:        0,
+		TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12}, // Enable TLS for Upstash
 	})
-	if err := redisClient.Ping(context.Background()).Err(); err != nil {
-		log.Fatalf("Failed to connect to Redis: %v", err)
+	defer redisClient.Close()
+	ctx := context.Background()
+	if err := redisClient.Ping(ctx).Err(); err != nil {
+		log.Fatalf("Failed to connect to Redis at %s: %v", redisAddr, err)
 	}
+	log.Printf("Successfully connected to Redis at %s", redisAddr)
 	redisStream := repository.NewRedisStream(redisClient)
 
 	// Initialize services
