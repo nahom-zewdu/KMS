@@ -1,3 +1,4 @@
+// main.go
 package main
 
 import (
@@ -6,7 +7,6 @@ import (
 	"log"
 	"os"
 
-	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"github.com/nahom-zewdu/kMS/api/handlers"
 	"github.com/nahom-zewdu/kMS/api/repository"
@@ -14,54 +14,61 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// main initializes and starts the KnowSphere backend server.
 func main() {
-	r := gin.Default()
-
+	// Load environment variables
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found, proceeding with defaults")
 	}
 
 	supabaseURL := os.Getenv("SUPABASE_URL")
 	supabaseKey := os.Getenv("SUPABASE_KEY")
-	upstashRedisURL := os.Getenv("UPSTASH_REDIS_URL") // e.g., sought-perch-5675.upstash.io:6379
-	upstashRedisToken := os.Getenv("UPSTASH_REDIS_TOKEN")
+	redisAddr := os.Getenv("REDIS_ADDR")
+	redisPassword := os.Getenv("REDIS_PASSWORD")
 	slackBotToken := os.Getenv("SLACK_BOT_TOKEN")
-	slackSigningKey := os.Getenv("SLACK_SIGNING_SECRET")
-
-	// Initialize storage
-	storage := repository.NewSupabaseRepo(supabaseURL, supabaseKey)
-
-	// Initialize Redis for Streams, Pub/Sub, caching
-	redisClient := redis.NewClient(&redis.Options{
-		Addr:      upstashRedisURL,
-		Password:  upstashRedisToken,
-		DB:        0,
-		TLSConfig: &tls.Config{InsecureSkipVerify: true}, // Upstash requires TLS
-	})
-	if err := redisClient.Ping(context.Background()).Err(); err != nil {
-		log.Fatalf("Failed to initialize Redis client: %v", err)
-	}
-
-	// Initialize RedisStream
-	redisStream := repository.NewRedisStream(redisClient)
-
-	// Initialize repositories and services
-	ingestRepo := repository.NewIngestRepository(storage)
-	queryRepo := repository.NewQueryRepository(redisStream, storage) // Use redisStream
-	ingestService := services.NewIngestService(ingestRepo, redisClient)
-	queryService := services.NewQueryService(queryRepo)
-	slackBotService := services.NewSlackBot(slackBotToken, slackSigningKey, ingestService, redisClient)
-
-	// Setup routes
-	handlers.SetupRoutes(r, ingestService, queryService, slackBotService, slackSigningKey)
-
+	slackSignKey := os.Getenv("SLACK_SIGNING_SECRET")
+	githubSecret := os.Getenv("GITHUB_WEBHOOK_SECRET")
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "9090"
+		port = "8080"
 	}
 
-	log.Printf("Starting server on port %s\n", port)
-	if err := r.Run(":" + port); err != nil {
+	// Validate environment variables
+	if supabaseURL == "" || supabaseKey == "" || redisAddr == "" || slackBotToken == "" || slackSignKey == "" || githubSecret == "" {
+		log.Fatalf("Missing required environment variables: SUPABASE_URL=%v, SUPABASE_KEY=%v, REDIS_ADDR=%v, SLACK_BOT_TOKEN=%v, SLACK_SIGNING_SECRET=%v, GITHUB_WEBHOOK_SECRET=%v",
+			supabaseURL != "", supabaseKey != "", redisAddr != "", slackBotToken != "", slackSignKey != "", githubSecret != "")
+	}
+
+	// Initialize Supabase client
+	supabaseRepo := repository.NewSupabaseRepo(supabaseURL, supabaseKey)
+
+	// Initialize Redis client (Upstash)
+	redisClient := redis.NewClient(&redis.Options{
+		Addr:      redisAddr,
+		Password:  redisPassword,
+		DB:        0,
+		TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12}, // Enable TLS for Upstash
+	})
+	defer redisClient.Close()
+	ctx := context.Background()
+	if err := redisClient.Ping(ctx).Err(); err != nil {
+		log.Fatalf("Failed to connect to Redis at %s: %v", redisAddr, err)
+	}
+	log.Printf("Successfully connected to Redis at %s", redisAddr)
+	redisStream := repository.NewRedisStream(redisClient)
+
+	// Initialize services
+	coreIngestService := services.NewCoreIngest(supabaseRepo, redisStream)
+	slackIngestService := services.NewSlackIngest(coreIngestService)
+	githubIngestService := services.NewGitHubIngest(coreIngestService)
+	slackBotService := services.NewSlackBot(slackBotToken, coreIngestService, redisStream)
+
+	// Setup routes
+	router := handlers.SetupRoutes(slackIngestService, slackBotService, githubIngestService, slackBotToken, slackSignKey, githubSecret)
+
+	// Start server
+	log.Printf("Starting server on port %s", port)
+	if err := router.Run(":" + port); err != nil {
 		log.Fatalf("Server failed to start: %v", err)
 	}
 }

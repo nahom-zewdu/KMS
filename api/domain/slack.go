@@ -1,9 +1,9 @@
+// domain/slack.go
 package domain
 
-import (
-	"context"
-)
+import "context"
 
+// SlackEvent represents a Slack webhook event payload.
 type SlackEvent struct {
 	Token     string       `json:"token"`
 	TeamID    string       `json:"team_id"`
@@ -14,6 +14,7 @@ type SlackEvent struct {
 	EventTime int64        `json:"event_time"`
 }
 
+// SlackMessage represents a Slack message event.
 type SlackMessage struct {
 	ClientMsgID string `json:"client_msg_id"`
 	Type        string `json:"type"`
@@ -22,23 +23,15 @@ type SlackMessage struct {
 	Ts          string `json:"ts"`
 	Channel     string `json:"channel"`
 	EventTs     string `json:"event_ts"`
+	ThreadTs    string `json:"thread_ts"`
 }
 
-type IngestRequest struct {
-	Source   string `json:"source" binding:"required,oneof=slack"`
-	Content  string `json:"content" binding:"required"`
-	EntityID string `json:"entity_id,omitempty"`
+// SlackIngestService defines the interface for ingesting Slack events.
+type SlackIngestService interface {
+	IngestSlackEvent(ctx context.Context, req IngestRequest) error
 }
 
-type IngestRepository interface {
-	IngestRepo(ctx context.Context, data JobPayload) error
-}
-
-type IngestService interface {
-	IngestService(ctx context.Context, data IngestRequest) error
-}
-
-// New interface for Slack Bot Service
+// SlackBotService defines the interface for Slack bot interactions.
 type SlackBotService interface {
 	HandleEvent(ctx context.Context, teamID, channel, threadTs, query string) error
 	GetBotID() string

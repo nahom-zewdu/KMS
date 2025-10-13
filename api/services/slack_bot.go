@@ -1,3 +1,4 @@
+// services/slack_bot.go
 package services
 
 import (
@@ -8,33 +9,35 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/nahom-zewdu/kMS/api/domain"
-	"github.com/redis/go-redis/v9"
 	"github.com/slack-go/slack"
 )
 
+// SlackBot handles Slack bot interactions for queries.
 type SlackBot struct {
-	client        *slack.Client
-	botToken      string
-	ingestService domain.IngestService
-	redis         *redis.Client
+	client     *slack.Client
+	botToken   string
+	coreIngest domain.CoreIngestService
+	redis      domain.RedisStream
 }
 
-func NewSlackBot(botToken, signingKey string, ingestService domain.IngestService, redis *redis.Client) domain.SlackBotService {
+// NewSlackBot creates a new SlackBot service.
+func NewSlackBot(botToken string, coreIngest domain.CoreIngestService, redis domain.RedisStream) domain.SlackBotService {
 	return &SlackBot{
-		client:        slack.New(botToken),
-		botToken:      botToken,
-		ingestService: ingestService,
-		redis:         redis,
+		client:     slack.New(botToken),
+		botToken:   botToken,
+		coreIngest: coreIngest,
+		redis:      redis,
 	}
 }
 
+// HandleEvent processes Slack app_mention events and publishes queries to Redis.
 func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, query string) error {
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
+	// Clean query to remove bot mentions
 	cleanQuery := removeBotMention(query)
 	if cleanQuery == "" {
 		log.Printf("QueryID: <none>, Channel: %s, Thread: %s - Empty query after cleaning, original: %s", channel, threadTs, query)
@@ -43,122 +46,88 @@ func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, 
 			slack.MsgOptionText("Please provide a valid query (e.g., 'Who owns github?').", false),
 			slack.MsgOptionTS(threadTs))
 		if err != nil {
-			log.Printf("QueryID: <none>, Channel: %s, Thread: %s - Failed to post empty query response in %v: %v", channel, threadTs, time.Since(startPost), err)
+			log.Printf("QueryID: <none>, Channel: %s, Thread: %s - Failed to post empty query response in %.3fs: %v", channel, threadTs, time.Since(startPost).Seconds(), err)
 			return fmt.Errorf("failed to post empty query response: %v", err)
 		}
-		log.Printf("QueryID: <none>, Channel: %s, Thread: %s - Posted empty query response in %v", channel, threadTs, time.Since(startPost))
+		log.Printf("QueryID: <none>, Channel: %s, Thread: %s - Posted empty query response in %.3fs", channel, threadTs, time.Since(startPost).Seconds())
 		return nil
 	}
 
-	// All @KMS mentions are queries
-	queryID := uuid.New().String()
-	job := domain.JobPayload{
+	// Generate query ID
+	queryID := threadTs + "-" + channel
+	log.Printf("QueryID: %s, Channel: %s, Thread: %s - Processing query: %s", queryID, channel, threadTs, cleanQuery)
+
+	// Publish to query_jobs
+	err := sb.redis.Publish(ctx, "query_jobs", domain.JobPayload{
+		ID:        "*",
 		RecordID:  queryID,
 		Source:    "slack",
 		Content:   cleanQuery,
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
-	}
-	log.Printf("QueryID: %s, Channel: %s, Thread: %s - Processing query: %s", queryID, channel, threadTs, cleanQuery)
-
-	// Publish to query_jobs
-	maxRetries := 3
-	backoff := 500 * time.Millisecond
-	for attempt := 1; attempt <= maxRetries; attempt++ {
-		if ctx.Err() != nil {
-			log.Printf("QueryID: %s, Channel: %s, Thread: %s - Attempt %d: Context canceled before publishing to query_jobs: %v", queryID, channel, threadTs, attempt, ctx.Err())
-			return ctx.Err()
-		}
-		startXAdd := time.Now()
-		err := sb.redis.XAdd(ctx, &redis.XAddArgs{
-			Stream: "query_jobs",
-			ID:     "*",
-			Values: map[string]interface{}{
-				"record_id":  job.RecordID,
-				"source":     job.Source,
-				"content":    job.Content,
-				"created_at": job.CreatedAt,
-			},
-		}).Err()
-		durationXAdd := time.Since(startXAdd)
-		if err == nil {
-			log.Printf("QueryID: %s, Channel: %s, Thread: %s - Successfully published to query_jobs in %v", queryID, channel, threadTs, durationXAdd)
-			break
-		}
-		log.Printf("QueryID: %s, Channel: %s, Thread: %s - Attempt %d: Failed to publish to query_jobs in %v: %v", queryID, channel, threadTs, attempt, durationXAdd, err)
-		if attempt == maxRetries {
-			startPost := time.Now()
-			_, _, err = sb.client.PostMessage(channel,
-				slack.MsgOptionText("Sorry, I couldn't process that query. Try again?", false),
-				slack.MsgOptionTS(threadTs))
-			durationPost := time.Since(startPost)
-			if err != nil {
-				log.Printf("QueryID: %s, Channel: %s, Thread: %s - Failed to post retry message in %v: %v", queryID, channel, threadTs, durationPost, err)
-			} else {
-				log.Printf("QueryID: %s, Channel: %s, Thread: %s - Posted retry message in %v", queryID, channel, threadTs, durationPost)
-			}
-			return fmt.Errorf("failed to publish to query_jobs after %d attempts: %v", maxRetries, err)
-		}
-		time.Sleep(backoff)
-		backoff *= 2
-	}
-
-	// Subscribe to Pub/Sub for answer
-	startSubscribe := time.Now()
-	pubsub := sb.redis.Subscribe(ctx, "query_results:"+queryID)
-	defer pubsub.Close()
-	log.Printf("QueryID: %s, Channel: %s, Thread: %s - Subscribed to query_results:%s in %v", queryID, channel, threadTs, queryID, time.Since(startSubscribe))
-
-	startReceive := time.Now()
-	msg, err := pubsub.ReceiveMessage(ctx)
-	durationReceive := time.Since(startReceive)
+	})
 	if err != nil {
-		log.Printf("QueryID: %s, Channel: %s, Thread: %s - Pub/Sub receive error in %v: %v", queryID, channel, threadTs, durationReceive, err)
+		log.Printf("QueryID: %s, Channel: %s, Thread: %s - Failed to publish to query_jobs in %.3fs: %v", queryID, channel, threadTs, time.Since(start).Seconds(), err)
 		startPost := time.Now()
 		_, _, err = sb.client.PostMessage(channel,
 			slack.MsgOptionText("Sorry, I couldn't process that query. Try again?", false),
 			slack.MsgOptionTS(threadTs))
-		durationPost := time.Since(startPost)
 		if err != nil {
-			log.Printf("QueryID: %s, Channel: %s, Thread: %s - Failed to post retry message in %v: %v", queryID, channel, threadTs, durationPost, err)
-		} else {
-			log.Printf("QueryID: %s, Channel: %s, Thread: %s - Posted retry message in %v", queryID, channel, threadTs, durationPost)
+			log.Printf("QueryID: %s, Channel: %s, Thread: %s - Failed to post retry message in %.3fs: %v", queryID, channel, threadTs, time.Since(startPost).Seconds(), err)
 		}
-		return fmt.Errorf("failed to receive Pub/Sub message: %v", err)
+		return fmt.Errorf("failed to publish to query_jobs: %v", err)
 	}
-	answer := msg.Payload
-	log.Printf("QueryID: %s, Channel: %s, Thread: %s - Received Pub/Sub answer in %v: %s", queryID, channel, threadTs, durationReceive, answer)
+	log.Printf("QueryID: %s, Channel: %s, Thread: %s - Published to query_jobs in %.3fs", queryID, channel, threadTs, time.Since(start).Seconds())
 
-	startPost := time.Now()
-	_, _, err = sb.client.PostMessage(channel,
-		slack.MsgOptionText(answer, false),
-		slack.MsgOptionTS(threadTs))
-	durationPost := time.Since(startPost)
+	// Subscribe to Pub/Sub for answer
+	startSubscribe := time.Now()
+	answerChan, err := sb.redis.Subscribe(ctx, "query_results:"+queryID)
 	if err != nil {
-		log.Printf("QueryID: %s, Channel: %s, Thread: %s - Failed to post Slack message in %v: %v", queryID, channel, threadTs, durationPost, err)
-		return fmt.Errorf("failed to post Slack message: %v", err)
+		log.Printf("QueryID: %s, Channel: %s, Thread: %s - Failed to subscribe to query_results:%s in %.3fs: %v", queryID, channel, threadTs, queryID, time.Since(startSubscribe).Seconds(), err)
+		return fmt.Errorf("failed to subscribe to query_results:%s: %v", queryID, err)
 	}
-	log.Printf("QueryID: %s, Channel: %s, Thread: %s - Successfully posted answer to Slack in %v", queryID, channel, threadTs, durationPost)
+	log.Printf("QueryID: %s, Channel: %s, Thread: %s - Subscribed to query_results:%s in %.3fs", queryID, channel, threadTs, queryID, time.Since(startSubscribe).Seconds())
 
-	log.Printf("QueryID: %s, Channel: %s, Thread: %s - Successfully processed query in %v", queryID, channel, threadTs, time.Since(start))
+	// Wait for answer
+	select {
+	case answer := <-answerChan:
+		startPost := time.Now()
+		_, _, err = sb.client.PostMessage(channel,
+			slack.MsgOptionText(answer, false),
+			slack.MsgOptionTS(threadTs))
+		if err != nil {
+			log.Printf("QueryID: %s, Channel: %s, Thread: %s - Failed to post Slack answer in %.3fs: %v", queryID, channel, threadTs, time.Since(startPost).Seconds(), err)
+			return fmt.Errorf("failed to post Slack answer: %v", err)
+		}
+		log.Printf("QueryID: %s, Channel: %s, Thread: %s - Posted answer '%s' in %.3fs", queryID, channel, threadTs, answer, time.Since(startPost).Seconds())
+	case <-ctx.Done():
+		log.Printf("QueryID: %s, Channel: %s, Thread: %s - Query timeout in %.3fs: %v", queryID, channel, threadTs, time.Since(start).Seconds(), ctx.Err())
+		startPost := time.Now()
+		_, _, err = sb.client.PostMessage(channel,
+			slack.MsgOptionText("Sorry, I couldn't process that query. Try again?", false),
+			slack.MsgOptionTS(threadTs))
+		if err != nil {
+			log.Printf("QueryID: %s, Channel: %s, Thread: %s - Failed to post timeout message in %.3fs: %v", queryID, channel, threadTs, time.Since(startPost).Seconds(), err)
+		}
+		return fmt.Errorf("query timeout: %v", ctx.Err())
+	}
+
+	log.Printf("QueryID: %s, Channel: %s, Thread: %s - Successfully processed query in %.3fs", queryID, channel, threadTs, time.Since(start).Seconds())
 	return nil
 }
 
+// GetBotID retrieves the Slack bot's ID.
 func (sb *SlackBot) GetBotID() string {
 	start := time.Now()
 	auth, err := sb.client.AuthTest()
-	duration := time.Since(start)
 	if err != nil {
-		log.Printf("Failed to get bot ID in %v: %v", duration, err)
+		log.Printf("Failed to get bot ID in %.3fs: %v", time.Since(start).Seconds(), err)
 		return ""
 	}
-	log.Printf("Successfully got bot ID %s in %v", auth.BotID, duration)
+	log.Printf("Successfully got bot ID %s in %.3fs", auth.BotID, time.Since(start).Seconds())
 	return auth.BotID
 }
 
-func (sb *SlackBot) GetBotToken() string {
-	return sb.botToken
-}
-
+// removeBotMention cleans a query by removing bot mentions and invalid characters.
 func removeBotMention(query string) string {
 	start := time.Now()
 	re := regexp.MustCompile(`(?i)<@U[0-9A-Z]+>|@kms`)
@@ -166,6 +135,6 @@ func removeBotMention(query string) string {
 	reInvalid := regexp.MustCompile(`[^a-zA-Z0-9\s\?\.,#]`)
 	cleaned = reInvalid.ReplaceAllString(cleaned, "")
 	cleaned = strings.TrimSpace(cleaned)
-	log.Printf("Cleaned query '%s' to '%s' in %v", query, cleaned, time.Since(start))
+	log.Printf("Cleaned query '%s' to '%s' in %.3fs", query, cleaned, time.Since(start).Seconds())
 	return cleaned
 }
