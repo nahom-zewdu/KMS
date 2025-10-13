@@ -206,7 +206,6 @@ redis-cli -h sought-perch-5675.upstash.io -p 6379 -a your-redis-token SUBSCRIBE 
 
 ## 🔜 Upcoming Features
 
-- **GitHub Integration**: Ingest PRs/issues, link to knowledge graph.
 - **Jira Integration**: Extract ticket data (e.g., JIRA-123) for richer context.
 - **NLP Enhancements**: Optimize LLM inference (e.g., quantization), integrate vector search (Pinecone).
 - **Monitoring**: Add production logging (Vercel, Heroku) and metrics for Redis/Supabase.
