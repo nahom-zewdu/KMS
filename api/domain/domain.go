@@ -55,6 +55,7 @@ type RedisStream interface {
 // StoragePort defines the interface for storage operations.
 type StoragePort interface {
 	Insert(ctx context.Context, table string, data map[string]interface{}) error
+	Query(ctx context.Context, table string, filter map[string]interface{}) ([]map[string]interface{}, error)
 	QueryKnowledgeGraphSupabase(ctx context.Context, query string) (string, error)
 }
 
