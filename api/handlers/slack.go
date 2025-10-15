@@ -1,4 +1,9 @@
 // handlers/slack.go
+// Package handlers provides the Slack webhook handler for KnowSphere, processing message and app_mention
+// events with HMAC-SHA256 verification. It ingests user messages, handles bot mentions for queries, and
+// ensures idempotency using event_ts as record_id. Supports edge cases like bot messages, timeouts, and
+// retries for reliability.
+
 package handlers
 
 import (
