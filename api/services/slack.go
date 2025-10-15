@@ -1,4 +1,8 @@
 // services/slack.go
+// Package services implements the SlackIngestService for processing Slack webhook events.
+// It validates event data, sanitizes content, and delegates to CoreIngestService for storage
+// and publishing. Supports edge cases like empty content and invalid event types.
+
 package services
 
 import (
