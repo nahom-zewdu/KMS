@@ -144,7 +144,6 @@ func (c *CoreIngest) Ingest(ctx context.Context, req domain.IngestRequest) error
 	streamName := req.Source + "_jobs"
 	err = c.redis.Publish(ctx, streamName, domain.JobPayload{
 		ID:        "*",
-		RecordID:  req.RecordID,
 		Source:    req.Source,
 		EventType: req.EventType,
 		Content:   content,
