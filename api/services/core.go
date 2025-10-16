@@ -52,23 +52,23 @@ func NewCoreIngest(storage domain.StoragePort, redis domain.RedisStream) domain.
 //	error if validation, storage, or publishing fails.
 func (c *CoreIngest) Ingest(ctx context.Context, req domain.IngestRequest) error {
 	start := time.Now()
-	// Generate record ID if not provided
-	recordID := req.RecordID
-	if recordID == "" {
-		recordID = uuid.New().String()
+	// Use provided record ID (e.g., Slack event_ts)
+	if req.RecordID == "" {
+		log.Printf("RecordID: <none> - Empty record ID in %.3fs", time.Since(start).Seconds())
+		return fmt.Errorf("record_id cannot be empty")
 	}
-	log.Printf("RecordID: %s - Starting ingestion for %s event (%s)", recordID, req.Source, req.EventType)
+	log.Printf("RecordID: %s - Starting ingestion for %s event (%s)", req.RecordID, req.Source, req.EventType)
 
 	// Validate source
 	if req.Source != "slack" && req.Source != "github" {
-		log.Printf("RecordID: %s - Invalid source %s in %.3fs", recordID, req.Source, time.Since(start).Seconds())
+		log.Printf("RecordID: %s - Invalid source %s in %.3fs", req.RecordID, req.Source, time.Since(start).Seconds())
 		return fmt.Errorf("invalid source: %s, must be 'slack' or 'github'", req.Source)
 	}
 
 	// Sanitize content
 	content := strings.TrimSpace(strings.ReplaceAll(req.Content, "\n", " "))
 	if content == "" {
-		log.Printf("RecordID: %s - Empty content after sanitization in %.3fs", recordID, time.Since(start).Seconds())
+		log.Printf("RecordID: %s - Empty content after sanitization in %.3fs", req.RecordID, time.Since(start).Seconds())
 		return fmt.Errorf("content cannot be empty")
 	}
 
@@ -84,65 +84,67 @@ func (c *CoreIngest) Ingest(ctx context.Context, req domain.IngestRequest) error
 		if commits, ok := payload["commits"].([]interface{}); ok && len(commits) > 20 {
 			truncated = true
 			payload["commits"] = commits[:20]
-			log.Printf("RecordID: %s - Truncated commits to 20 for %s event", recordID, req.EventType)
+			log.Printf("RecordID: %s - Truncated commits to 20 for %s event", req.RecordID, req.EventType)
 		}
 	}
 
 	// Marshal payload for storage
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
-		log.Printf("RecordID: %s - Failed to marshal payload in %.3fs: %v", recordID, time.Since(start).Seconds(), err)
+		log.Printf("RecordID: %s - Failed to marshal payload in %.3fs: %v", req.RecordID, time.Since(start).Seconds(), err)
 		return fmt.Errorf("failed to marshal payload: %v", err)
 	}
 
 	// Check for duplicate delivery (idempotency)
-	existing, err := c.storage.Query(ctx, "events", map[string]interface{}{"delivery_id": recordID})
+	existing, err := c.storage.Query(ctx, "events", map[string]interface{}{"delivery_id": req.RecordID})
 	if err != nil {
-		log.Printf("RecordID: %s - Failed to check duplicate delivery in %.3fs: %v", recordID, time.Since(start).Seconds(), err)
+		log.Printf("RecordID: %s - Failed to check duplicate delivery in %.3fs: %v", req.RecordID, time.Since(start).Seconds(), err)
+		return fmt.Errorf("failed to check duplicate delivery: %v", err)
 	}
 	if len(existing) > 0 {
-		log.Printf("RecordID: %s - Duplicate delivery detected, skipping ingestion", recordID)
+		log.Printf("RecordID: %s - Duplicate delivery detected, skipping ingestion", req.RecordID)
 		return nil
 	}
 
 	// Store raw payload in events table
 	eventID := uuid.New().String()
 	err = c.storage.Insert(ctx, "events", map[string]interface{}{
+		"record_id":   req.RecordID,
 		"id":          eventID,
 		"source":      req.Source,
 		"event_type":  req.EventType,
 		"payload":     string(payloadBytes),
-		"delivery_id": recordID,
+		"delivery_id": req.RecordID,
 		"processed":   false,
 		"truncated":   truncated,
 		"created_at":  req.CreatedAt.Format(time.RFC3339),
 	})
 	if err != nil {
-		log.Printf("RecordID: %s - Failed to insert into events in %.3fs: %v", recordID, time.Since(start).Seconds(), err)
+		log.Printf("RecordID: %s - Failed to insert into events in %.3fs: %v", req.RecordID, time.Since(start).Seconds(), err)
 		return fmt.Errorf("failed to insert into events: %v", err)
 	}
-	log.Printf("RecordID: %s - Stored %s event (%s) in events table in %.3fs", recordID, req.Source, req.EventType, time.Since(start).Seconds())
+	log.Printf("RecordID: %s - Stored %s event (%s) in events table in %.3fs", req.RecordID, req.Source, req.EventType, time.Since(start).Seconds())
 
 	// Store summarized content in raw_data
 	err = c.storage.Insert(ctx, "raw_data", map[string]interface{}{
 		"id":         uuid.New().String(),
 		"source":     req.Source,
 		"content":    content,
-		"record_id":  recordID,
+		"record_id":  req.RecordID,
 		"event_id":   eventID,
 		"created_at": req.CreatedAt.Format(time.RFC3339),
 	})
 	if err != nil {
-		log.Printf("RecordID: %s - Failed to store %s raw_data in %.3fs: %v", recordID, req.Source, time.Since(start).Seconds(), err)
+		log.Printf("RecordID: %s - Failed to store %s raw_data in %.3fs: %v", req.RecordID, req.Source, time.Since(start).Seconds(), err)
 		return fmt.Errorf("failed to store %s raw_data: %v", req.Source, err)
 	}
-	log.Printf("RecordID: %s - Stored %s raw_data in %.3fs", recordID, req.Source, time.Since(start).Seconds())
+	log.Printf("RecordID: %s - Stored %s raw_data in %.3fs", req.RecordID, req.Source, time.Since(start).Seconds())
 
 	// Publish to Redis stream
 	streamName := req.Source + "_jobs"
 	err = c.redis.Publish(ctx, streamName, domain.JobPayload{
 		ID:        "*",
-		RecordID:  recordID,
+		RecordID:  req.RecordID,
 		Source:    req.Source,
 		EventType: req.EventType,
 		Content:   content,
@@ -150,10 +152,10 @@ func (c *CoreIngest) Ingest(ctx context.Context, req domain.IngestRequest) error
 		CreatedAt: req.CreatedAt.Format(time.RFC3339),
 	})
 	if err != nil {
-		log.Printf("RecordID: %s - Failed to publish to %s in %.3fs: %v", recordID, streamName, time.Since(start).Seconds(), err)
+		log.Printf("RecordID: %s - Failed to publish to %s in %.3fs: %v", req.RecordID, streamName, time.Since(start).Seconds(), err)
 		return fmt.Errorf("failed to publish to %s: %v", streamName, err)
 	}
-	log.Printf("RecordID: %s - Published to %s in %.3fs", recordID, streamName, time.Since(start).Seconds())
+	log.Printf("RecordID: %s - Published to %s in %.3fs", req.RecordID, streamName, time.Since(start).Seconds())
 
 	return nil
 }
