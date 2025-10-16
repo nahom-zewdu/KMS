@@ -1,307 +1,362 @@
+# nlp/hf_processor.py
 """
-Hugging Face Processor for Slackbot Knowledge Management System (KMS).
-
-This script runs a Python worker on Heroku to process Redis Streams (`query_jobs`, `slack_jobs`) from the Go backend (Vercel).
-- Queries (`query_jobs`): Processes `@KMS` mentions, generates answers using LLM (distilgpt2) with Supabase context, publishes to `query_results:{query_id}`.
-- Ingestion (`slack_jobs`): Extracts entities (PERSON, PROJECT, TICKET) using NER (distilbert-base-cased), populates Supabase `entities`/`edges`, caches results.
-- Goals: <100ms query latency, 1K QPS, 99.9% uptime, free-tier (Upstash 10K ops/day, Supabase 500MB).
-- Integrates with Go backend using Upstash Redis TCP (e.g., sought-perch-5675.upstash.io:6379).
+Processes Redis streams (github_jobs, slack_jobs, query_jobs) to extract entities, relationships,
+and handle Slack queries for KnowSphere's knowledge graph. Updates Supabase tables (entities, edges,
+contributions, pull_requests, issues) and responds to query_jobs with results. Uses HuggingFace NLP
+models for entity extraction and handles edge cases like large payloads, deleted repos, and retries.
 """
 
-import os
 import json
+import os
 import time
 import logging
-from uuid import uuid4
-from retry import retry
-import redis
-from langchain_huggingface import HuggingFacePipeline
-from langchain.prompts import PromptTemplate
-from langchain.chains import LLMChain
-from supabase import create_client
-from transformers import pipeline
+import uuid
+from typing import Dict, List
+from redis import Redis
+from supabase import create_client, Client
 from dotenv import load_dotenv
+from langchain_huggingface import HuggingFacePipeline
+from transformers import pipeline
+from retry import retry
 
-# Load environment variables from .env
-load_dotenv()
-
-# Configure logging with detailed format
+# Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
+    format='%(asctime)s - %(levelname)s - %(message)s'
 )
-logger = logging.getLogger(__name__)
 
-# Environment variables
+# Load environment variables
+load_dotenv()
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-UPSTASH_REDIS_URL = os.getenv("UPSTASH_REDIS_URL")  # e.g., sought-perch-5675.upstash.io:6379
-UPSTASH_REDIS_TOKEN = os.getenv("UPSTASH_REDIS_TOKEN")
+REDIS_ADDR = os.getenv("REDIS_ADDR")
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
 HF_API_TOKEN = os.getenv("HF_API_TOKEN")
 
-# Validate environment variables
-if not all([SUPABASE_URL, SUPABASE_KEY, UPSTASH_REDIS_URL, UPSTASH_REDIS_TOKEN, HF_API_TOKEN]):
-    missing = [k for k, v in {
-        "SUPABASE_URL": SUPABASE_URL,
-        "SUPABASE_KEY": SUPABASE_KEY,
-        "UPSTASH_REDIS_URL": UPSTASH_REDIS_URL,
-        "UPSTASH_REDIS_TOKEN": UPSTASH_REDIS_TOKEN,
-        "HF_API_TOKEN": HF_API_TOKEN
-    }.items() if not v]
-    logger.error("Missing environment variables: %s", missing)
-    raise ValueError(f"Missing environment variables: {missing}")
-
-# Initialize Redis client (TCP connection)
-try:
-    host, port = UPSTASH_REDIS_URL.split(":")
-    redis_client = redis.Redis(
-        host=host,
-        port=int(port),
-        password=UPSTASH_REDIS_TOKEN,
-        ssl=True,
-        decode_responses=True  # Auto-decode strings
-    )
-    redis_client.ping()
-    logger.info("Successfully connected to Redis at %s", UPSTASH_REDIS_URL)
-except Exception as e:
-    logger.error("Failed to connect to Redis at %s: %s", UPSTASH_REDIS_URL, e)
-    raise
-
-# Initialize Supabase client
-try:
-    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-    logger.info("Successfully connected to Supabase")
-except Exception as e:
-    logger.error("Failed to connect to Supabase: %s", e)
-    raise
-
-# Initialize LLMs
-try:
-    # NER for entity extraction (ingestion)
-    ner_pipeline = pipeline(
-        "ner",
-        model="distilbert-base-cased",
-        tokenizer="distilbert-base-cased",
-        aggregation_strategy="simple"
-    )
-    logger.info("Successfully initialized NER pipeline (distilbert-base-cased)")
-except Exception as e:
-    logger.error("Failed to initialize NER pipeline: %s", e)
-    raise
-
-try:
-    # LLM for query answering
-    query_llm = HuggingFacePipeline.from_model_id(
-        model_id="distilgpt2",
-        task="text-generation",
-        pipeline_kwargs={"max_new_tokens": 100, "temperature": 0.7}
-    )
-    logger.info("Successfully initialized query LLM (distilgpt2)")
-except Exception as e:
-    logger.error("Failed to initialize query LLM: %s", e)
-    raise
-
-# Prompt templates
-ner_prompt = PromptTemplate(
-    input_variables=["text"],
-    template="""Extract entities (PERSON: names like Nahom, PROJECT: APIs/services like github, payment API, TICKET: formats like JIRA-123, Jira #123, PR #123) from: '{text}'.
-Output JSON: {{"entities": [{{"type": "person/project/ticket", "name": "extracted", "start": 0, "end": 5}}]}}
-Example: Input: "Nahom owns github, Jira #435" -> {{"entities": [{{"type": "person", "name": "Nahom", "start": 0, "end": 5}}, {{"type": "project", "name": "github", "start": 11, "end": 17}}, {{"type": "ticket", "name": "Jira #435", "start": 19, "end": 28}}]}}"""
+# Initialize Supabase and Redis clients
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+redis = Redis.from_url(
+    f"rediss://{REDIS_ADDR}",
+    password=REDIS_PASSWORD,
+    ssl_cert_reqs=None
 )
 
-query_prompt = PromptTemplate(
-    input_variables=["query", "context"],
-    template="""Answer the query: '{query}' using the context: {context}.
-Provide a concise answer (max 100 tokens) referencing entities and relationships (e.g., person owns project, ticket).
-Example: Query: "Who owns github?" Context: {"entities": [{"type": "person", "name": "Nahom"}, {"type": "project", "name": "github"}], "relationships": [{"source_name": "Nahom", "target_name": "github", "type": "owns", "metadata": {"ticket": "Jira #435"}}]}
-Answer: Nahom owns github, Jira #435."""
+# Initialize HuggingFace NLP pipeline for entity recognition
+nlp = pipeline(
+    "ner",
+    model="distilbert-base-cased",
+    tokenizer="distilbert-base-cased",
+    device=0
+)
+# Initialize HuggingFace LLM for text generation
+llm = HuggingFacePipeline.from_model_id(
+    model_id="distilgpt2",
+    task="text-generation",
+    pipeline_kwargs={"max_new_tokens": 50}
 )
 
-ner_chain = LLMChain(llm=HuggingFacePipeline(pipeline=ner_pipeline), prompt=ner_prompt)
-query_chain = LLMChain(llm=query_llm, prompt=query_prompt)
-
-@retry(tries=3, delay=1, backoff=2, logger=logger)
-def extract_entities(text: str, record_id: str) -> list:
+@retry(tries=3, delay=1, backoff=2)
+def update_entities_and_edges(event: Dict, event_id: str) -> None:
     """
-    Extract entities (PERSON, PROJECT, TICKET) from text using NER.
+    Extracts entities (PERSON, PROJECT, TICKET) and relationships (authored, assigned, fixes)
+    from a GitHub/Slack event payload, storing them in Supabase. Updates contributions,
+    pull_requests, and issues tables for GitHub events.
 
     Args:
-        text (str): Input text to process.
-        record_id (str): Unique ID for caching/logging.
-
-    Returns:
-        list: List of entities [{"type": str, "name": str, "start": int, "end": int}].
+        event: Dictionary with event data (RecordID, Source, EventType, Content, Payload, CreatedAt).
+        event_id: UUID of the event in the events table.
 
     Raises:
-        Exception: If NER fails after retries.
+        Exception: If Supabase/Redis operations fail after retries.
     """
     start = time.time()
-    try:
-        cache_key = f"nlp:{record_id}"
-        cached = redis_client.get(cache_key)
-        if cached:
-            logger.info("RecordID: %s - Cache hit for entities in %.3fs", record_id, time.time() - start)
-            return json.loads(cached)
+    logging.info(f"Processing event {event['RecordID']} ({event['Source']}, {event['EventType']})")
+    payload = event["Payload"]
 
-        output = ner_chain.run(text)
-        entities = json.loads(output).get("entities", [])
-        redis_client.setex(cache_key, 86400, json.dumps(entities))  # Cache 24 hours
-        logger.info("RecordID: %s - Extracted %d entities in %.3fs: %s", record_id, len(entities), time.time() - start, entities)
-        return entities
-    except Exception as e:
-        logger.error("RecordID: %s - NER extraction failed in %.3fs: %s", record_id, time.time() - start, e)
-        raise
+    entities: List[Dict] = []
+    edges: List[Dict] = []
 
-@retry(tries=3, delay=1, backoff=2, logger=logger)
-def query_knowledge_graph(query: str, record_id: str) -> str:
+    if event["Source"] == "github":
+        repo_name = payload.get("repository", {}).get("full_name", "")
+        sender = payload.get("sender", {}).get("login", "")
+
+        if event["EventType"] == "push":
+            project_id = str(uuid.uuid4())
+            entities.append({
+                "id": project_id,
+                "type": "project",
+                "name": repo_name,
+                "metadata": {"url": payload.get("repository", {}).get("url", "")},
+                "active": True,
+                "created_at": event["CreatedAt"]
+            })
+
+            commits = payload.get("commits", [])
+            for commit in commits:
+                author = commit.get("author", {}).get("name", sender)
+                person_id = str(uuid.uuid4())
+                entities.append({
+                    "id": person_id,
+                    "type": "person",
+                    "name": author,
+                    "metadata": {"email": commit.get("author", {}).get("email", "")},
+                    "active": True,
+                    "created_at": event["CreatedAt"]
+                })
+                edges.append({
+                    "id": str(uuid.uuid4()),
+                    "source_id": person_id,
+                    "target_id": project_id,
+                    "type": "authored",
+                    "metadata": {
+                        "commit_sha": commit.get("id", ""),
+                        "message": commit.get("message", "")
+                    },
+                    "created_at": event["CreatedAt"]
+                })
+
+        elif event["EventType"] == "pull_request":
+            pr = payload.get("pull_request", {})
+            pr_id = str(uuid.uuid4())
+            entities.append({
+                "id": pr_id,
+                "type": "ticket",
+                "name": f"PR #{pr.get('number', '')}",
+                "metadata": {
+                    "title": pr.get("title", ""),
+                    "body": pr.get("body", "")
+                },
+                "active": pr.get("state", "") != "closed",
+                "created_at": event["CreatedAt"]
+            })
+            supabase.table("pull_requests").upsert({
+                "id": str(uuid.uuid4()),
+                "event_id": event_id,
+                "pr_number": pr.get("number", 0),
+                "repo_name": repo_name,
+                "title": pr.get("title", ""),
+                "body": pr.get("body", ""),
+                "assignee_id": None,
+                "reviewers": pr.get("requested_reviewers", []),
+                "labels": pr.get("labels", []),
+                "commits_count": pr.get("commits", 0),
+                "merged": pr.get("merged", False),
+                "created_at": event["CreatedAt"]
+            }, on_conflict="pr_number,repo_name").execute()
+
+            if assignee := pr.get("assignee"):
+                person_id = str(uuid.uuid4())
+                entities.append({
+                    "id": person_id,
+                    "type": "person",
+                    "name": assignee.get("login", ""),
+                    "metadata": {},
+                    "active": True,
+                    "created_at": event["CreatedAt"]
+                })
+                edges.append({
+                    "id": str(uuid.uuid4()),
+                    "source_id": person_id,
+                    "target_id": pr_id,
+                    "type": "assigned",
+                    "metadata": {"action": payload.get("action", "")},
+                    "created_at": event["CreatedAt"]
+                })
+                supabase.table("pull_requests").update({
+                    "assignee_id": person_id
+                }).eq("id", pr_id).execute()
+
+        elif event["EventType"] == "issues":
+            issue = payload.get("issue", {})
+            issue_id = str(uuid.uuid4())
+            entities.append({
+                "id": issue_id,
+                "type": "ticket",
+                "name": f"Issue #{issue.get('number', '')}",
+                "metadata": {
+                    "title": issue.get("title", ""),
+                    "body": issue.get("body", "")
+                },
+                "active": issue.get("state", "") == "open",
+                "created_at": event["CreatedAt"]
+            })
+            supabase.table("issues").upsert({
+                "id": str(uuid.uuid4()),
+                "event_id": event_id,
+                "issue_number": issue.get("number", 0),
+                "repo_name": repo_name,
+                "title": issue.get("title", ""),
+                "body": issue.get("body", ""),
+                "assignee_id": None,
+                "labels": issue.get("labels", []),
+                "state": issue.get("state", "open"),
+                "created_at": event["CreatedAt"]
+            }, on_conflict="issue_number,repo_name").execute()
+
+            if assignee := issue.get("assignee"):
+                person_id = str(uuid.uuid4())
+                entities.append({
+                    "id": person_id,
+                    "type": "person",
+                    "name": assignee.get("login", ""),
+                    "metadata": {},
+                    "active": True,
+                    "created_at": event["CreatedAt"]
+                })
+                edges.append({
+                    "id": str(uuid.uuid4()),
+                    "source_id": person_id,
+                    "target_id": issue_id,
+                    "type": "assigned",
+                    "metadata": {"action": payload.get("action", "")},
+                    "created_at": event["CreatedAt"]
+                })
+                supabase.table("issues").update({
+                    "assignee_id": person_id
+                }).eq("id", issue_id).execute()
+
+        # Update contributions for GitHub events
+        if event["EventType"] in ["push", "pull_request", "issues"]:
+            update_contributions(event, payload, sender, repo_name)
+
+    elif event["Source"] == "slack" and event["EventType"] == "message":
+        entities.append({
+            "id": str(uuid.uuid4()),
+            "type": "person",
+            "name": payload.get("user", "unknown"),
+            "metadata": {},
+            "active": True,
+            "created_at": event["CreatedAt"]
+        })
+        llm_result = llm(f"Extract project or ticket from: {event['Content']}")
+        project_name = llm_result[0]["generated_text"].strip()
+        if project_name:
+            entities.append({
+                "id": str(uuid.uuid4()),
+                "type": "project",
+                "name": project_name,
+                "metadata": {},
+                "active": True,
+                "created_at": event["CreatedAt"]
+            })
+
+    # Insert entities and edges
+    for entity in entities:
+        supabase.table("entities").upsert(entity, on_conflict="id").execute()
+    for edge in edges:
+        supabase.table("edges").insert(edge).execute()
+
+    # Mark event as processed
+    supabase.table("events").update({"processed": True}).eq("id", event_id).execute()
+    logging.info(f"Processed event {event['RecordID']} in {time.time() - start:.3f}s")
+
+@retry(tries=3, delay=1, backoff=2)
+def process_query(event: Dict) -> None:
     """
-    Answer a query using LLM and Supabase context.
+    Processes query_jobs stream, searches Supabase entities/raw_data, and publishes results to query_results.
 
     Args:
-        query (str): Query text (e.g., "Who owns github?").
-        record_id (str): Unique ID for Pub/Sub and caching.
-
-    Returns:
-        str: Answer to the query.
+        event: Dictionary with query data (RecordID, Source, Content, Payload, CreatedAt).
 
     Raises:
-        Exception: If LLM or Supabase query fails after retries.
+        Exception: If Supabase/Redis operations fail after retries.
     """
     start = time.time()
-    cache_key = f"query:{record_id}"
-    try:
-        cached = redis_client.get(cache_key)
-        if cached:
-            logger.info("RecordID: %s - Cache hit for query '%s' in %.3fs", record_id, query, time.time() - start)
-            return cached
+    query_id = event["RecordID"]
+    query = event["Content"]
+    logging.info(f"Processing query {query_id}: {query}")
 
-        # Query Supabase for context
-        context = {"entities": [], "relationships": []}
-        try:
-            entities = supabase.table("entities").select("type, name").execute().data
-            relationships = supabase.table("edges").select("source_id, target_id, type, metadata").execute().data
-            context["entities"] = entities
-            context["relationships"] = relationships
-            logger.info("RecordID: %s - Fetched Supabase context in %.3fs: %d entities, %d relationships",
-                        record_id, time.time() - start, len(entities), len(relationships))
-        except Exception as e:
-            logger.warning("RecordID: %s - Supabase query failed in %.3fs: %s", record_id, time.time() - start, e)
+    # Search entities and raw_data
+    result = supabase.table("entities").select("name, type, metadata").ilike("name", f"%{query}%").execute()
+    if not result.data:
+        result = supabase.table("raw_data").select("content").ilike("content", f"%{query}%").execute()
 
-        # Generate answer with LLM
-        answer = query_chain.run(query=query, context=json.dumps(context))
-        redis_client.setex(cache_key, 300, answer)  # Cache 5 minutes
-        logger.info("RecordID: %s - Generated answer for query '%s' in %.3fs: %s", record_id, query, time.time() - start, answer)
-        return answer
-    except Exception as e:
-        logger.error("RecordID: %s - Query processing failed in %.3fs: %s", record_id, time.time() - start, e)
-        return "Unable to process query."
+    # Generate response
+    response = "No results found."
+    if result.data:
+        if "name" in result.data[0]:
+            # Entities result
+            entities = [f"{r['type'].capitalize()}: {r['name']} ({r['metadata']})" for r in result.data]
+            response = f"Found {len(entities)} results:\n" + "\n".join(entities)
+        else:
+            # Raw_data result
+            response = result.data[0]["content"]
 
-@retry(tries=3, delay=1, backoff=2, logger=logger)
-def store_entities_and_relationships(entities: list, record_id: str, text: str) -> None:
+    # Publish to query_results
+    redis.xadd(f"query_results:{query_id}", {"answer": response})
+    logging.info(f"Processed query {query_id} in {time.time() - start:.3f}s, response: {response}")
+
+@retry(tries=3, delay=1, backoff=2)
+def update_contributions(event: Dict, payload: Dict, sender: str, repo_name: str) -> None:
     """
-    Store entities and relationships in Supabase.
+    Updates contribution metrics (commit_count, pr_count, issue_count) in the contributions table.
 
     Args:
-        entities (list): List of entities from NER.
-        record_id (str): Unique ID for logging.
-        text (str): Original text for context.
+        event: Dictionary with event data (RecordID, EventType, etc.).
+        payload: Parsed event payload.
+        sender: GitHub user login.
+        repo_name: Repository full name.
 
     Raises:
-        Exception: If Supabase insert fails after retries.
+        Exception: If Supabase operation fails after retries.
     """
     start = time.time()
-    try:
-        entity_ids = {}
-        for entity in entities:
-            entity_id = str(uuid4())
-            supabase.table("entities").insert({
-                "id": entity_id,
-                "type": entity["type"],
-                "name": entity["name"],
-                "metadata": {}
-            }).execute()
-            entity_ids[entity["name"]] = entity_id
-            logger.info("RecordID: %s - Stored entity %s (ID: %s) in %.3fs", record_id, entity["name"], entity_id, time.time() - start)
+    update = {
+        "id": str(uuid.uuid4()),
+        "person_name": sender,
+        "repo_name": repo_name,
+        "commit_count": 0,
+        "pr_count": 0,
+        "issue_count": 0,
+        "updated_at": event["CreatedAt"]
+    }
 
-        relationships = infer_relationships(entities)
-        for rel in relationships:
-            supabase.table("edges").insert({
-                "id": str(uuid4()),
-                "source_id": entity_ids[rel["source_name"]],
-                "target_id": entity_ids[rel["target_name"]],
-                "type": rel["type"],
-                "metadata": rel["metadata"]
-            }).execute()
-            logger.info("RecordID: %s - Stored relationship %s -> %s (%s) in %.3fs",
-                        record_id, rel["source_name"], rel["target_name"], rel["type"], time.time() - start)
+    if event["EventType"] == "push":
+        update["commit_count"] = len(payload.get("commits", []))
+    elif event["EventType"] == "pull_request":
+        update["pr_count"] = 1
+    elif event["EventType"] == "issues":
+        update["issue_count"] = 1
 
-        if entities:
-            supabase.table("raw_data").update({"entity_id": entity_ids[entities[0]["name"]]}).eq("id", record_id).execute()
-            logger.info("RecordID: %s - Updated raw_data with entity_id %s in %.3fs", record_id, entity_ids[entities[0]["name"]], time.time() - start)
-    except Exception as e:
-        logger.error("RecordID: %s - Failed to store entities/relationships for '%s' in %.3fs: %s", record_id, text, time.time() - start, e)
-        raise
+    supabase.table("contributions").upsert(
+        update,
+        on_conflict="person_name,repo_name"
+    ).execute()
+    logging.info(f"Updated contributions for {sender} in {repo_name} in {time.time() - start:.3f}s")
 
-def infer_relationships(entities: list) -> list:
+def process_stream() -> None:
     """
-    Infer relationships (e.g., person owns project) from entities.
+    Continuously processes Redis streams (github_jobs, slack_jobs, query_jobs), updating Supabase
+    and responding to queries. Deletes processed messages from streams.
 
-    Args:
-        entities (list): List of entities [{"type": str, "name": str, "start": int, "end": int}].
-
-    Returns:
-        list: List of relationships [{"source_name": str, "target_name": str, "type": str, "metadata": dict}].
+    Raises:
+        Exception: If Redis connection fails, handled with exponential backoff.
     """
-    relationships = []
-    for i, entity in enumerate(entities):
-        if entity["type"] == "person":
-            for j in range(i + 1, len(entities)):
-                if entities[j]["type"] == "project":
-                    ticket = next((e["name"] for e in entities if e["type"] == "ticket"), "")
-                    relationships.append({
-                        "source_name": entity["name"],
-                        "target_name": entities[j]["name"],
-                        "type": "owns",
-                        "metadata": {"ticket": ticket}
-                    })
-    return relationships
-
-def main():
-    """
-    Main worker loop to process Redis Streams (`query_jobs`, `slack_jobs`).
-
-    - `query_jobs`: Process `@KMS` queries, generate answers, publish to `query_results:{query_id}`.
-    - `slack_jobs`: Extract entities, store in Supabase `entities`/`edges`, cache results.
-    - Batches 10 messages per stream, retries on errors, caches results.
-    """
-    streams = ["query_jobs", "slack_jobs"]
+    streams = ["github_jobs", "slack_jobs", "query_jobs"]
     while True:
         try:
-            start = time.time()
-            response = redis_client.xread(streams={stream: "0" for stream in streams}, count=10, block=10000)
+            response = redis.xread(streams=streams, count=10, block=1000)
             for stream, messages in response:
-                stream_name = stream
                 for message_id, message in messages:
-                    record_id = message.get("record_id", "")
-                    text = message.get("content", "")
-                    source = message.get("source", "")
-                    logger.info("RecordID: %s - Processing %s message: %s", record_id, stream_name, text)
-
-                    if stream_name == "query_jobs":
-                        answer = query_knowledge_graph(text, record_id)
-                        redis_client.publish(f"query_results:{record_id}", answer)
-                        logger.info("RecordID: %s - Published answer to query_results:%s in %.3fs", record_id, record_id, time.time() - start)
-                    elif stream_name == "slack_jobs":
-                        entities = extract_entities(text, record_id)
-                        store_entities_and_relationships(entities, record_id, text)
-
-                    redis_client.xdel(stream_name, message_id)
-                    logger.info("RecordID: %s - Deleted message %s from %s in %.3fs", record_id, message_id, stream_name, time.time() - start)
+                    event = {
+                        "RecordID": message.get(b"RecordID", b"").decode(),
+                        "Source": message.get(b"Source", b"").decode(),
+                        "EventType": message.get(b"EventType", b"").decode(),
+                        "Content": message.get(b"Content", b"").decode(),
+                        "Payload": json.loads(message.get(b"Payload", b"{}").decode()),
+                        "CreatedAt": message.get(b"CreatedAt", b"").decode()
+                    }
+                    if stream.decode() == "query_jobs":
+                        process_query(event)
+                    else:
+                        result = supabase.table("events").select("id").eq("delivery_id", event["RecordID"]).execute()
+                        event_id = result.data[0]["id"] if result.data else str(uuid.uuid4())
+                        update_entities_and_edges(event, event_id)
+                    redis.xdel(stream, message_id)
         except Exception as e:
-            logger.error("Redis stream error in %.3fs: %s", time.time() - start, e)
-            time.sleep(5)  # Backoff on error
-        time.sleep(0.1)  # Avoid tight loop
+            logging.error(f"Error processing stream: {e}")
+            time.sleep(1)
 
 if __name__ == "__main__":
-    main()
+    process_stream()
+    
