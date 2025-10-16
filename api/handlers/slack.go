@@ -159,6 +159,12 @@ func (h *SlackHandler) HandleSlackWebhook(c *gin.Context) {
 		}()
 
 	case *slackevents.MessageEvent:
+		// Validate event_ts
+		if ev.TimeStamp == "" || !strings.Contains(ev.TimeStamp, ".") {
+			log.Printf("RecordID: <none> - Invalid or empty Slack event_ts in %.3fs", time.Since(start).Seconds())
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or empty event timestamp"})
+			return
+		}
 		// Ingest only non-bot, non-mention messages
 		botID := h.slackBot.GetBotID()
 		if ev.BotID == "" && ev.User != botID && !strings.Contains(ev.Text, "<@") && ev.User != "" {
