@@ -8,9 +8,9 @@ import logging
 from dotenv import load_dotenv
 from redis import Redis
 from utils import init_supabase, init_redis, log_error
-from ner import extract_entities
-from re import extract_relations
-from query_handler import handle_query
+from nlp.ner import extract_entities
+from nlp.re import extract_relations
+from nlp.query_handler import handle_query
 
 # Configure logging
 logging.basicConfig(
