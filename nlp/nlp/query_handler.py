@@ -1,13 +1,12 @@
 # nlp/query_handler.py
 # Purpose: Handles query_jobs stream, searches Supabase, and generates answers using free LLM.
 
-import json
-import logging
-import time
 from typing import Dict
 from langchain_huggingface import HuggingFacePipeline
 from supabase import Client
-from redis import Redis
+import json
+import logging
+import time
 
 llm = HuggingFacePipeline.from_model_id(
     model_id="distilgpt2",
@@ -16,7 +15,7 @@ llm = HuggingFacePipeline.from_model_id(
     device=-1
 )
 
-def handle_query(job: Dict, supabase: Client, redis: Redis) -> None:
+def handle_query(job: Dict, supabase: Client, redis: 'Redis') -> None:
     """
     Processes a query job, searches Supabase, and generates an answer using LLM.
     
@@ -36,7 +35,7 @@ def handle_query(job: Dict, supabase: Client, redis: Redis) -> None:
 
     # Search Supabase
     try:
-        result = supabase.table("entities").select("*").ilike("name", f"%{content.lower()}%").execute()
+        result = supabase.table("entities").select("*").ilike("text", f"%{content.lower()}%").execute()
         if not result.data:
             result = supabase.table("raw_data").select("*").ilike("content", f"%{content.lower()}%").execute()
         context = json.dumps(result.data, indent=2) if result.data else "No relevant data found."
@@ -52,11 +51,24 @@ def handle_query(job: Dict, supabase: Client, redis: Redis) -> None:
         logging.error(f"QueryID: {query_id} - Failed to generate answer: {e}")
         answer = "No results found."
 
-    # Publish to query_results
+    # Store in Supabase
+    try:
+        supabase.table("query_results").insert({
+            "id": f"{query_id}-{channel}",
+            "query": content,
+            "response": answer,
+            "channel": channel,
+            "thread_ts": job["Payload"].get("thread_ts", ""),
+            "created_at": job["CreatedAt"]
+        }).execute()
+        logging.info(f"Stored query result for {query_id}-{channel} in {time.time() - start:.3f}s")
+    except Exception as e:
+        logging.error(f"QueryID: {query_id} - Failed to store query result: {e}")
+
+    # Publish to Redis
     try:
         redis.xadd(f"query_results:{query_id}", {"answer": answer})
         logging.info(f"Published answer for {query_id}: {answer}")
     except Exception as e:
         logging.error(f"QueryID: {query_id} - Failed to publish to Redis: {e}")
-
-    logging.info(f"Processed query {query_id} in {time.time() - start:.3f}s")
+        
