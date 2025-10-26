@@ -2,10 +2,10 @@
 # Purpose: Main loop for processing Redis streams (slack_jobs, github_jobs, query_jobs).
 # It delegates to NER/RE/query modules and updates Supabase, handling retries and edge cases.
 
+import json
 import os
 import time
 import logging
-import json
 from dotenv import load_dotenv
 from redis import Redis
 from utils import init_supabase, init_redis, log_error
@@ -16,7 +16,8 @@ from nlp.query_handler import handle_query
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
 )
 
 load_dotenv()
@@ -26,7 +27,7 @@ REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
 redis = init_redis(REDIS_ADDR, REDIS_PASSWORD)
 supabase = init_supabase()
 
-streams = ["slack_jobs", "github_jobs", "query_jobs"]
+streams = {"slack_jobs": "$", "github_jobs": "$", "query_jobs": "$"}
 
 def main():
     logging.info("Starting KMS NLP Processor")
@@ -49,7 +50,7 @@ def main():
                             "CreatedAt": message_data.get("CreatedAt", "")
                         }
                         if stream_name == "query_jobs":
-                            handle_query(job, supabase)
+                            handle_query(job, supabase, redis)
                         else:
                             entities = extract_entities(job["Content"])
                             relations = extract_relations(job["Content"], entities)
