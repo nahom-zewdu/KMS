@@ -5,6 +5,7 @@
 import os
 import time
 import logging
+import json
 from dotenv import load_dotenv
 from redis import Redis
 from utils import init_supabase, init_redis, log_error
