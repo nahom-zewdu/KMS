@@ -4,6 +4,8 @@
 from typing import Dict
 from langchain_huggingface import HuggingFacePipeline
 from supabase import Client
+from redis import Redis
+
 import json
 import logging
 import time
@@ -71,4 +73,3 @@ def handle_query(job: Dict, supabase: Client, redis: 'Redis') -> None:
         logging.info(f"Published answer for {query_id}: {answer}")
     except Exception as e:
         logging.error(f"QueryID: {query_id} - Failed to publish to Redis: {e}")
-        
