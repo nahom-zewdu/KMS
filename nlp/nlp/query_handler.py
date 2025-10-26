@@ -16,13 +16,14 @@ llm = HuggingFacePipeline.from_model_id(
     device=-1
 )
 
-def handle_query(job: Dict, supabase: Client) -> None:
+def handle_query(job: Dict, supabase: Client, redis: Redis) -> None:
     """
     Processes a query job, searches Supabase, and generates an answer using LLM.
     
     Args:
         job: Dictionary with query data (RecordID, Source, Content, Payload, CreatedAt).
         supabase: Supabase client for querying.
+        redis: Redis client for publishing results.
     
     Returns:
         None (publishes to query_results via Redis).
