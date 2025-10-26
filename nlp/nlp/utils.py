@@ -38,7 +38,12 @@ def init_redis(addr: str, password: str) -> Redis:
         ssl_cert_reqs=None,
         decode_responses=True
     )
-    logging.info(f"Initialized Redis client at {addr}")
+    try:
+        client.ping()
+        logging.info(f"Initialized Redis client at {addr}")
+    except Exception as e:
+        logging.error(f"Failed to initialize Redis: {e}")
+        raise
     return client
 
 def log_error(message: str):
