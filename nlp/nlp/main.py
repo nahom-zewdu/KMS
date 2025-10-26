@@ -48,14 +48,24 @@ def main():
                             "CreatedAt": message_data.get("CreatedAt", "")
                         }
                         if stream_name == "query_jobs":
-                            handle_query(job)
+                            handle_query(job, supabase)
                         else:
                             entities = extract_entities(job["Content"])
                             relations = extract_relations(job["Content"], entities)
-                            # Update Supabase (placeholder, expand as needed)
-                            supabase.table("entities").insert(entities).execute()
-                            supabase.table("edges").insert(relations).execute()
-                        # Delete processed message
+                            for entity in entities:
+                                entity["record_id"] = job["RecordID"]
+                                entity["source"] = job["Source"]
+                                entity["created_at"] = job["CreatedAt"]
+                                supabase.table("entities").insert(entity).execute()
+                            for relation in relations:
+                                relation["record_id"] = job["RecordID"]
+                                relation["source"] = job["Source"]
+                                relation["created_at"] = job["CreatedAt"]
+                                supabase.table("edges").insert(relation).execute()
+                            supabase.table("events").update({"processed": True}).eq("delivery_id", job["RecordID"]).execute()
+                        
+                        # Acknowledge and delete message
+                        redis.xack(stream_name, "kms", message_id)
                         redis.xdel(stream_name, message_id)
                     except Exception as e:
                         log_error(f"Failed to process message {message_id} in {stream_name}: {e}")
