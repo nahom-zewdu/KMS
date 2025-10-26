@@ -1,6 +1,7 @@
 # nlp/ner.py
 # Purpose: Extracts entities (PERSON, PROJECT, TICKET) from text using free HuggingFace NER models.
 
+from typing import List, Dict
 from transformers import pipeline
 
 # Initialize NER pipeline (free model)
