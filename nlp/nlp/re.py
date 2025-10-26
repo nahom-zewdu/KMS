@@ -1,6 +1,7 @@
 # nlp/re.py
 # Purpose: Extracts relationships (authored, assigned, fixes) from text and entities using free HuggingFace RE models.
 
+from typing import List, Dict
 from transformers import pipeline
 
 # Initialize RE pipeline (free model)
