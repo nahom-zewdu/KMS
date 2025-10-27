@@ -2,13 +2,13 @@
 # Purpose: Handles query_jobs stream, searches Supabase, and generates answers using free LLM.
 
 from typing import Dict
-from langchain_huggingface import HuggingFacePipeline
-from supabase import Client
-from redis import Redis
-
 import json
 import logging
 import time
+
+from langchain_huggingface import HuggingFacePipeline
+from supabase import Client
+from redis import Redis
 
 llm = HuggingFacePipeline.from_model_id(
     model_id="distilgpt2",
@@ -37,7 +37,7 @@ def handle_query(job: Dict, supabase: Client, redis: Redis) -> None:
 
     # Search Supabase
     try:
-        result = supabase.table("entities").select("*").ilike("text", f"%{content.lower()}%").execute()
+        result = supabase.table("entities").select("*").ilike("name", f"%{content.lower()}%").execute()
         if not result.data:
             result = supabase.table("raw_data").select("*").ilike("content", f"%{content.lower()}%").execute()
         context = json.dumps(result.data, indent=2) if result.data else "No relevant data found."
@@ -48,22 +48,22 @@ def handle_query(job: Dict, supabase: Client, redis: Redis) -> None:
     # Generate answer with LLM
     prompt = f"Query: {content}\nContext: {context}\nAnswer:"
     try:
-        answer = llm(prompt)[0]["generated_text"].split("Answer:")[-1].strip()
+        answer = llm.invoke(prompt).split("Answer:")[-1].strip()
     except Exception as e:
         logging.error(f"QueryID: {query_id} - Failed to generate answer: {e}")
         answer = "No results found."
 
-    # Store in Supabase
+    # Store in raw_data (since query_results table doesn't exist)
     try:
-        supabase.table("query_results").insert({
-            "id": f"{query_id}-{channel}",
-            "query": content,
-            "response": answer,
-            "channel": channel,
-            "thread_ts": job["Payload"].get("thread_ts", ""),
+        supabase.table("raw_data").insert({
+            "id": str(query_id) + "-query",
+            "source": "query",
+            "content": f"Query: {content}, Answer: {answer}",
+            "record_id": query_id,
+            "event_id": None,  # No linked event for queries
             "created_at": job["CreatedAt"]
         }).execute()
-        logging.info(f"Stored query result for {query_id}-{channel} in {time.time() - start:.3f}s")
+        logging.info(f"Stored query result for {query_id}-{channel} in raw_data in {time.time() - start:.3f}s")
     except Exception as e:
         logging.error(f"QueryID: {query_id} - Failed to store query result: {e}")
 
