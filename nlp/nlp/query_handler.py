@@ -59,11 +59,17 @@ def handle_query(job: Dict, supabase: Client, redis: Redis) -> None:
             Question: {content}
             Context: {context}
             Provide a short, direct answer:"""
-    try:
-        answer = llm.invoke(prompt).split("Answer:")[-1].strip()
-    except Exception as e:
-        logging.error(f"QueryID: {query_id} - LLM error: {e}")
-        answer = "No results found."
+    
+    # Invoke LLM
+    raw_output = llm.invoke(prompt)
+
+    if isinstance(raw_output, list) and len(raw_output) > 0:
+        raw_output = raw_output[0].get("generated_text", "")
+    elif not isinstance(raw_output, str):
+        raw_output = str(raw_output)
+
+    answer = raw_output.split("Answer:")[-1].strip() if "Answer:" in raw_output else raw_output.strip()
+
 
     created_at = job.get("CreatedAt")
     if not created_at:
