@@ -46,7 +46,10 @@ def handle_query(job: Dict, supabase: Client, redis: Redis) -> None:
         context = "No relevant data found."
 
     # Generate answer with LLM
-    prompt = f"Query: {content}\nContext: {context}\nAnswer:"
+    prompt = prompt = f"""You are a helpful assistant. Answer the user's question based on the provided context.
+            Question: {content}
+            Context: {context}
+            Provide a short, direct answer:"""
     try:
         answer = llm.invoke(prompt).split("Answer:")[-1].strip()
     except Exception as e:
