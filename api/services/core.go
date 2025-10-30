@@ -139,9 +139,13 @@ func (c *CoreIngest) Ingest(ctx context.Context, req domain.IngestRequest) error
 	}
 	log.Printf("RecordID: %s - Stored %s raw_data in %.3fs", req.RecordID, req.Source, time.Since(start).Seconds())
 
+	// Create a separate context with timeout for publishing
+	publishCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	// Publish to Redis stream
 	streamName := req.Source + "_jobs"
-	err = c.redis.Publish(ctx, streamName, domain.JobPayload{
+	err = c.redis.Publish(publishCtx, streamName, domain.JobPayload{
 		ID:        "*",
 		RecordID:  req.RecordID,
 		Source:    req.Source,
