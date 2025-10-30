@@ -66,9 +66,9 @@ def main():
                                 supabase.table("edges").insert(relation).execute()
                             supabase.table("events").update({"processed": True}).eq("delivery_id", job["RecordID"]).execute()
                         
-                        # Acknowledge and delete message
-                        redis.xack(stream_name, "kms", message_id)
-                        redis.xdel(stream_name, message_id)
+                            # Acknowledge and delete message
+                            redis.xack(stream_name, "kms", message_id)
+                            redis.xdel(stream_name, message_id)
                     except Exception as e:
                         log_error(f"Failed to process message {message_id} in {stream_name}: {e}")
         except Exception as e:
