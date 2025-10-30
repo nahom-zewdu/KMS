@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nahom-zewdu/kMS/api/domain"
 	"github.com/slack-go/slack"
 )
@@ -32,7 +33,7 @@ func NewSlackBot(botToken string, coreIngest domain.CoreIngestService, redis dom
 }
 
 // HandleEvent processes Slack app_mention events and publishes queries to Redis.
-func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, query string) error {
+func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, query, eventTs string) error {
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
@@ -54,7 +55,7 @@ func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, 
 	}
 
 	// Generate query ID
-	queryID := threadTs + "-" + channel
+	queryID := eventTs + "-" + uuid.New().String()
 	log.Printf("QueryID: %s, Channel: %s, Thread: %s - Processing query: %s", queryID, channel, threadTs, cleanQuery)
 
 	// Publish to query_jobs
