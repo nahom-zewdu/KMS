@@ -6,14 +6,13 @@ import json
 import os
 import time
 import logging
+import datetime
 from dotenv import load_dotenv
-from redis import Redis
 from utils import init_supabase, init_redis, log_error
 from nlp.ner import extract_entities
 from nlp.re import extract_relations
 from nlp.query_handler import handle_query
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -33,7 +32,6 @@ def main():
     logging.info("Starting KMS NLP Processor")
     while True:
         try:
-            # Read 10 messages from streams (block for 1s)
             response = redis.xread(streams=streams, count=10, block=1000)
             if not response:
                 continue
@@ -41,14 +39,19 @@ def main():
             for stream_name, messages in response:
                 for message_id, message_data in messages:
                     try:
+                        created_at = message_data.get("CreatedAt")
+                        if not created_at or created_at == "":
+                            created_at = datetime.datetime.utcnow().isoformat() + "Z"
+
                         job = {
                             "RecordID": message_data.get("RecordID", ""),
                             "Source": message_data.get("Source", ""),
                             "EventType": message_data.get("EventType", ""),
                             "Content": message_data.get("Content", ""),
                             "Payload": json.loads(message_data.get("Payload", "{}")),
-                            "CreatedAt": message_data.get("CreatedAt", "")
+                            "CreatedAt": created_at
                         }
+
                         if stream_name == "query_jobs":
                             handle_query(job, supabase, redis)
                         else:
@@ -69,6 +72,7 @@ def main():
                             # Acknowledge and delete message
                             redis.xack(stream_name, "kms", message_id)
                             redis.xdel(stream_name, message_id)
+
                     except Exception as e:
                         log_error(f"Failed to process message {message_id} in {stream_name}: {e}")
         except Exception as e:
