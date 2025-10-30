@@ -33,6 +33,6 @@ type SlackIngestService interface {
 
 // SlackBotService defines the interface for Slack bot interactions.
 type SlackBotService interface {
-	HandleEvent(ctx context.Context, teamID, channel, threadTs, query string) error
+	HandleEvent(ctx context.Context, teamID, channel, threadTs, query, eventTs string) error
 	GetBotID() string
 }
