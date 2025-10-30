@@ -71,7 +71,7 @@ func (r *SupabaseRepo) Insert(ctx context.Context, table string, data map[string
 	}
 
 	// Validate record_id for relevant tables
-	if table == "raw_data" || table == "events" {
+	if table == "raw_data" {
 		if data["record_id"] == nil || data["record_id"] == "" {
 			log.Printf("RecordID: <none> - Empty record ID in %.3fs", time.Since(start).Seconds())
 			return fmt.Errorf("empty record ID for table %s", table)
