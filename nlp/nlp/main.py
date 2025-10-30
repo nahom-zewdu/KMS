@@ -39,17 +39,19 @@ def main():
             for stream_name, messages in response:
                 for message_id, message_data in messages:
                     try:
-                        created_at = message_data.get("CreatedAt")
-                        if not created_at or created_at == "":
-                            created_at = datetime.datetime.utcnow().isoformat() + "Z"
+                        raw_data = message_data.get("data")
+                        if not raw_data:
+                            logging.warning(f"Empty data field in message {message_id} from {stream_name}")
+                            continue
 
+                        payload = json.loads(raw_data)
                         job = {
-                            "RecordID": message_data.get("RecordID", ""),
-                            "Source": message_data.get("Source", ""),
-                            "EventType": message_data.get("EventType", ""),
-                            "Content": message_data.get("Content", ""),
-                            "Payload": json.loads(message_data.get("Payload", "{}")),
-                            "CreatedAt": created_at
+                            "RecordID": payload.get("RecordID") or payload.get("record_id", ""),
+                            "Source": payload.get("Source") or payload.get("source", ""),
+                            "EventType": payload.get("EventType") or payload.get("event_type", ""),
+                            "Content": payload.get("Content") or payload.get("content", ""),
+                            "Payload": payload.get("Payload") or payload.get("payload", {}),
+                            "CreatedAt": payload.get("CreatedAt") or payload.get("created_at", "")
                         }
 
                         if stream_name == "query_jobs":
