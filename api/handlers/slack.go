@@ -141,7 +141,7 @@ func (h *SlackHandler) HandleSlackWebhook(c *gin.Context) {
 
 			// Retry logic for HandleEvent
 			for attempt := 1; attempt <= 3; attempt++ {
-				err := h.slackBot.HandleEvent(ctx, eventsAPIEvent.TeamID, ev.Channel, ev.ThreadTimeStamp, ev.Text)
+				err := h.slackBot.HandleEvent(ctx, eventsAPIEvent.TeamID, ev.Channel, ev.ThreadTimeStamp, ev.Text, ev.TimeStamp)
 				if err == nil {
 					log.Printf("RecordID: %s - Successfully handled app_mention in %.3fs (attempt %d)", ev.TimeStamp, time.Since(start).Seconds(), attempt)
 					return
