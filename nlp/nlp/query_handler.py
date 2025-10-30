@@ -66,8 +66,8 @@ def handle_query(job: Dict, supabase: Client, redis: Redis) -> None:
         answer = "No results found."
 
     created_at = job.get("CreatedAt")
-    if not created_at or created_at == "":
-        created_at = time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime())
+    if not created_at:
+        created_at = time.strftime("%Y-%m-%d %H:%M:%S+00", time.gmtime())
 
     # Store in raw_data
     try:
