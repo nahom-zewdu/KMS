@@ -78,7 +78,6 @@ def handle_query(job: Dict, supabase: Client, redis: Redis) -> None:
     # Store in raw_data
     try:
         supabase.table("raw_data").insert({
-            "id": query_id + "-query",
             "source": "query",
             "content": f"Q: {content} | A: {answer}",
             "record_id": query_id,
