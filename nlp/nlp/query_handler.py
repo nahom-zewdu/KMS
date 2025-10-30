@@ -53,6 +53,10 @@ def handle_query(job: Dict, supabase: Client, redis: Redis) -> None:
         logging.error(f"QueryID: {query_id} - Failed to generate answer: {e}")
         answer = "No results found."
 
+    created_at = job.get("CreatedAt")
+    if not created_at:
+        created_at = time.strftime("%Y-%m-%d %H:%M:%S+00", time.gmtime())
+
     # Store in raw_data (since query_results table doesn't exist)
     try:
         supabase.table("raw_data").insert({
@@ -61,7 +65,7 @@ def handle_query(job: Dict, supabase: Client, redis: Redis) -> None:
             "content": f"Query: {content}, Answer: {answer}",
             "record_id": query_id,
             "event_id": None,  # No linked event for queries
-            "created_at": job["CreatedAt"]
+            "created_at": created_at
         }).execute()
         logging.info(f"Stored query result for {query_id}-{channel} in raw_data in {time.time() - start:.3f}s")
     except Exception as e:
