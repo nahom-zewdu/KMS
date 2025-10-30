@@ -109,7 +109,6 @@ func (c *CoreIngest) Ingest(ctx context.Context, req domain.IngestRequest) error
 	// Store raw payload in events table
 	eventID := uuid.New().String()
 	err = c.storage.Insert(ctx, "events", map[string]interface{}{
-		"record_id":   req.RecordID,
 		"id":          eventID,
 		"source":      req.Source,
 		"event_type":  req.EventType,
