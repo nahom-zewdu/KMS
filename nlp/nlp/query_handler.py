@@ -67,9 +67,8 @@ def handle_query(job: Dict, supabase: Client, redis: Redis) -> None:
     except Exception as e:
         logging.error(f"QueryID: {query_id} - Failed to store query result: {e}")
 
-    # Publish to Redis
+    # Publish to PUB/SUB channel
     try:
-        redis.xadd(f"query_results:{query_id}", {"answer": answer})
-        logging.info(f"Published answer for {query_id}: {answer}")
+        redis.publish(f"query_results:{query_id}", answer)
     except Exception as e:
         logging.error(f"QueryID: {query_id} - Failed to publish to Redis: {e}")
