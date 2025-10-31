@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/nahom-zewdu/kMS/api/domain"
 	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
@@ -181,7 +180,7 @@ func (h *SlackHandler) HandleSlackWebhook(c *gin.Context) {
 					"thread_ts": ev.ThreadTimeStamp,
 					"text":      ev.Text,
 				},
-				RecordID:  ev.TimeStamp + "-" + uuid.New().String(), // Use event_ts as record_id
+				RecordID:  ev.TimeStamp,
 				CreatedAt: slackTimestampToTime(ev.TimeStamp),
 			}
 
