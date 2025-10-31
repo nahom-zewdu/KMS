@@ -165,43 +165,49 @@ func (h *SlackHandler) HandleSlackWebhook(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or empty event timestamp"})
 			return
 		}
-		// Ingest only non-bot, non-mention messages
-		botID := h.slackBot.GetBotID()
-		if ev.BotID == "" && ev.User != botID && !strings.Contains(ev.Text, "<@") && ev.User != "" {
-			log.Printf("RecordID: %s - Handling message event: %s", ev.TimeStamp, ev.Text)
-			// Create ingest request with event_ts as record_id
-			ingestReq := domain.IngestRequest{
-				Source:    "slack",
-				EventType: "message",
-				Content:   strings.TrimSpace(ev.Text),
-				Payload: map[string]interface{}{
-					"user":      ev.User,
-					"channel":   ev.Channel,
-					"thread_ts": ev.ThreadTimeStamp,
-					"text":      ev.Text,
-				},
-				RecordID:  ev.TimeStamp,
-				CreatedAt: slackTimestampToTime(ev.TimeStamp),
-			}
 
-			// Retry ingestion
-			for attempt := 1; attempt <= 3; attempt++ {
-				if err := h.slackIngest.IngestSlackEvent(c.Request.Context(), ingestReq); err != nil {
-					log.Printf("RecordID: %s - Failed to ingest message in %.3fs (attempt %d): %v", ev.TimeStamp, time.Since(start).Seconds(), attempt, err)
-					if attempt == 3 {
-						c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process message"})
-						return
-					}
-					time.Sleep(time.Duration(attempt*attempt) * 100 * time.Millisecond)
-					continue
+		go func() {
+			// Use new context to avoid HTTP request cancellation
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			// Ingest only non-bot, non-mention messages
+			botID := h.slackBot.GetBotID()
+			if ev.BotID == "" && ev.User != botID && !strings.Contains(ev.Text, "<@") && ev.User != "" {
+				log.Printf("RecordID: %s - Handling message event: %s", ev.TimeStamp, ev.Text)
+				// Create ingest request with event_ts as record_id
+				ingestReq := domain.IngestRequest{
+					Source:    "slack",
+					EventType: "message",
+					Content:   strings.TrimSpace(ev.Text),
+					Payload: map[string]interface{}{
+						"user":      ev.User,
+						"channel":   ev.Channel,
+						"thread_ts": ev.ThreadTimeStamp,
+						"text":      ev.Text,
+					},
+					RecordID:  ev.TimeStamp,
+					CreatedAt: slackTimestampToTime(ev.TimeStamp),
 				}
-				log.Printf("RecordID: %s - Successfully ingested message in %.3fs", ev.TimeStamp, time.Since(start).Seconds())
-				break
+
+				// Retry ingestion
+				for attempt := 1; attempt <= 3; attempt++ {
+					if err := h.slackIngest.IngestSlackEvent(ctx, ingestReq); err != nil {
+						log.Printf("RecordID: %s - Failed to ingest message in %.3fs (attempt %d): %v", ev.TimeStamp, time.Since(start).Seconds(), attempt, err)
+						if attempt == 3 {
+							c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process message"})
+							return
+						}
+						time.Sleep(time.Duration(attempt*attempt) * 100 * time.Millisecond)
+						continue
+					}
+					log.Printf("RecordID: %s - Successfully ingested message in %.3fs", ev.TimeStamp, time.Since(start).Seconds())
+					break
+				}
+			} else {
+				log.Printf("RecordID: %s - Skipping message event (bot or mention) in %.3fs", ev.TimeStamp, time.Since(start).Seconds())
+				c.JSON(http.StatusOK, gin.H{"status": "skipped bot/mention"})
 			}
-		} else {
-			log.Printf("RecordID: %s - Skipping message event (bot or mention) in %.3fs", ev.TimeStamp, time.Since(start).Seconds())
-			c.JSON(http.StatusOK, gin.H{"status": "skipped bot/mention"})
-		}
+		}()
 	}
 
 	log.Printf("Successfully handled Slack webhook of type %s in %.3fs", eventsAPIEvent.Type, time.Since(start).Seconds())
