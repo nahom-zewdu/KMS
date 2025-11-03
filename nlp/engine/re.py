@@ -5,7 +5,7 @@ LLM-powered Relation Extraction with entity grounding.
 from typing import List, Dict
 from .prompt import get_relation_prompt
 from .llm import llm_infer, parse_json_response
-from .schema import Relation, Entity,
+from .schema import Relation, Entity
 import logging
 
 def extract_relations(
