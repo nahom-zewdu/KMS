@@ -48,13 +48,17 @@ CONSUMER_GROUP = "kms"
 BATCH_SIZE = 10
 BLOCK_MS = 1000
 MAX_RETRIES = 3
-RETRY_BACKOFF_BASE = 0.1  # seconds
+RETRY_BACKOFF_BASE = 0.1
 
 # === GLOBALS ===
-redis: Redis = init_redis(REDIS_ADDR, REDIS_PASSWORD)
-supabase = init_supabase()
+redis: Redis = None
+supabase = None
 shutdown_event = threading.Event()
 
+def init_globals():
+    global redis, supabase
+    redis = init_redis(REDIS_ADDR, REDIS_PASSWORD)
+    supabase = init_supabase()
 
 # === DATA MODEL ===
 @dataclass
@@ -245,5 +249,8 @@ def main():
 
 
 if __name__ == "__main__":
+    setup_structured_logging()
+    init_globals()
+    
     main()
     
