@@ -33,9 +33,25 @@ kms/
 │   │   └── github.go      # GitHub ingestion
 │   └── main.go            # Entry point
 ├── nlp/
-│   └── hf_processor.py    # Python worker for event processing/query answering
-├── .env                   # Environment variables
-└── README.md              # This file
+│   ├── main.py
+│   ├── engine/
+│   │   ├── __init__.py
+│   │   ├── llm.py
+│   │   ├── schema.py
+│   │   ├── ner.py
+│   │   ├── re.py
+│   │   └── prompt.py
+│   ├── utils/
+│   │   ├── __init__.py
+│   │   ├── supabase.py
+│   │   ├── redis.py
+│   │   ├── logger.py
+│   │   └── common.py
+│   ├── query_handler.py
+│   ├── tests/
+│   │   └── test_full_flow.py
+│   ├── requirements.txt
+│   └── .env
 ```
 
 ## How to Run Locally
