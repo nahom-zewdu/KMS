@@ -8,6 +8,9 @@ import time
 from typing import Any, Dict, List
 from openai import OpenAI
 from functools import lru_cache
+from dotenv import load_dotenv
+
+load_dotenv()
 
 client = OpenAI(
     api_key=os.getenv("GROQ_API_KEY"),
