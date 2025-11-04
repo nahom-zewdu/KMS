@@ -100,11 +100,11 @@ signal.signal(signal.SIGTERM, signal_handler)
 @contextmanager
 def redis_connection():
     """Context manager for Redis with auto-reconnect."""
+    global redis
     try:
         yield redis
     except (ConnectionError, TimeoutError) as e:
         log_error(f"Redis connection lost: {e}. Reconnecting...")
-        global redis
         redis = init_redis(REDIS_ADDR, REDIS_PASSWORD)
         raise
 
