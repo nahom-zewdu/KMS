@@ -34,9 +34,9 @@ from redis import Redis
 from redis.exceptions import ConnectionError, TimeoutError
 
 from utils import init_supabase, init_redis, log_error, setup_structured_logging
-from nlp.engine.ner import extract_entities as llm_extract_entities
-from nlp.engine.re import extract_relations as llm_extract_relations
-from nlp.query_handler import handle_query
+from engine.ner import extract_entities as llm_extract_entities
+from engine.re import extract_relations as llm_extract_relations
+from query_handler import handle_query
 
 # === CONFIGURATION ===
 load_dotenv()
