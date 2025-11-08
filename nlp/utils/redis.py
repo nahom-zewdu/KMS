@@ -16,7 +16,6 @@ def init_redis(addr: str, password: str) -> redis.Redis:
     try:
         client = redis.Redis(
             host=addr,
-            port=6379,
             password=password,
             db=0,
             socket_timeout=5,
