@@ -41,8 +41,7 @@ from query_handler import handle_query
 # === CONFIGURATION ===
 load_dotenv()
 
-REDIS_ADDR = os.getenv("REDIS_ADDR")
-REDIS_PASSWORD = os.getenv("REDIS_PASSWORD")
+REDIS_URL = os.getenv("REDIS_URL")
 STREAMS = {"slack_jobs": "$", "github_jobs": "$", "query_jobs": "$"}
 CONSUMER_GROUP = "kms"
 BATCH_SIZE = 10
@@ -57,7 +56,7 @@ shutdown_event = threading.Event()
 
 def init_globals():
     global redis, supabase
-    redis = init_redis(REDIS_ADDR, REDIS_PASSWORD)
+    redis = init_redis(REDIS_URL)
     supabase = init_supabase()
 
 # === DATA MODEL ===
@@ -105,7 +104,7 @@ def redis_connection():
         yield redis
     except (ConnectionError, TimeoutError) as e:
         log_error(f"Redis connection lost: {e}. Reconnecting...")
-        redis = init_redis(REDIS_ADDR, REDIS_PASSWORD)
+        redis = init_redis(REDIS_URL)
         raise
 
 
@@ -118,6 +117,8 @@ def ensure_consumer_group(stream: str):
     except redis.exceptions.ResponseError as e:
         if "BUSYGROUP" not in str(e):
             log_error(f"Failed to create consumer group for {stream}: {e}")
+    except:
+        log_error(f"error{redis}")
 
 
 def process_ingestion_job(job: Job, message_id: str, stream_name: str):
