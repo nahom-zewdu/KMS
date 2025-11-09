@@ -181,6 +181,7 @@ def process_query_job(job: Job):
 def main():
     """Main processing loop with batching, retry, and shutdown handling."""
     setup_structured_logging()
+    init_globals()
     logging.info("KMS NLP Processor starting...")
 
     # Ensure consumer groups
@@ -250,8 +251,5 @@ def main():
 
 
 if __name__ == "__main__":
-    setup_structured_logging()
-    init_globals()
-    
     main()
     
