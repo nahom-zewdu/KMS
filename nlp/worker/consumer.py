@@ -7,8 +7,10 @@ import json
 import logging
 from typing import Dict, Callable
 from redis import Redis
-from redis.exceptions import ConnectionError, TimeoutError
+from redis.exceptions import ConnectionError, TimeoutError, ResponseError
+
 from utils import init_redis, log_error
+
 
 class RedisStreamConsumer:
     def __init__(self, streams: list, group: str, handlers: Dict[str, Callable]):
@@ -25,7 +27,7 @@ class RedisStreamConsumer:
         try:
             self.redis.xgroup_create(stream, self.group, id="$", mkstream=True)
             logging.info(f"Created consumer group '{self.group}' for '{stream}'")
-        except self.redis.exceptions.ResponseError as e:
+        except ResponseError as e:
             if "BUSYGROUP" not in str(e):
                 log_error(f"Failed to create group for {stream}: {e}")
 
