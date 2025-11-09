@@ -1,31 +1,31 @@
 # utils/redis.py
 """
-Redis client with connection pooling and retry.
+Redis client with TLS support for Upstash.
 """
-
+import os
 import redis
 import logging
+from dotenv import load_dotenv
 
-def init_redis(addr: str, password: str) -> redis.Redis:
+load_dotenv()
+
+def init_redis(url = os.getenv("REDIS_URL")) -> redis.Redis:
     """
-    Initialize Redis client with connection pooling.
+    Initialize Redis client using REDIS_URL (rediss:// for TLS).
     """
-    if not addr or not password:
-        raise EnvironmentError("REDIS_ADDR and REDIS_PASSWORD must be set")
     
+    if not url:
+        raise EnvironmentError("REDIS_URL must be set in .env (use rediss://)")
+
     try:
-        client = redis.Redis(
-            host=addr,
-            password=password,
-            db=0,
-            socket_timeout=5,
-            socket_connect_timeout=5,
-            retry_on_timeout=True,
-            health_check_interval=30
+        client = redis.from_url(
+            url,
+            decode_responses=True,
+            ssl_cert_reqs="required"  # Enforce TLS
         )
         # Test connection
         client.ping()
-        logging.info(f"Redis connected to {addr}")
+        logging.info(f"Redis connected via TLS: {url.split('@')[1].split(':')[0]}")
         return client
     except Exception as e:
         logging.error(f"Failed to connect to Redis: {e}")
