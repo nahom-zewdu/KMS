@@ -7,7 +7,7 @@ import time
 from datetime import datetime, timezone
 from engine.ner import extract_entities
 from engine.re import extract_relations
-from utils import init_supabase
+from utils import init_supabase, log_error
 
 supabase = init_supabase()
 
