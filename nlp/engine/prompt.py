@@ -5,19 +5,23 @@ Prompt templates with caching and schema enforcement.
 from functools import lru_cache
 from typing import List, Dict
 
-ENTITY_PROMPT = """You are an expert knowledge engineer. Extract ALL entities from the text.
+
+ENTITY_PROMPT = """You are a JSON-only API. Extract ALL entities from the text.
 
 Text: "{text}"
 
-Return ONLY a valid JSON array of objects with:
-- "text": exact span (lowercase)
-- "type": one of {PERSON, SYSTEM, TICKET, PROJECT, ENVIRONMENT}
+Return ONLY a valid JSON array. No explanations.
+
+Schema:
+[
+  {{"text": "exact span lowercase", "type": "PERSON|SYSTEM|TICKET|PROJECT|ENVIRONMENT"}}
+]
 
 Examples:
 - "jhon owns auth" → [{{"text": "jhon", "type": "PERSON"}}, {{"text": "auth", "type": "SYSTEM"}}]
 - "fix KMS-123 in prod" → [{{"text": "kms-123", "type": "TICKET"}}, {{"text": "prod", "type": "ENVIRONMENT"}}]
 
-Respond with JSON only.
+JSON only. No markdown.
 """
 
 RELATION_PROMPT = """Given entities and text, extract ALL relations.
