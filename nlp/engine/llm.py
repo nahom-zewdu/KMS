@@ -26,14 +26,15 @@ def llm_infer(prompt: str, model: str = "llama3-8b-8192") -> str:
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.0,
-                max_tokens=512
+                max_tokens=512,
+                response_format={"type": "json_object"}
             )
             return response.choices[0].message.content.strip()
         except Exception as e:
             if attempt == 2:
                 raise
             time.sleep(0.5 * (2 ** attempt))
-    return ""
+    return "[]"
 
 def parse_json_response(response: str) -> List[Dict]:
     """Safely parse JSON from LLM output."""
