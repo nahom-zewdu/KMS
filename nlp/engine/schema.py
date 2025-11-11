@@ -7,7 +7,7 @@ from typing import Literal, List
 from pydantic import BaseModel, Field, validator
 from datetime import datetime
 
-EntityType = Literal["PERSON", "SYSTEM", "TICKET", "PROJECT", "ENVIRONMENT"]
+EntityType = Literal["PERSON", "SYSTEM", "TICKET", "PROJECT", "ENVIRONMENT", "FILE"]
 RelationType = Literal["OWNS", "MAINTAINS", "ASSIGNED_TO", "FIXES", "DEPLOYED_IN", "PART_OF"]
 
 class Entity(BaseModel):
@@ -16,11 +16,14 @@ class Entity(BaseModel):
     confidence: float = Field(..., ge=0, le=1)
     record_id: str
     source: str
-    created_at: str  # ISO format
+    created_at: str
 
     @validator("text")
     def normalize_text(cls, v):
         return v.strip().lower()
+    
+    def dict(self, **kwargs):
+        return super().dict(**kwargs)
 
 class Relation(BaseModel):
     source: str = Field(..., description="Source entity text")
