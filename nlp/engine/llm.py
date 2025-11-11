@@ -18,7 +18,7 @@ client = OpenAI(
 )
 
 @lru_cache(maxsize=500)
-def llm_infer(prompt: str, model: str = "llama-3.1-70b-versatile") -> str:
+def llm_infer(prompt: str, model: str = "llama-3.1-8b-instant") -> str:
     """
     High-precision LLM inference with JSON enforcement.
     Model: llama-3.1-70b-versatile (current Groq flagship, Nov 2025)
