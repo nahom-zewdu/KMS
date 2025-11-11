@@ -2,52 +2,44 @@
 """
 LLM-powered Relation Extraction with entity grounding.
 """
+# engine/re.py
 from typing import List, Dict
+import json
+from functools import lru_cache
+from .schema import Entity
+from .llm import parse_json_response
+from .llm import llm_infer
 from .prompt import get_relation_prompt
-from .llm import llm_infer, parse_json_response
-from .schema import Relation, Entity
 import logging
 
-def extract_relations(
-    text: str,
-    entities: List[Entity],
-    record_id: str,
-    created_at: str
-) -> List[Relation]:
-    """
-    Extract relations between entities using LLM.
-    """
-    if len(entities) < 2:
-        return []
-    
-    prompt = get_relation_prompt(text, [e.dict() for e in entities])
+@lru_cache(maxsize=500)
+def extract_relations_cached(text: str, entities_json: str, record_id: str, created_at: str) -> List[Dict]:
+    prompt = get_relation_prompt(text, json.loads(entities_json))
     response = llm_infer(prompt)
-    raw_relations = parse_json_response(response)
+    return parse_json_response(response)
+
+def extract_relations(text: str, entities: List[Entity], record_id: str, created_at: str):
+    # Convert to JSON string for caching
+    entities_json = json.dumps([e.dict() for e in entities], separators=(',', ':'))
+    raw_relations = extract_relations_cached(text, entities_json, record_id, created_at)
     
     relations = []
-    entity_map = {e.text: e for e in entities}
-    
     for rel in raw_relations:
         try:
-            source = rel.get("source", "").strip().lower()
-            target = rel.get("target", "").strip().lower()
-            rel_type = rel.get("type", "UNKNOWN")
+            source = rel.get("source", "").lower()
+            target = rel.get("target", "").lower()
+            rel_type = rel.get("type", "UNKNOWN").upper()
             
-            if source not in entity_map or target not in entity_map:
+            if rel_type not in ["OWNS", "MAINTAINS", "ASSIGNED_TO", "FIXES", "DEPLOYED_IN", "PART_OF"]:
                 continue
                 
-            relation = Relation(
-                source=source,
-                target=target,
-                type=rel_type,
-                confidence=rel.get("score", 0.9),
-                record_id=record_id,
-                source_type=entity_map[source].type,
-                target_type=entity_map[target].type,
-                created_at=created_at
-            )
-            if relation.type != "UNKNOWN":
-                relations.append(relation)
+            relations.append({
+                "source": source,
+                "target": target,
+                "type": rel_type,
+                "record_id": record_id,
+                "created_at": created_at
+            })
         except Exception as e:
             logging.warning(f"Invalid relation: {rel} → {e}")
     
