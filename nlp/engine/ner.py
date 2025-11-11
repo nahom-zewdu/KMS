@@ -43,17 +43,31 @@ def extract_entities(text: str, record_id: str, source: str, created_at: str) ->
     
     raw_entities = parse_json_response(response)
     entities = []
+    type_map = {
+        "FILE": "SYSTEM",
+        "PATH": "SYSTEM",
+        "SERVICE": "SYSTEM",
+        "REPO": "PROJECT",
+        "REPOSITORY": "PROJECT"
+    }
+
     for ent in raw_entities:
         try:
+            raw_type = ent.get("type", "UNKNOWN").upper()
+            normalized_type = type_map.get(raw_type, raw_type)
+            
+            if normalized_type not in ["PERSON", "SYSTEM", "TICKET", "PROJECT", "ENVIRONMENT"]:
+                continue  # Skip unknown
+
             entity = Entity(
                 text=ent.get("text", "").strip().lower(),
-                type=ent.get("type", "UNKNOWN"),
+                type=normalized_type,
                 confidence=ent.get("score", 0.95),
                 record_id=record_id,
                 source=source,
                 created_at=created_at
             )
-            if entity.type != "UNKNOWN" and len(entity.text) > 1:
+            if len(entity.text) > 1:
                 entities.append(entity)
         except Exception as e:
             logging.warning(f"Invalid entity: {ent} → {e}")
