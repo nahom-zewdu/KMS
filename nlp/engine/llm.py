@@ -18,8 +18,11 @@ client = OpenAI(
 )
 
 @lru_cache(maxsize=500)
-def llm_infer(prompt: str, model: str = "llama3-8b-8192") -> str:
-    """Cached LLM inference with retry."""
+def llm_infer(prompt: str, model: str = "llama-3.1-70b-versatile") -> str:
+    """
+    High-precision LLM inference with JSON enforcement.
+    Model: llama-3.1-70b-versatile (current Groq flagship, Nov 2025)
+    """
     for attempt in range(3):
         try:
             response = client.chat.completions.create(
