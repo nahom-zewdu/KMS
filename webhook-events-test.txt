@@ -1,1 +1,1 @@
-just to test github webhooks works on events
+just to test github webhooks works on events.
