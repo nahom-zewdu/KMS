@@ -6,22 +6,21 @@ from functools import lru_cache
 from typing import List, Dict
 
 
-ENTITY_PROMPT = """You are a JSON-only API. Extract ALL entities from the text.
+ENTITY_PROMPT = """You are a JSON API. Extract ALL entities.
 
 Text: "{text}"
 
-Return ONLY a valid JSON array. No explanations.
-
-Schema:
+Return ONLY JSON array:
 [
-  {{"text": "exact span lowercase", "type": "PERSON|SYSTEM|TICKET|PROJECT|ENVIRONMENT"}}
+  {{"text": "exact lowercase span", "type": "PERSON|SYSTEM|TICKET|PROJECT|ENVIRONMENT|FILE"}}
 ]
 
 Examples:
 - "jhon owns auth" → [{{"text": "jhon", "type": "PERSON"}}, {{"text": "auth", "type": "SYSTEM"}}]
 - "fix KMS-123 in prod" → [{{"text": "kms-123", "type": "TICKET"}}, {{"text": "prod", "type": "ENVIRONMENT"}}]
+- "modified config/auth.yaml" → [{{"text": "config/auth.yaml", "type": "FILE"}}]
 
-JSON only. No markdown.
+No explanations. No markdown. JSON only.
 """
 
 RELATION_PROMPT = """Given entities and text, extract ALL relations.
