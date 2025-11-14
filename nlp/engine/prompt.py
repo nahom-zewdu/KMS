@@ -2,16 +2,19 @@
 """
 Prompt templates with caching and schema enforcement.
 """
+
 from functools import lru_cache
 from typing import List, Dict
+from string import Template
 
-ENTITY_PROMPT = """
-You are a deterministic JSON API. Extract ALL entities explicitly mentioned in the text.
+ENTITY_PROMPT = Template("""
+You are a deterministic JSON API. Extract ALL explicit entities in the text.
+Your response MUST begin with "{" as the first character.
 
 Input text:
-"{text}"
+"$text"
 
-Return ONLY a JSON object with this exact schema:
+Return ONLY a JSON object with this schema:
 
 {
   "entities": [
@@ -23,12 +26,12 @@ Return ONLY a JSON object with this exact schema:
 }
 
 Strict rules:
-- Output must be valid JSON. No comments, no markdown, no explanation.
-- "text" MUST be the exact substring from the input, converted to lowercase.
-- Never generate entities that are not explicitly present in the text.
-- Never infer or guess types beyond the allowed set.
-- If no entities are present, return: { "entities": [] }
-- Order entities by appearance in the text.
+- Output must be valid JSON. No explanations or markdown.
+- "text" MUST be an exact substring from the input, converted to lowercase.
+- Do NOT infer or hallucinate entities not present.
+- Do NOT create custom types. Only the allowed set.
+- If no entities exist: { "entities": [] }
+- Maintain the original order of appearance.
 
 Valid examples:
 
@@ -54,19 +57,19 @@ Output: {
     {"text": "config/auth.yaml", "type": "FILE"}
   ]
 }
-"""
+""".strip())
 
-
-RELATION_PROMPT = """
-You are a deterministic JSON API. Identify ALL relations between the provided entities as they appear in the text.
+RELATION_PROMPT = Template("""
+You are a deterministic JSON API. Identify ALL explicit relations between the provided entities.
+Your response MUST begin with "{" as the first character.
 
 Entities (JSON list):
-{entities}
+$entities
 
 Input text:
-"{text}"
+"$text"
 
-Return ONLY a JSON object with this exact schema:
+Return ONLY a JSON object with this schema:
 
 {
   "relations": [
@@ -79,16 +82,16 @@ Return ONLY a JSON object with this exact schema:
 }
 
 Strict rules:
-- Output must be valid JSON — no explanations, no markdown, no extra fields.
-- Use ONLY the entities provided. Never invent new entities.
-- source and target MUST match an entity.text value exactly.
-- A relation MUST be explicitly implied by the text — no guessing.
-- If no relations exist, return: { "relations": [] }
-- Order relations by where their source entity appears in the text.
+- Only output valid JSON. No markdown. No explanations.
+- Use ONLY entities provided in the list.
+- Do NOT invent new entities.
+- "source" and "target" MUST exactly match entity.text.
+- Relations must be explicitly implied by the input text.
+- If no relations exist: { "relations": [] }
+- Order relations by the source entity's first appearance in the text.
 
 Valid examples:
 
-Input:
 Entities: [{"text": "jhon", "type": "PERSON"}, {"text": "auth", "type": "SYSTEM"}]
 Text: "jhon owns auth"
 
@@ -99,7 +102,6 @@ Output:
   ]
 }
 
-Input:
 Entities: [{"text": "kms-123", "type": "TICKET"}, {"text": "prod", "type": "ENVIRONMENT"}]
 Text: "KMS-123 is in prod"
 
@@ -109,14 +111,19 @@ Output:
     {"source": "kms-123", "target": "prod", "type": "DEPLOYED_IN"}
   ]
 }
-"""
+""".strip())
 
 
 @lru_cache(maxsize=1000)
 def get_entity_prompt(text: str) -> str:
-    return ENTITY_PROMPT.format(text=text.strip())
+    return ENTITY_PROMPT.substitute(text=text.strip())
+
 
 @lru_cache(maxsize=1000)
 def get_relation_prompt(text: str, entities: List[Dict]) -> str:
-    entity_str = ", ".join([f"{e['text']} ({e['type']})" for e in entities])
-    return RELATION_PROMPT.format(entities=entity_str, text=text.strip())
+    # Turn entity list into readable JSON-like display
+    entities_repr = str(entities)
+    return RELATION_PROMPT.substitute(
+        text=text.strip(),
+        entities=entities_repr
+    )
