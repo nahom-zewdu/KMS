@@ -27,9 +27,9 @@ class IngestionHandler:
         logging.info(f"Processing ingestion | {job['record_id']} | {job['source']}")
 
         try:
-            created_at = job["created_at"] or datetime.now(timezone.utc).isoformat()
+            created_at = job.get("created_at") or datetime.now(timezone.utc).isoformat()
 
-            # NER
+            # --- NER ---
             entities = extract_entities(
                 text=job["content"],
                 record_id=job["record_id"],
@@ -37,17 +37,62 @@ class IngestionHandler:
                 created_at=created_at,
             )
 
-            entity_dicts = [e.dict() for e in entities]
+            if not entities:
+                logging.info("No entities found, skipping RE.")
+                insert_raw_data(
+                    supabase,
+                    {
+                        "record_id": job["record_id"],
+                        "source": job["source"],
+                        "content": job["content"],
+                        "event_id": job.get("event_id"),
+                        "created_at": created_at,
+                    },
+                )
+                mark_event_processed(supabase, job["record_id"])
+                return
 
-            # RE
-            relations = extract_relations(
+            # --- Insert Entities ---
+            db_entities = [e.to_db_record() for e in entities]
+            insert_entities(supabase, db_entities)
+            logging.info(f"Inserted {len(db_entities)} entities")
+
+            # --- Build text -> ID mapping ---
+            entity_text_to_id = {e['name'].lower(): e['id'] for e in db_entities}
+
+            # --- RE ---
+            entity_dicts = [e.dict() for e in entities]
+            raw_relations = extract_relations(
                 text=job["content"],
                 entities=entity_dicts,
                 record_id=job["record_id"],
                 created_at=created_at,
             )
 
-            # Insert raw_data first
+            # --- Map relation text -> IDs ---
+            relations_payload = []
+            for r in raw_relations:
+                src_id = entity_text_to_id.get(r['source'])
+                tgt_id = entity_text_to_id.get(r['target'])
+
+                if not src_id or not tgt_id:
+                    logging.warning("Skipping relation; entity ID not found: %s", r)
+                    continue
+
+                relations_payload.append({
+                    "source_id": src_id,
+                    "target_id": tgt_id,
+                    "type": r['type'],
+                    "record_id": job["record_id"],
+                    "created_at": r.get("created_at") or created_at
+                })
+
+            # --- Insert relations ---
+            if relations_payload:
+                insert_relations(supabase, relations_payload)
+                logging.info(f"Inserted {len(relations_payload)} relations")
+
+            # --- Insert raw data ---
             insert_raw_data(
                 supabase,
                 {
@@ -59,20 +104,8 @@ class IngestionHandler:
                 },
             )
 
-            # Entities
-            if entities:
-                db_entities = [e.to_db_record() for e in entities]
-                insert_entities(supabase, db_entities)
-                logging.info(f"Inserted {len(db_entities)} entities")
-
-            # Relations
-            if relations:
-                insert_relations(supabase, relations)
-                logging.info(f"Inserted {len(relations)} relations")
-
-            # Mark event processed
+            # --- Mark event processed ---
             mark_event_processed(supabase, job["record_id"])
-
             logging.info(f"Ingestion complete in {time.time()-start:.3f}s")
 
         except Exception as e:
