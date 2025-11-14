@@ -6,6 +6,7 @@ This is the contract between NLP and the knowledge graph.
 from typing import Literal, List
 from pydantic import BaseModel, Field, validator
 from datetime import datetime
+from uuid import uuid4
 
 EntityType = Literal["PERSON", "SYSTEM", "TICKET", "PROJECT", "ENVIRONMENT", "FILE"]
 RelationType = Literal["OWNS", "MAINTAINS", "ASSIGNED_TO", "FIXES", "DEPLOYED_IN", "PART_OF"]
@@ -28,7 +29,7 @@ class Entity(BaseModel):
     def to_db_record(self) -> dict:
         """Convert to Supabase entities table schema."""
         return {
-            "id": None,  # Auto-generated
+            "id": str(uuid4()),
             "type": self.type.lower(),  # DB expects lowercase
             "name": self.text,
             "metadata": {
