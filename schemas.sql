@@ -62,7 +62,7 @@ COMMENT ON INDEX idx_raw_data_record_id IS 'Index on record_id for fast lookup o
 -- Entities table: knowledge graph nodes
 CREATE TABLE public.entities (
     id UUID PRIMARY KEY,
-    type TEXT CHECK (type IN ('person', 'project', 'ticket')) NOT NULL,
+    type TEXT NOT NULL,
     name TEXT NOT NULL,
     metadata JSONB,
     active BOOLEAN DEFAULT TRUE,
