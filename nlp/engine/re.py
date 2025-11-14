@@ -97,4 +97,5 @@ def extract_relations(text: str, entities: List[Any], record_id: str, created_at
             logger.warning("Skipping bad relation entry %s -> %s", r, e)
 
     logger.info("RE → %d relations", len(relations))
+    logger.info("Relations: %s", relations)
     return relations
