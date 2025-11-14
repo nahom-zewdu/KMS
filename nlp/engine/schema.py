@@ -24,6 +24,21 @@ class Entity(BaseModel):
     
     def dict(self, **kwargs):
         return super().dict(**kwargs)
+    
+    def to_db_record(self) -> dict:
+        """Convert to Supabase entities table schema."""
+        return {
+            "id": "*",  # Auto-generated
+            "type": self.type.lower(),  # DB expects lowercase
+            "name": self.text,
+            "metadata": {
+                "confidence": self.confidence,
+                "source": self.source,
+                "original_record_id": self.record_id,
+                "extracted_at": self.created_at
+            },
+            "created_at": self.created_at
+        }
 
 class Relation(BaseModel):
     source: str = Field(..., description="Source entity text")
