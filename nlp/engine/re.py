@@ -36,9 +36,20 @@ def _ensure_entity_list(entities: List[Any]) -> List[Dict[str, Any]]:
     return normalized
 
 # cached wrapper expects hashable args -> we pass JSON string
-@lru_cache(maxsize=500)
 def _cached_re(text: str, entities_json: str) -> str:
-    prompt = get_relation_prompt(text, json.loads(entities_json))
+    """
+    text: the input text
+    entities_json: JSON string of normalized entity list (deterministic)
+    """
+    # Always deserialize string into list for the prompt
+    try:
+        entities_list = json.loads(entities_json)
+    except TypeError:
+        # if somehow a list is passed, convert it to string first
+        entities_list = entities_json
+        entities_json = json.dumps(entities_list, separators=(",", ":"), sort_keys=True)
+    
+    prompt = get_relation_prompt(text, entities_list)
     return llm_infer(prompt)
 
 def extract_relations(text: str, entities: List[Any], record_id: str, created_at: str) -> List[Dict[str, Any]]:
