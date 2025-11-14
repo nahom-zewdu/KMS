@@ -28,7 +28,7 @@ class Entity(BaseModel):
     def to_db_record(self) -> dict:
         """Convert to Supabase entities table schema."""
         return {
-            "id": "*",  # Auto-generated
+            "id": None,  # Auto-generated
             "type": self.type.lower(),  # DB expects lowercase
             "name": self.text,
             "metadata": {
