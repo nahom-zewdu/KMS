@@ -1,4 +1,8 @@
 # nlp/engine/ner.py
+"""
+LLM-powered Named Entity Recognition with schema enforcement.
+"""
+
 from typing import List
 import json
 import logging
