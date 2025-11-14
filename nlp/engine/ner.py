@@ -48,7 +48,9 @@ def extract_entities(text: str, record_id: str, source: str, created_at: str) ->
         "PATH": "SYSTEM",
         "SERVICE": "SYSTEM",
         "REPO": "PROJECT",
-        "REPOSITORY": "PROJECT"
+        "REPOSITORY": "PROJECT",
+        "TICKET": "TICKET",
+        "ISSUE": "TICKET"
     }
 
     for ent in raw_entities:
