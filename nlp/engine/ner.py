@@ -80,4 +80,5 @@ def extract_entities(text: str, record_id: str, source: str, created_at: str) ->
             logger.warning("Invalid entity entry skipped: %s -> %s", ent, e)
 
     logger.info("NER → %d entities", len(results))
+    logger.info("Entities: %s", [e.dict() for e in results])
     return results
