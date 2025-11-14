@@ -34,6 +34,12 @@ kms/
 │   └── main.go            # Entry point
 ├── nlp/
 │   ├── main.py
+│   ├── worker/
+│   │   ├── __init__.py
+│   │   ├── ingestion.py
+│   │   ├── processor.py
+│   │   ├── query.py
+│   │   ├── consumer.py
 │   ├── engine/
 │   │   ├── __init__.py
 │   │   ├── llm.py
