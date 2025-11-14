@@ -5,40 +5,109 @@ Prompt templates with caching and schema enforcement.
 from functools import lru_cache
 from typing import List, Dict
 
+ENTITY_PROMPT = """
+You are a deterministic JSON API. Extract ALL entities explicitly mentioned in the text.
 
-ENTITY_PROMPT = """You are a JSON API. Extract ALL entities.
+Input text:
+"{text}"
 
-Text: "{text}"
+Return ONLY a JSON object with this exact schema:
 
-Return ONLY JSON array:
-[
-  {{"text": "exact lowercase span", "type": "PERSON|SYSTEM|TICKET|PROJECT|ENVIRONMENT|FILE"}}
-]
+{
+  "entities": [
+    {
+      "text": "<exact lowercase span from input>",
+      "type": "PERSON | SYSTEM | TICKET | PROJECT | ENVIRONMENT | FILE"
+    }
+  ]
+}
 
-Examples:
-- "jhon owns auth" → [{{"text": "jhon", "type": "PERSON"}}, {{"text": "auth", "type": "SYSTEM"}}]
-- "fix KMS-123 in prod" → [{{"text": "kms-123", "type": "TICKET"}}, {{"text": "prod", "type": "ENVIRONMENT"}}]
-- "modified config/auth.yaml" → [{{"text": "config/auth.yaml", "type": "FILE"}}]
+Strict rules:
+- Output must be valid JSON. No comments, no markdown, no explanation.
+- "text" MUST be the exact substring from the input, converted to lowercase.
+- Never generate entities that are not explicitly present in the text.
+- Never infer or guess types beyond the allowed set.
+- If no entities are present, return: { "entities": [] }
+- Order entities by appearance in the text.
 
-No explanations. No markdown. JSON only.
+Valid examples:
+
+Input: "jhon owns auth"
+Output: {
+  "entities": [
+    {"text": "jhon", "type": "PERSON"},
+    {"text": "auth", "type": "SYSTEM"}
+  ]
+}
+
+Input: "fix KMS-123 in prod"
+Output: {
+  "entities": [
+    {"text": "kms-123", "type": "TICKET"},
+    {"text": "prod", "type": "ENVIRONMENT"}
+  ]
+}
+
+Input: "modified config/auth.yaml"
+Output: {
+  "entities": [
+    {"text": "config/auth.yaml", "type": "FILE"}
+  ]
+}
 """
 
-RELATION_PROMPT = """Given entities and text, extract ALL relations.
 
-Entities: {entities}
-Text: "{text}"
+ENTITY_PROMPT = """
+You are a deterministic JSON API. Extract ALL entities explicitly mentioned in the text.
 
-Return JSON array of:
-- "source": entity text
-- "target": entity text
-- "type": one of {OWNS, MAINTAINS, ASSIGNED_TO, FIXES, DEPLOYED_IN, PART_OF}
+Input text:
+"{text}"
 
-Examples:
-- "jhon owns auth" → [{{"source": "jhon", "target": "auth", "type": "OWNS"}}]
-- "KMS-123 is in prod" → [{{"source": "kms-123", "target": "prod", "type": "DEPLOYED_IN"}}]
+Return ONLY a JSON object with this exact schema:
 
-JSON only.
+{
+  "entities": [
+    {
+      "text": "<exact lowercase span from input>",
+      "type": "PERSON | SYSTEM | TICKET | PROJECT | ENVIRONMENT | FILE"
+    }
+  ]
+}
+
+Strict rules:
+- Output must be valid JSON. No comments, no markdown, no explanation.
+- "text" MUST be the exact substring from the input, converted to lowercase.
+- Never generate entities that are not explicitly present in the text.
+- Never infer or guess types beyond the allowed set.
+- If no entities are present, return: { "entities": [] }
+- Order entities by appearance in the text.
+
+Valid examples:
+
+Input: "jhon owns auth"
+Output: {
+  "entities": [
+    {"text": "jhon", "type": "PERSON"},
+    {"text": "auth", "type": "SYSTEM"}
+  ]
+}
+
+Input: "fix KMS-123 in prod"
+Output: {
+  "entities": [
+    {"text": "kms-123", "type": "TICKET"},
+    {"text": "prod", "type": "ENVIRONMENT"}
+  ]
+}
+
+Input: "modified config/auth.yaml"
+Output: {
+  "entities": [
+    {"text": "config/auth.yaml", "type": "FILE"}
+  ]
+}
 """
+
 
 @lru_cache(maxsize=1000)
 def get_entity_prompt(text: str) -> str:
