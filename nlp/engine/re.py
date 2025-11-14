@@ -68,7 +68,8 @@ def extract_relations(text: str, entities: List[Any], record_id: str, created_at
     entities_json = json.dumps(normalized_entities, separators=(",", ":"), sort_keys=True)
 
     try:
-        raw = _cached_re(text, entities_json)
+        prompt = get_relation_prompt(text, entities_json)
+        raw = llm_infer(prompt)
     except Exception as e:
         logger.error("RE LLM failed: %s", e)
         return []
@@ -101,7 +102,6 @@ def extract_relations(text: str, entities: List[Any], record_id: str, created_at
                 "source": src,
                 "target": tgt,
                 "type": typ,
-                "record_id": record_id or "",
                 "created_at": created_at or ""
             })
         except Exception as e:
