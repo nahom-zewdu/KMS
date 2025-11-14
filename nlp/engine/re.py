@@ -2,46 +2,99 @@
 """
 LLM-powered Relation Extraction with entity grounding.
 """
-# engine/re.py
+
 from typing import List, Dict
 import json
+import logging
+from typing import List, Dict, Any
 from functools import lru_cache
-from .schema import Entity
-from .llm import parse_json_response
 from .llm import llm_infer
 from .prompt import get_relation_prompt
-import logging
 
+logger = logging.getLogger("engine.re")
+
+VALID_REL_TYPES = {"OWNS", "MAINTAINS", "ASSIGNED_TO", "FIXES", "DEPLOYED_IN", "PART_OF"}
+
+def _ensure_entity_list(entities: List[Any]) -> List[Dict[str, Any]]:
+    """
+    Ensure we have a list of dicts: [{'text':..., 'type':...}, ...]
+    """
+    normalized = []
+    for e in entities:
+        if hasattr(e, "dict"):
+            d = e.dict()
+        elif isinstance(e, dict):
+            d = e
+        else:
+            # Skip unknown shapes
+            continue
+        # keep only relevant keys
+        normalized.append({
+            "text": d.get("text", "").strip().lower(),
+            "type": d.get("type", "").upper()
+        })
+    return normalized
+
+# cached wrapper expects hashable args -> we pass JSON string
 @lru_cache(maxsize=500)
-def extract_relations_cached(text: str, entities_json: str, record_id: str, created_at: str) -> List[Dict]:
+def _cached_re(text: str, entities_json: str) -> str:
     prompt = get_relation_prompt(text, json.loads(entities_json))
-    response = llm_infer(prompt)
-    return parse_json_response(response)
+    return llm_infer(prompt)
 
-def extract_relations(text: str, entities: List[Entity], record_id: str, created_at: str):
-    # Convert to JSON string for caching
-    entities_json = json.dumps([e.dict() for e in entities], separators=(',', ':'))
-    raw_relations = extract_relations_cached(text, entities_json, record_id, created_at)
-    
-    relations = []
-    for rel in raw_relations:
+def extract_relations(text: str, entities: List[Any], record_id: str, created_at: str) -> List[Dict[str, Any]]:
+    """
+    Return list of relations ready for DB insertion:
+    [{ "source": "...", "target": "...", "type": "...", "record_id": ..., "created_at": ... }, ...]
+    """
+    if not entities:
+        return []
+
+    normalized_entities = _ensure_entity_list(entities)
+    if not normalized_entities:
+        return []
+
+    # deterministic serialization for cache
+    entities_json = json.dumps(normalized_entities, separators=(",", ":"), sort_keys=True)
+
+    try:
+        raw = _cached_re(text, entities_json)
+    except Exception as e:
+        logger.error("RE LLM failed: %s", e)
+        return []
+
+    # parse expected JSON object: {"relations": [ ... ]}
+    try:
+        obj = json.loads(raw)
+        raw_rel = obj.get("relations", [])
+    except Exception:
+        # fallback: try to extract array substring
         try:
-            source = rel.get("source", "").lower()
-            target = rel.get("target", "").lower()
-            rel_type = rel.get("type", "UNKNOWN").upper()
-            
-            if rel_type not in ["OWNS", "MAINTAINS", "ASSIGNED_TO", "FIXES", "DEPLOYED_IN", "PART_OF"]:
+            start = raw.find("[")
+            end = raw.rfind("]") + 1
+            raw_rel = json.loads(raw[start:end]) if start != -1 and end > 0 else []
+        except Exception:
+            logger.warning("Failed to parse relations JSON; returning empty list.")
+            raw_rel = []
+
+    relations = []
+    for r in raw_rel:
+        try:
+            src = (r.get("source") or "").strip().lower()
+            tgt = (r.get("target") or "").strip().lower()
+            typ = (r.get("type") or "").strip().upper()
+            if not src or not tgt or typ not in VALID_REL_TYPES:
+                logger.debug("Skipping invalid relation: %s", r)
                 continue
-                
+            
             relations.append({
-                "source": source,
-                "target": target,
-                "type": rel_type,
-                "record_id": record_id,
-                "created_at": created_at
+                "source": src,
+                "target": tgt,
+                "type": typ,
+                "record_id": record_id or "",
+                "created_at": created_at or ""
             })
         except Exception as e:
-            logging.warning(f"Invalid relation: {rel} → {e}")
-    
-    logging.info(f"RE → {len(relations)} relations")
+            logger.warning("Skipping bad relation entry %s -> %s", r, e)
+
+    logger.info("RE → %d relations", len(relations))
     return relations
