@@ -14,7 +14,7 @@ from utils import init_redis, log_error
 
 class RedisStreamConsumer:
     def __init__(self, streams: list, group: str, handlers: Dict[str, Callable]):
-        self.streams = {s: "$" for s in streams}
+        self.streams = {s: ">" for s in streams}
         self.group = group
         self.handlers = handlers
         self.redis = init_redis()
@@ -33,13 +33,19 @@ class RedisStreamConsumer:
 
     def start(self):
         self.running = True
+
+        consumer_name = f"consumer-{int(time.time())}"
+
         while self.running:
             try:
-                messages = self.redis.xread(
+                messages = self.redis.xreadgroup(
+                    groupname=self.group,
+                    consumername=consumer_name,
                     streams=self.streams,
                     count=10,
-                    block=1000
+                    block=2000
                 )
+
                 if not messages:
                     continue
 
@@ -51,17 +57,20 @@ class RedisStreamConsumer:
                     for msg_id, data in entries:
                         if not self.running:
                             break
+
                         self._process_message(stream, msg_id, data, handler)
 
             except (ConnectionError, TimeoutError):
                 log_error("Redis connection lost. Reconnecting...")
                 time.sleep(1)
                 self.redis = init_redis()
+
             except Exception as e:
                 log_error(f"Unexpected error: {e}")
                 time.sleep(1)
 
         logging.info("Consumer stopped.")
+
 
     def _process_message(self, stream: str, msg_id: str, data: dict, handler):
         raw = data.get("data")
