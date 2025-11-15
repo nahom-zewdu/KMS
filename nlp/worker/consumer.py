@@ -65,6 +65,21 @@ class RedisStreamConsumer:
                 time.sleep(1)
                 self.redis = init_redis()
 
+            except ResponseError as e:
+                if "NOGROUP" in str(e):
+                    for stream in self.streams.keys():
+                        try:
+                            logging.info(f"Group '{self.group}' missing for '{stream}', creating...")
+                            self.redis.xgroup_create(stream, self.group, id="0", mkstream=True)
+                        except ResponseError as e2:
+                            if "BUSYGROUP" in str(e2):  # Group already exists — normal race condition
+                                logging.info(f"Consumer group '{self.group}' already exists for '{stream}', ignoring...")
+                            else:
+                                log_error(f"Failed to create missing group '{self.group}' on '{stream}': {e2}")
+                    continue  # Try reading again
+                else:
+                    raise  # real error
+
             except Exception as e:
                 log_error(f"Unexpected error: {e}")
                 time.sleep(1)
