@@ -26,6 +26,7 @@ Return ONLY a JSON object with this schema:
 }
 
 Strict rules:
+- You must only use entity.text values from the list provided. Do NOT create new or combined names. Every source and target must exactly match one of the entities
 - Output must be valid JSON. No explanations or markdown.
 - "text" MUST be an exact substring from the input, converted to lowercase.
 - Do NOT infer or hallucinate entities not present.
