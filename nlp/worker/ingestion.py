@@ -83,7 +83,6 @@ class IngestionHandler:
                     "source_id": src_id,
                     "target_id": tgt_id,
                     "type": r['type'],
-                    "record_id": job["record_id"],
                     "created_at": r.get("created_at") or created_at
                 })
 
