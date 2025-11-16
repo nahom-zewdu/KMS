@@ -25,13 +25,13 @@ def search_knowledge_graph(supabase: Client, query: str) -> str:
     """Search entities and edges for relevant context."""
     try:
         # Search entities
-        entities = supabase.table("entities").select("text,type").ilike("text", f"%{query.lower()}%").limit(10).execute()
+        entities = supabase.table("entities").select("name,type").ilike("name", f"%{query.lower()}%").limit(10).execute()
         # Search edges
         edges = supabase.table("edges").select("source,target,type").ilike("source", f"%{query.lower()}%").limit(10).execute()
         
         context = []
         for e in entities.data:
-            context.append(f"{e['text']} is a {e['type']}")
+            context.append(f"{e['name']} is a {e['type']}")
         for e in edges.data:
             context.append(f"{e['source']} {e['type']} {e['target']}")
         
