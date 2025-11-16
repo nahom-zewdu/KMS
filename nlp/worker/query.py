@@ -12,5 +12,5 @@ class QueryHandler:
         self.redis = redis_client
 
     def process(self, job: dict, stream: str, msg_id: str, redis_client):
-        _handle_query(job, None, redis_client)  # supabase injected globally
+        _handle_query(job, self.supabase, self.redis)  # supabase injected globally
         
