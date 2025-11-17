@@ -1,0 +1,52 @@
+# nlp/engine/schema.py
+"""
+Defines the canonical schema for entities and relations.
+This is the contract between NLP and the knowledge graph.
+"""
+from typing import Literal, List
+from pydantic import BaseModel, Field, validator
+from datetime import datetime
+from uuid import uuid4
+
+EntityType = Literal["PERSON", "SYSTEM", "TICKET", "PROJECT", "ENVIRONMENT", "FILE"]
+RelationType = Literal["OWNS", "MAINTAINS", "ASSIGNED_TO", "FIXES", "DEPLOYED_IN", "PART_OF"]
+
+class Entity(BaseModel):
+    text: str = Field(..., description="Exact text span")
+    type: EntityType = Field(..., description="Canonical type")
+    confidence: float = Field(..., ge=0, le=1)
+    record_id: str
+    source: str
+    created_at: str
+
+    @validator("text")
+    def normalize_text(cls, v):
+        return v.strip().lower()
+    
+    def dict(self, **kwargs):
+        return super().dict(**kwargs)
+    
+    def to_db_record(self) -> dict:
+        """Convert to Supabase entities table schema."""
+        return {
+            "id": str(uuid4()),
+            "type": self.type.lower(),  # DB expects lowercase
+            "name": self.text,
+            "metadata": {
+                "confidence": self.confidence,
+                "source": self.source,
+                "original_record_id": self.record_id,
+                "extracted_at": self.created_at
+            },
+            "created_at": self.created_at
+        }
+
+class Relation(BaseModel):
+    source: str = Field(..., description="Source entity text")
+    target: str = Field(..., description="Target entity text")
+    type: RelationType = Field(..., description="Canonical relation")
+    confidence: float = Field(..., ge=0, le=1)
+    record_id: str
+    source_type: EntityType
+    target_type: EntityType
+    created_at: str

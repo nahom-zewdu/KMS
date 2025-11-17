@@ -40,9 +40,14 @@ func (r *RedisStream) Publish(ctx context.Context, stream string, payload domain
 		return fmt.Errorf("failed to marshal payload for %s: %v", stream, err)
 	}
 
+	id := payload.ID
+	if id == "" {
+		id = "*"
+	}
+
 	err = r.client.XAdd(ctx, &redis.XAddArgs{
 		Stream: stream,
-		ID:     payload.ID,
+		ID:     id,
 		Values: map[string]interface{}{"data": string(data)},
 	}).Err()
 	if err != nil {
