@@ -1,91 +1,134 @@
-# KMS System Design Overview
+# KMS System Design Overview (November 2025 — Production-Ready MVP)
 
 ## Introduction
 
-KMS (Knowledge Management System) is an AI-powered knowledge oracle designed for SaaS and fintech teams to reduce onboarding friction and eliminate knowledge silos. It integrates with tools like Slack and GitHub to extract, organize, and query contextual knowledge, providing verifiable answers to questions such as "Who owns the billing service?" or "What PR fixed the incident last week?" The system emphasizes real-time event ingestion, intelligent processing, and a structured knowledge graph, enabling teams to access insights quickly and accurately. Built with a hybrid architecture, KMS prioritizes efficiency, scalability, and reliability within free-tier limits of services like Supabase and Upstash Redis.
+**KMS** is an AI-powered knowledge oracle that passively captures tribal knowledge from Slack and GitHub, builds a real-time, referentially-integral knowledge graph, and delivers instant, accurate answers to questions like:
 
-The design follows event-driven principles, separating concerns into ingestion, storage, processing, and querying. It handles 100 events/day for 20 beta users, scaling to 1M events/month, with <100ms latency for ingestion and <1s for queries.
+- “Who owns the billing service?”
+- “What was the context when the payment retry logic was added?”
+- “Which engineer has the most context on KMS-123?”
+
+KMS eliminates onboarding friction, reduces repetitive questions, and mitigates bus-factor risk in engineering teams. The system is built for correctness, observability, and resilience — all while staying within free-tier limits of Supabase, Upstash Redis, and Groq.
+
+Current status: End-to-end flow is stable and production-grade. Ingestion → KG construction → query loop works reliably with real Slack and GitHub events.
 
 ## Architecture Overview
 
-KMS uses a microservices-like structure with two main components: a Go backend for event ingestion and a Python processor for NLP analysis. Data flows through queues for async processing, ensuring decoupling and fault tolerance.
-
-- **Frontend Integration**: Slack bot and GitHub webhooks serve as entry points.
-- **Backend (Go)**: Handles incoming events, stores raw data, and queues for processing.
-- **Storage (Supabase)**: Central database for raw events, summarized content, knowledge graph, and metrics.
-- **Queueing (Redis)**: Streams for event queues (slack_jobs, github_jobs, query_jobs) and Pub/Sub for real-time responses (query_results).
-- **NLP Processor (Python)**: Consumes queues, extracts knowledge, updates graph/metrics.
-- **Deployment**: Backend on Vercel, processor on Render (free tier), with Colab for testing.
-
-Text Diagram:
-
 ```txt
-Slack/GitHub Webhooks → Go Backend (Ingestion) → Supabase (Storage) + Redis (Queues)
-                                             ↓
-                                     Python NLP Processor (Extraction) → Supabase (Graph/Metrics)
-                                             ↑
-Slack Responses ← Redis Pub/Sub (Real-Time)
+Slack / GitHub Webhook
+        ↓
+   Go Backend (Gin + Vercel)
+        ↓
+   Supabase (raw events + raw_data) + Redis Streams (slack_jobs / github_jobs / query_jobs)
+        ↓
+   Python NLP Worker (Render)
+        ↓
+   NER → Entities (UUID) → RE → Edges (UUID-grounded)
+        ↓
+   Supabase Knowledge Graph
+        ↓
+   Query → (future: vector + graph search) → LLM → Answer → Slack Thread (Pub/Sub)
 ```
 
 ## Key Components
 
-1. **Ingestion Layer (Go Backend)**:
-   - Receives webhooks from Slack (`/slack/events`) and GitHub (`/github`).
-   - Verifies signatures for security.
-   - Stores raw payloads in `events` and summarized content in `raw_data`.
-   - Queues events in Redis streams (`slack_jobs`, `github_jobs`, `query_jobs`) for async processing.
-   - Design Decision: Hybrid services (SlackIngestService, GitHubIngestService) share core logic for maintainability.
+### 1. Ingestion Layer (Go Backend — `api/`)
 
-2. **Storage Layer (Supabase)**:
-   - **events**: Raw payloads for auditability (delivery_id for idempotency, processed flag).
-   - **raw_data**: Summarized content (linked to events for traceability).
-   - **entities/edges**: Knowledge graph (entities: PERSON, PROJECT, TICKET; edges: authored, assigned, fixes).
-   - **contributions**: Metrics (commit/pr/issue counts, bus factor per person/repo).
-   - **pull_requests/issues**: GitHub details (merged status for unmerged PRs, state for issues).
-   - Design Decision: Layered schema separates raw/processed data, with indexes for fast queries and RLS for security.
+- Secure webhook endpoints with signature verification
+- Exactly-once semantics via `delivery_id` → `events` table check
+- Stores raw payloads in `events`, summarized content in `raw_data`
+- Publishes to source-specific Redis streams (`slack_jobs`, `github_jobs`)
+- Slack bot publishes user queries to `query_jobs`
+- Real-time response via Redis Pub/Sub (`query_results:{query_id}`)
 
-3. **Queueing Layer (Redis)**:
-   - Streams for batch processing (e.g., slack_jobs for messages, query_jobs for bot queries).
-   - Pub/Sub for real-time responses (query_results: queryID for Slack bot).
-   - Design Decision: Event-driven decoupling allows independent scaling of backend and processor.
+### 2. Storage Layer (Supabase — Postgres)
 
-4. **NLP Processor Layer (Python)**:
-   - Consumes streams, extracts entities/relationships using free LLMs.
-   - Updates knowledge graph and metrics in Supabase.
-   - Generates query answers and publishes responses.
-   - Design Decision: Modular files (main, ner, re, query_handler, utils) for maintainability; free models for MVP.
+| Table          | Purpose                                      | Key Design |
+|----------------|-----------------------------------------------|------------|
+| `events`       | Raw webhook payloads (audit + idempotency)   | `delivery_id` unique, `processed` flag |
+| `raw_data`     | Cleaned, searchable content                  | Linked to `events` via `record_id` |
+| `entities`     | Canonical nodes (PERSON, SYSTEM, TICKET, etc.)| `id: uuid`, `name`, `type`, `metadata` JSONB |
+| `edges`        | Relations (OWNS, FIXES, etc.)                | `source_id`/`target_id` → `entities.id` (grounded) |
+| `contributions`| Metrics (in progress)                        | Future normalization to `entity_id` |
 
-## Data Flow
+### 3. Queueing Layer (Upstash Redis)
 
-1. **Ingestion Flow**:
-   - Webhook → Backend Handler → Service Validation → CoreIngest (store in events/raw_data, publish to source_jobs).
-   - Example: Slack message "Nahom owns billing" → Stored raw, summarized, queued in slack_jobs.
+- Streams with consumer groups → true exactly-once processing
+- `XACK` + `XDEL` only on success
+- Automatic group recovery on cold start (`NOGROUP` handling)
+- Pub/Sub for real-time Slack responses
 
-2. **Processing Flow**:
-   - Python consumes source_jobs → NER/RE → Update entities/edges/contributions/pull_requests/issues → Set processed: true.
-   - Example: GitHub push → Extract PERSON (Nahom), PROJECT (billing), update contributions (commit_count +=1).
+### 4. NLP Processor Layer (Python — `nlp/`)
 
-3. **Query Flow**:
-   - Slack `@KMS who owns billing?` → Backend publishes to query_jobs → Python consumes, searches Supabase, generates answer → Publishes to query_results → Backend posts to Slack.
-   - Example: Search entities/raw_data → LLM generates "Nahom owns billing [80% commits]".
+- Deterministic JSON-object prompts (LLM forced to return `{ "entities": [...] }`)
+- Grounded relation extraction: entities inserted first → text → UUID mapping → edges inserted
+- Safe upserts with individual-insert fallback (`db_helpers.py`)
+- Full referential integrity — no dangling edges
+- Comprehensive logging, caching, and error recovery
 
-4. **Metrics Flow**:
-   - GitHub events → Update contributions (e.g., bus factor = max(commit_count)/total_commits).
-   - Edge Case: Unmerged PRs counted in pr_count, but flagged merged: false.
+## Current Achievements (Production-Grade)
 
-### Edge Cases
+- Exactly-once ingestion from Slack & GitHub
+- Deterministic entity & relation extraction (Groq Llama 3.1 + strict JSON schema)
+- UUID-grounded knowledge graph (no text-based edges)
+- Resilient consumer with auto-recovery
+- Full audit trail and query logging
+- Zero hallucinations in structured extraction (enforced schema)
 
-- **Unmerged PRs/Commits**: Stored in pull_requests/issues with merged/state flags, counted in contributions for metrics (e.g., active devs).
+## Data Flow — Current (Working)
 
-- **Deleted Repos**: Mark entities active: false via repository event.
-- **Rate Limits**: Cache queries in Redis (delivery_id checks).
-- **Redeliveries**: Skip duplicates using delivery_id in events.
-- **Noisy Data**: NER/RE thresholds (>0.5 score) filter low-confidence results.
+1. **Ingestion**
 
-### Scalability and Efficiency
+   ```txt
+   Webhook → Go → events + raw_data → Redis stream (slack_jobs / github_jobs)
+   ```
 
-- **Horizontal Scaling**: Backend on Vercel (auto-scales), processor on Render (free tier).
-- **Efficiency**: Batch processing (10 events), LLM quantization (<1s/query).
-- **Free Tools**: HuggingFace models, Supabase PGVector, Upstash Redis, Colab for testing.
+2. **KG Construction**
 
-This design makes KMS efficient and intelligent, ready for growth. Feedback?
+   ```txt
+   Python consumes stream → NER → insert entities → map name→id → RE → insert edges → mark processed
+   ```
+
+3. **Query (v1 — Working, to be replaced)**
+
+   ```txt
+   @KMS query → Go → query_jobs → Python → simple ILIKE search → LLM → publish answer → Slack
+   ```
+
+## Next Phase: Query Engine v2 (In Progress — 2-Week Sprint)
+
+| Feature                      | Status            | Impact |
+|------------------------------|-------------------|--------|
+| `pgvector` + embeddings      | Ready to enable   | Semantic search |
+| Vector search on `raw_data`  | Implementation    | <100ms recall |
+| Multi-hop graph traversal    | Design complete   | “Who owns X?” → real answers |
+| Result ranking + citation    | Planned           | Trust & transparency |
+| Query caching (Redis)        | Planned           | <50ms cold → <10ms warm |
+| Confidence decay & TTL       | Planned           | Stale knowledge auto-expires |
+
+## Scalability & Reliability
+
+- Go backend: Vercel serverless (auto-scale)
+- Python worker: Render (free tier → paid on traction)
+- Redis: Upstash (10K ops/day → scale on demand)
+- Supabase: Free tier → paid at 50+ users
+- All components stateless or replayable
+
+## Edge Cases Handled
+
+- Redeliveries → `delivery_id` deduplication
+- Redis downtime → consumer auto-reconnect + group recovery
+- LLM malformed output → strict parsing + fallback
+- Partial failures → no `XACK` → automatic retry
+- Large pushes → commit truncation (20 max)
+
+## Roadmap (Next 8 Weeks)
+
+| Milestone                    | ETA         |
+|------------------------------|-------------|
+| Query Engine v2 (vector + graph) | End Nov 2025 |
+| VS Code extension            | Dec 2025    |
+| Onboarding playbooks         | Dec 2025    |
+| Knowledge health dashboard   | Jan 2026    |
+| Jira / Linear integration    | Jan 2026    |
+| First 20 beta users          | Jan 2026    |
