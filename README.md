@@ -1,144 +1,170 @@
-# KnowSphere (KMS) - AI-Powered Knowledge Oracle
+# KMS — AI-Powered Knowledge Oracle
 
-KnowSphere is an AI-powered knowledge oracle for SaaS/fintech teams, integrating with Slack and GitHub to eliminate onboarding friction and knowledge silos. It extracts entities (PERSON, PROJECT, TICKET) and relationships from messages/events, building a verifiable knowledge graph in Supabase for instant answers like "Who owns the billing service?" or "What PR fixed the incident last week?"
+**KMS** passively captures tribal knowledge from Slack and GitHub, builds a real-time knowledge graph, and answers natural-language questions like:
 
-## MVP Scope
+- “Who owns the billing service?”
+- “What was the context behind the last payment API change?”
+- “Which PR fixed KMS-123?”
 
-- **Slackbot**: Ingests messages, handles `@KMS` queries via `query_jobs`, responds with LLM-generated answers using Supabase context.
-- **GitHub Integration**: Processes webhooks (`push`, `pull_request`, `issues`), stores raw payloads in `events`, summarized content in `raw_data`, publishes to `github_jobs`.
-- **Knowledge Graph**: Entities/edges for relationships (authored, assigned, fixes), metrics (contributions, bus factor).
-- **Architecture**: Hybrid with source-specific services (`SlackIngestService`, `GitHubIngestService`) and shared `CoreIngestService`.
-- **Performance**: <100ms latency, 1K QPS, 99.9% uptime within free-tier limits (Upstash 10K ops/day, Supabase 500MB, GitHub API 5K/hour).
+By connecting scattered signals across tools, KMS eliminates onboarding friction, reduces repetitive questions, and mitigates bus-factor risk in engineering teams.
+
+## Current Status — MVP (Working End-to-End)
+
+- Slack & GitHub event ingestion (exactly-once)
+- Production-grade entity & relation extraction (grounded to UUIDs)
+- Real-time Slack bot (`@KMS`) with query → answer loop
+- Resilient Redis Streams + consumer groups
+- Supabase-backed knowledge graph (`entities`, `edges`, `raw_data`, `events`)
+- Full referential integrity (no dangling edges)
+
+## Architecture Overview
+
+```txt
+Slack / GitHub Webhook
+        ↓
+   Go Backend (Gin)
+        ↓
+   Redis Streams → slack_jobs / github_jobs / query_jobs
+        ↓
+   Python NLP Worker (RedisStreamConsumer)
+        ↓
+   NER → Entities → RE → Edges (UUID-grounding)
+        ↓
+   Supabase (knowledge graph)
+        ↓
+   Query → Vector/Graph Search → LLM → Answer → Slack Thread
+```
 
 ## Project Structure
 
-```text
+```txt
 kms/
-├── api/
-│   ├── domain/
-│   │   ├── domain.go      # Shared structs/interfaces (IngestRequest, CoreIngestService)
-│   │   ├── slack.go       # Slack-specific structs/interfaces
-│   │   └── github.go      # GitHub-specific structs/interfaces
-│   ├── handlers/
-│   │   ├── slack.go       # Slack webhook handler
-│   │   ├── github.go      # GitHub webhook handler
-│   │   └── routes.go      # Route configuration
-│   ├── repository/
-│   │   ├── redis_stream.go # Redis operations
-│   │   └── supabase.go     # Supabase operations
-│   ├── services/
-│   │   ├── core.go        # Shared ingestion logic
-│   │   ├── slack.go       # Slack ingestion
-│   │   ├── slack_bot.go   # Slack bot query handling
-│   │   └── github.go      # GitHub ingestion
-│   └── main.go            # Entry point
-├── nlp/
-│   ├── main.py
+├── api/                  # Go backend (webhooks, Slack bot, ingestion)
+│   ├── domain/           # Shared interfaces & structs
+│   ├── handlers/         # Slack & GitHub webhook endpoints
+│   ├── repository/       # Redis & Supabase adapters
+│   ├── services/         # Core ingestion + source-specific logic
+│   └── main.go
+│
+├── nlp/                  # Python NLP processor
 │   ├── worker/
-│   │   ├── __init__.py
-│   │   ├── ingestion.py
-│   │   ├── processor.py
-│   │   ├── query.py
-│   │   ├── consumer.py
+│   │   ├── consumer.py      # Exactly-once Redis stream consumer
+│   │   ├── ingestion.py     # NER + RE + grounded KG build
+│   │   ├── query.py         # Query handler (v1 — being replaced)
+│   │   └── processor.py
 │   ├── engine/
-│   │   ├── __init__.py
-│   │   ├── llm.py
-│   │   ├── schema.py
-│   │   ├── ner.py
-│   │   ├── re.py
-│   │   └── prompt.py
+│   │   ├── llm.py           # Groq + JSON-mode interface
+│   │   ├── ner.py / re.py   # Deterministic entity & relation extraction
+│   │   ├── prompt.py        # Strict JSON-object prompts
+│   │   └── schema.py        # Pydantic models
 │   ├── utils/
-│   │   ├── __init__.py
+│   │   ├── db_helpers.py    # Safe upsert + fallback logic
 │   │   ├── supabase.py
-│   │   ├── redis.py
-│   │   ├── logger.py
-│   │   └── common.py
-│   ├── query_handler.py
-│   ├── tests/
-│   │   └── test_full_flow.py
-│   ├── requirements.txt
-│   └── .env
+│   │   └── redis.py
+│   ├── query_handler.py     # Current query logic (to be upgraded)
+│   └── main.py              # Entry point
+│
+└── README.md
 ```
 
-## How to Run Locally
+## Local Development
 
-1. Clone the repo:
+### 1. Clone & Setup
 
-   ```bash
-   git clone https://github.com/nahom-zewdu/kms.git
-   cd kms
-   ```
+```bash
+git clone https://github.com/nahom-zewdu/kms.git
+cd kms
+```
 
-2. Set up `.env`:
+### 2. Environment Variables (`.env` in both `api/` and `nlp/`)
 
-   ```env
-   SUPABASE_URL=https://your-supabase-project.supabase.co
-   SUPABASE_KEY=your-service-key
-   REDIS_ADDR=sought-perch-5675.upstash.io:6379
-   REDIS_PASSWORD=your-redis-password
-   SLACK_BOT_TOKEN=xoxb-your-slack-bot-token
-   SLACK_SIGNING_SECRET=your-slack-signing-secret
-   GITHUB_WEBHOOK_SECRET=your-github-secret
-   HF_API_TOKEN=your-huggingface-token
-   PORT=9090
-   ```
+```env
+# Supabase
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your-service-role-key
 
-3. Install Go dependencies:
+# Redis (Upstash)
+REDIS_URL=rediss://:password@host:port
 
-   ```bash
-   cd api
-   go mod tidy
-   ```
+# Slack
+SLACK_BOT_TOKEN=xoxb-...
+SLACK_SIGNING_SECRET=...
 
-4. Run Go backend:
+# Groq (for LLM)
+GROQ_API_KEY=gsk_...
 
-   ```bash
-   go run main.go
-   ```
+# Github
+GITHUB_WEBHOOK_SECRET=your-github-secret-key
+GITHUB_API_TOKEN=ghp_ ...
 
-5. Install Python dependencies:
 
-   ```bash
-   cd nlp
-   pip install -r requirements.txt  # Create requirements.txt with: redis langchain-huggingface supabase python-dotenv retry transformers torch
-   ```
+# Optional
+PORT=9090
+```
 
-6. Run Python processor:
+### 3. Run Go Backend
 
-   ```bash
-   python hf_processor.py
-   ```
+```bash
+cd api
+go mod tidy
+go run main.go
+```
 
-7. Test:
+### 4. Run Python NLP Worker
 
-- **Slack Message**: Send "Nahom owns billing" → Stored in Supabase, published to `slack_jobs`.
-- **@KMS Query**: Send "@KMS Who owns billing?" → Processed via `query_jobs`, response posted in thread.
-- **GitHub Push**: Trigger a push → Stored in Supabase, published to `github_jobs`.
+```bash
+cd nlp
+pip install -r requirements.txt
+python main.py
+```
+
+### 5. Test the Flow
+
+- Send a Slack message: `Nahom owns the billing service`
+- Trigger a GitHub push or PR
+- Ask in Slack: `@KMS Who owns billing?`
+
+→ Answer appears in thread within seconds.
 
 ## Tech Stack
 
-- **Go (Gin)**: Backend for webhook handling and Slack bot.
-- **Python (HuggingFace)**: LLM/NER processing (`distilgpt2`, `distilbert-base-cased`).
-- **Supabase**: Knowledge graph storage (`events`, `raw_data`, `entities`, `edges`).
-- **Upstash Redis**: Streams (`slack_jobs`, `github_jobs`, `query_jobs`), Pub/Sub (`query_results:{query_id}`).
+| Layer         | Technology                                   |
+|---------------|-----------------------------------------------|
+| Backend       | Go (Gin)                                      |
+| NLP / LLM     | Python + Groq (Llama 3.1 70B / 8B) + JSON mode |
+| Vector Search | Planned: `pgvector` + `sentence-transformers` |
+| Database      | Supabase (Postgres)                           |
+| Message Queue | Upstash Redis (Streams + Pub/Sub)             |
+| Hosting       | Vercel (Go) + Render (Python)                 |
 
-## Key Features
+## Key Achievements (Production-Ready)
 
-- **Event Ingestion**: GitHub webhooks and Slack messages stored as raw payloads for auditability.
-- **Knowledge Graph**: Entities/relationships extracted from events, supporting metrics like bus factor.
-- **Query Handling**: Real-time answers via Slack bot, with LLM context from Supabase.
-- **Metrics**: Contribution tracking (commits/PRs/issues) and bus factor calculation.
+- Exactly-once processing with consumer groups
+- Deterministic LLM prompts (JSON-object schema)
+- Grounded relations (`source_id`/`target_id` → real UUIDs)
+- Safe upserts with individual-insert fallback
+- Full audit trail (`events`, `raw_data`, query logs)
 
-## Upcoming Features
+## Upcoming (Next 2–4 Weeks)
 
-- **Jira Integration**: Link tickets to GitHub events.
-- **NLP Enhancements**: Fine-tuned models for 85%+ accuracy.
-- **Deployment**: Vercel (Go) and Heroku/Render (Python).
+| Feature                     | Status     |
+|-----------------------------|------------|
+| `pgvector` + semantic search| In progress     |
+| Multi-hop graph traversal   | Planned         |
+| Query result caching        | Planned         |
+| Confidence decay & edge TTL | Planned         |
+| VS Code extension           | Planned         |
+| Onboarding playbooks        | Planned         |
+| Knowledge health dashboard  | Planned         |
 
 ## Contributing
 
-Contributions welcome! Submit PRs with clean code (gofmt, PEP 8) and tests.
+Contributions are welcome! Please:
+
+- Follow Go formatting (`gofmt`) and PEP 8
+- Add tests where possible
+- Open an issue first for big changes
 
 ## License
 
-MIT License
+MIT
