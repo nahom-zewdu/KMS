@@ -10,6 +10,8 @@ from typing import Dict, Any
 import logging
 from .graph.traverser import GraphTraverser
 from .vector.retriever import VectorRetriever
+from .router import classify_intent
+from .synthesizer import synthesize
 
 logger = logging.getLogger(__name__)
 
@@ -53,13 +55,27 @@ class QueryEngine:
         if not question:
             answer = "Please ask a clear question."
         else:
-            # GRAPH-FIRST PATH
-            graph_answer = self.graph.traverse(question)
-            if graph_answer:
-                answer = graph_answer
-            else:
-                # Fall back to vector + LLM
-                answer = self.vector.answer(question)
+            # 1. Route
+            route = classify_intent(question)
+            logger.info(f"Route: {route['path']} (confidence: {route['confidence']:.0%})")
+
+            # 2. Execute
+            graph_answer = None
+            vector_chunks = None
+
+            if route["path"] in ("graph", "hybrid"):
+                graph_answer = self.graph.traverse(question)
+
+            if not graph_answer or route["path"] in ("vector", "hybrid"):
+                vector_chunks = self.vector.retrieve(question)
+
+            # 3. Synthesize
+            answer = synthesize(
+                question=question,
+                graph_facts=[graph_answer] if graph_answer else None,
+                vector_chunks=vector_chunks,
+                route=route["path"]
+            )
 
         # Publish result
         self.redis.publish(f"query_results:{query_id}", answer)
