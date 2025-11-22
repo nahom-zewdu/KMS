@@ -10,4 +10,5 @@ nlp/query_engine/
 │   └── embedder.py        # Cached sentence-transformers
 ├── synthesizer.py         # Final LLM answer + citations
 ├── cache.py               # Redis result cache (24h TTL)
+
 └── core.py                # Public handle_query() entrypoint
