@@ -1,6 +1,6 @@
 # nlp/query_engine/analytics.py
 """
-Query analytics — know exactly what your team asks.
+Query analytics know exactly what your team asks.
 
 Tracks:
 - question text (anonymized hash)
