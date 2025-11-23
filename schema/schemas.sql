@@ -143,6 +143,21 @@ CREATE INDEX idx_issues_repo_name ON public.issues (repo_name);
 COMMENT ON TABLE public.issues IS 'Stores detailed GitHub issue data, linked to events.';
 
 
+-- Query Logs: tracks user queries for analytics
+create table if not exists public.query_logs (
+    id uuid primary key default gen_random_uuid(),
+    query_id text not null,
+    question_hash text not null,
+    route text check (route in ('graph', 'vector', 'hybrid', 'unknown')),
+    latency_ms double precision,
+    cache_hit boolean default false,
+    answer_length integer,
+    asked_at timestamptz default now()
+);
+
+create index idx_query_logs_asked_at on query_logs(asked_at);
+create index idx_query_logs_route on query_logs(route);
+
 -- ============================================================
 --  GRANT PERMISSIONS (SUPABASE COMPATIBLE)
 -- ============================================================
