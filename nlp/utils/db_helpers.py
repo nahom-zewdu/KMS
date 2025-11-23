@@ -7,8 +7,20 @@ import uuid
 import logging
 from typing import List, Dict, Any
 from supabase import Client
+from sentence_transformers import SentenceTransformer
+from functools import lru_cache
 
 logger = logging.getLogger("nlp.db_helpers")
+
+
+@lru_cache(maxsize=1)
+def get_embedder():
+    """Singleton embedder loads once, reuses."""
+    return SentenceTransformer('all-MiniLM-L6-v2')
+
+def embed_content(content: str) -> list:
+    """Generate 384-dim embedding."""
+    return get_embedder().encode(content, normalize_embeddings=True).tolist()
 
 def _ensure_uuid(val: str) -> str:
     try:
@@ -83,19 +95,33 @@ def insert_relations(supabase: Client, relations: List[Dict[str, Any]]) -> None:
             logger.exception("Batch insert relations failed: %s", ie)
         return
 
-def insert_raw_data(supabase: Client, raw_record: Dict[str, Any]) -> None:
+def insert_raw_data(supabase: Client, raw_job: Dict[str, Any]) -> None:
     """
-    Safe insert for raw_data. Uses upsert on id if present; otherwise generate id.
-    raw_record fields: id (optional), source, content, record_id, event_id (optional), created_at
+    Safe insert for raw_data with automatic embedding generation.
+    This is the ONLY place embeddings are created — at ingestion time.
     """
-    rec = dict(raw_record)
+    rec = dict(raw_job)
+    content = rec.get("content", "").strip()
+    
+    # Generate embedding if content exists
+    if content:
+        try:
+            rec["embedding"] = embed_content(content)
+            rec["embedding_model"] = "all-MiniLM-L6-v2"
+        except Exception as e:
+            logger.warning(f"Failed to generate embedding: {e}")
+            rec["embedding"] = None
+    else:
+        rec["embedding"] = None
+
     if not rec.get("id"):
         rec["id"] = str(uuid.uuid4())
+
     try:
         supabase.table("raw_data").upsert(rec, on_conflict="id").execute()
-        logger.info("Inserted/upserted raw_data id=%s", rec["id"])
+        logger.info("Inserted raw_data + embedding | id=%s", rec["id"])
     except Exception as e:
-        logger.exception("Failed to insert raw_data: %s", e)
+        logger.exception("raw_data upsert failed: %s", e)
         try:
             supabase.table("raw_data").insert(rec).execute()
         except Exception as ie:
