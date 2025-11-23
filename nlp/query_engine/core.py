@@ -8,10 +8,14 @@ Routes questions to the optimal path and returns final answer.
 
 from typing import Dict, Any
 import logging
+import time
 from .graph.traverser import GraphTraverser
 from .vector.retriever import VectorRetriever
 from .router import classify_intent
 from .synthesizer import synthesize
+from .cache import QueryCache
+from .decay import update_edge_lifecycle
+from .analytics import log_query
 
 logger = logging.getLogger(__name__)
 
@@ -24,61 +28,68 @@ class QueryEngine:
     - Vector-first: historical context, "why" questions
     - Hybrid: complex multi-hop questions
 
-    All answers include inline citations and confidence scoring.
+    All answers include inline citations and confidence scoring with caching, decay, and analytics.
     """
 
     def __init__(self, supabase_client, redis_client):
         self.supabase = supabase_client
         self.redis = redis_client
-        self.logger = logger
         self.graph = GraphTraverser(supabase_client)
         self.vector = VectorRetriever(supabase_client)
+        self.cache = QueryCache(redis_client)
 
     def handle_query(self, job: Dict[str, Any]) -> str:
-        """
-        Process a query_job from Redis stream.
-
-        Args:
-            job: Dict containing:
-                - record_id: str (query ID)
-                - content: str (user question)
-                - created_at: str (optional timestamp)
-
-        Returns:
-            Final answer string with citations (published to Redis)
-        """
+        start_time = time.time()
         query_id = job["record_id"]
         question = job["content"].strip()
 
-        self.logger.info(f"Query {query_id} | {question}")
+        logger.info(f"Query {query_id} | {question}")
 
         if not question:
             answer = "Please ask a clear question."
-        else:
-            # 1. Route
-            route = classify_intent(question)
-            logger.info(f"Route: {route['path']} (confidence: {route['confidence']:.0%})")
+            self.redis.publish(f"query_results:{query_id}", answer)
+            return answer
 
-            # 2. Execute
-            graph_answer = None
-            vector_chunks = None
+        # 1. Cache check
+        cached = self.cache.get(question)
+        if cached:
+            latency = (time.time() - start_time) * 1000
+            log_query(self.supabase, query_id, question, "cached", latency, True, len(cached))
+            self.redis.publish(f"query_results:{query_id}", cached)
+            return cached
 
-            if route["path"] in ("graph", "hybrid"):
-                graph_answer = self.graph.traverse(question)
+        # 2. Route
+        route = classify_intent(question)
+        path = route["path"]
 
-            if not graph_answer or route["path"] in ("vector", "hybrid"):
-                vector_chunks = self.vector.retrieve(question)
+        # 3. Execute
+        graph_answer = None
+        vector_chunks = None
 
-            # 3. Synthesize
-            answer = synthesize(
-                question=question,
-                graph_facts=[graph_answer] if graph_answer else None,
-                vector_chunks=vector_chunks,
-                route=route["path"]
-            )
+        if path in ("graph", "hybrid"):
+            graph_answer = self.graph.traverse(question)
 
-        # Publish result
+        if not graph_answer or path in ("vector", "hybrid"):
+            vector_chunks = self.vector.retrieve(question)
+
+        # 4. Synthesize
+        answer = synthesize(
+            question=question,
+            graph_facts=[graph_answer] if graph_answer else None,
+            vector_chunks=vector_chunks,
+            route=path
+        )
+
+        # 5. Cache
+        is_graph_only = bool(graph_answer and not vector_chunks)
+        self.cache.set(question, answer, is_graph_only=is_graph_only)
+
+        # 6. Analytics
+        latency = (time.time() - start_time) * 1000
+        log_query(self.supabase, query_id, question, path, latency, False, len(answer))
+
+        # 7. Publish
         self.redis.publish(f"query_results:{query_id}", answer)
-        self.logger.info(f"Answer published | {query_id}")
+        logger.info(f"Answer sent | {query_id} | {latency:.1f}ms")
 
         return answer
