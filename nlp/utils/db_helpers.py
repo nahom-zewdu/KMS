@@ -98,7 +98,7 @@ def insert_relations(supabase: Client, relations: List[Dict[str, Any]]) -> None:
 def insert_raw_data(supabase: Client, raw_job: Dict[str, Any]) -> None:
     """
     Safe insert for raw_data with automatic embedding generation.
-    This is the ONLY place embeddings are created — at ingestion time.
+    This is the ONLY place embeddings are created at ingestion time.
     """
     rec = dict(raw_job)
     content = rec.get("content", "").strip()
