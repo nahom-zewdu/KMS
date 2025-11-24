@@ -12,4 +12,5 @@ dependencies = [
     "redis==5.0.8",
     "sentence-transformers>=5.1.2",
     "supabase>=2.24.0",
+    "tqdm>=4.67.1",
 ]
