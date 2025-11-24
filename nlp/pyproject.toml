@@ -13,5 +13,4 @@ dependencies = [
     "sentence-transformers>=5.1.2",
     "supabase>=2.24.0",
     "tqdm>=4.67.1",
-    "tqdm>=4.67.1",
 ]
