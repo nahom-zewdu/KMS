@@ -37,11 +37,12 @@ class VectorRetriever:
         response = (
             self.supabase.rpc("match_documents", {
                 "query_embedding": embedding,
-                "match_count": top_k
+                "match_count": top_k,
             })
             .execute()
         )
-        return response.data
+        chunks = response.data or []
+        return chunks
 
     def answer(self, question: str) -> str:
         """Simple RAG answer (bridge to v2)."""
