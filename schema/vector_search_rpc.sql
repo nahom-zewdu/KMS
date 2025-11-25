@@ -1,7 +1,7 @@
 -- supabase/functions/match_documents.sql
 create or replace function public.match_documents(
   query_embedding vector(384),
-  match_threshold float default 0.75,
+  match_threshold float default 0.65,
   match_count int default 10
 )
 returns table (
