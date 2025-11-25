@@ -38,6 +38,7 @@ class VectorRetriever:
             self.supabase.rpc("match_documents", {
                 "query_embedding": embedding,
                 "match_count": top_k,
+                "match_threshold": 0.65
             })
             .execute()
         )
