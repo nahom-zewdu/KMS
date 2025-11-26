@@ -84,8 +84,7 @@ class QueryEngine:
 
             # 4. Execute with isolation
             graph_answer = None
-            vector_chunks = None
-
+            vector_chunks = []
             if path in ("graph", "hybrid"):
                 try:
                     graph_answer = self.graph.traverse(question)
@@ -100,8 +99,10 @@ class QueryEngine:
                     logger.warning(f"Vector path failed: {e}")
                     vector_chunks = []
 
+            logger.info(f"Vector chunks retrieved: {len(vector_chunks)}")
+
             # 5. Synthesize (only if we have something)
-            if not graph_answer and not vector_chunks:
+            if not graph_answer and (not vector_chunks or len(vector_chunks) == 0):
                 answer = "I couldn't find any relevant information yet."
             else:
                 answer = synthesize(
