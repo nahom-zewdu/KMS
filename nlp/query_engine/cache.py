@@ -34,7 +34,7 @@ class QueryCache:
             cached = self.redis.get(key)
             if cached:
                 logger.info("Cache HIT")
-                return cached.decode()
+                return cached if isinstance(cached, str) else cached.decode()
         except Exception as e:
             logger.warning(f"Cache get failed: {e}")
         return None
