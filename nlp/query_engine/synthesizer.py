@@ -38,7 +38,7 @@ def synthesize(
             citations.append(f"Source: {source} • record:{record_id}")
 
     if not parts:
-        return "I don't know yet."
+        return "I couldn't find any relevant information yet."
 
     # Final answer via LLM (constrained)
     context = "\n\n".join(parts)
