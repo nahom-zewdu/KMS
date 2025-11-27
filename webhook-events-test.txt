@@ -9,5 +9,9 @@ nlp/query_engine/
 │   ├── retriever.py       # pgvector RPC + filtering
 │   └── embedder.py        # Cached sentence-transformers
 ├── synthesizer.py         # Final LLM answer + citations
+├── router.py         # Final LLM answer + citations
+├── analytics.py         # Final LLM answer + citations
 ├── cache.py               # Redis result cache (24h TTL)
+├── decay.py               # Redis result cache (24h TTL)
+├── errors.py               # Redis result cache (24h TTL)
 └── core.py                # Public handle_query() entrypoint
