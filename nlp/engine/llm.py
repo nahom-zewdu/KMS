@@ -6,6 +6,7 @@ Works perfectly with Groq + response_format.
 import os
 import json
 import time
+import logging
 from typing import Any
 from openai import OpenAI
 from functools import lru_cache
@@ -18,12 +19,14 @@ client = OpenAI(
     base_url="https://api.groq.com/openai/v1"
 )
 
+logger = logging.getLogger("engine.llm")
+
 @lru_cache(maxsize=500)
 def llm_infer(
     prompt: str,
     temperature: float = 0.0,
     max_tokens: int = 512,
-    model: str = "llama-3.1-70b-versatile"  # Best Groq model as of Nov 2025
+    model: str = "llama-3.1-8b-instant"  # Best Groq model as of Nov 2025
 ) -> str:
     """
     Always returns valid JSON string when response_format is used.
@@ -39,19 +42,12 @@ def llm_infer(
                 }],
                 temperature=temperature,
                 max_tokens=max_tokens,
-                # response_format={"type": "json_object"}
+                response_format={"type": "json_object"}
             )
             return response.choices[0].message.content.strip()
         except Exception as e:
-            if "json" in str(e).lower():
-                # Fallback: force plain text if Groq is being strict
-                if attempt == 2:
-                    return fallback_infer(prompt, temperature, max_tokens, model)
-                time.sleep(0.8 * (2 ** attempt))
-                continue
-            if attempt == 2:
-                return fallback_infer(prompt, temperature, max_tokens, model)
-            time.sleep(0.5 * (2 ** attempt))
+            logger.exception(f"LLM ERROR: {e}")
+            raise
     return '{"error": "llm_failed"}'
 
 def fallback_infer(prompt: str, temperature: float, max_tokens: int, model: str) -> str:
