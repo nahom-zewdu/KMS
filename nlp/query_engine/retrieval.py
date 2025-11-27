@@ -1,48 +1,48 @@
 # nlp/query_engine/retrieval.py
 """
-Parallel retrieval from both graph and vector stores.
-Always returns something. Never fails silently.
+Parallel retrieval from graph hints and vector store.
+Robust, logs errors, never crashes.
 """
 from typing import List, Dict, Any, Tuple
 import logging
 from supabase import Client
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("engine.retrieval")
 
 class DualRetriever:
-    """Retrieves from both knowledge graph and semantic memory in parallel."""
+    """Retrieves from both structured hints and semantic context."""
     
     def __init__(self, supabase: Client):
         self.supabase = supabase
 
     def _get_graph_facts(self, question: str) -> List[Dict]:
-        """Extract structured facts using simple, robust SQL."""
+        """Search raw_data for high-signal ownership statements."""
         try:
-            # Look for OWNS/MAINTAINS relationships mentioned in raw_data
+            # Use .limit() correctly — Supabase client supports it
             result = (
-                self.supabase
-                .table("raw_data")
+                self.supabase.table("raw_data")
                 .select("content, source, record_id, created_at")
-                .text_search("content", question.split()[-3:])  # last few words
-                .limit(5)
+                .or_(f"content.ilike.%{question.split()[-1]}%,content.ilike.%{question.split()[-2]}%")
+                .limit(6)
                 .execute()
             )
             return [
                 {
                     "type": "graph_hint",
-                    "content": r["content"][:400],
+                    "content": r["content"][:500],
                     "source": r["source"],
                     "record_id": r["record_id"],
-                    "score": 0.95
+                    "score": 0.96
                 }
                 for r in (result.data or [])
+                if any(word in r["content"].lower() for word in ["owns", "own", "responsible", "maintains", "built", "working on"])
             ]
         except Exception as e:
             logger.warning(f"Graph hint search failed: {e}")
             return []
 
     def _get_vector_context(self, question: str) -> List[Dict]:
-        """Semantic search over raw_data."""
+        """Semantic search via pgvector."""
         try:
             from .vector.retriever import VectorRetriever
             retriever = VectorRetriever(self.supabase)
@@ -68,5 +68,7 @@ class DualRetriever:
         """
         graph_facts = self._get_graph_facts(question)
         vector_context = self._get_vector_context(question)
+        
+        logger.info(f"Graph facts: {len(graph_facts)} | Vector context: {len(vector_context)}")
 
         return graph_facts, vector_context
