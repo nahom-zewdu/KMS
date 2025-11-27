@@ -13,7 +13,7 @@ from datetime import timedelta
 from supabase import Client
 import logging
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("engine.decay")
 
 def update_edge_lifecycle(
     supabase: Client,
