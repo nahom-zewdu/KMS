@@ -18,7 +18,7 @@ client = OpenAI(
 )
 
 @lru_cache(maxsize=500)
-def llm_infer(prompt: str, model: str = "llama-3.1-8b-instant") -> str:
+def llm_infer(prompt: str, temperature: float = 0.0, max_tokens: int = 512 ,  model: str = "llama-3.1-8b-instant") -> str:
     """
     High-precision LLM inference with JSON enforcement.
     Model: llama-3.1-70b-versatile (current Groq flagship, Nov 2025)
@@ -28,8 +28,8 @@ def llm_infer(prompt: str, model: str = "llama-3.1-8b-instant") -> str:
             response = client.chat.completions.create(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.0,
-                max_tokens=512,
+                temperature=temperature,
+                max_tokens=max_tokens,
                 response_format={"type": "json_object"}
             )
             return response.choices[0].message.content.strip()
