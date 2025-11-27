@@ -6,6 +6,9 @@ import logging
 from query_engine.core import QueryEngine
 from utils.supabase import init_supabase
 from utils.redis import init_redis
+
+logger = logging.getLogger("query")
+
 class QueryHandler:
     def __init__(self, supabase = init_supabase(), redis_client = init_redis()):
         self.supabase = supabase
