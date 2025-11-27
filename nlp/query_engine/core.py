@@ -14,7 +14,7 @@ from .synthesizer import synthesize
 from .cache import QueryCache
 from .analytics import log_query
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("engine.core")
 
 class QueryEngine:
     """The final, minimal, production-ready query engine."""
