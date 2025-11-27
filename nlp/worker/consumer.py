@@ -11,6 +11,7 @@ from redis.exceptions import ConnectionError, TimeoutError, ResponseError
 
 from utils import init_redis, log_error
 
+logger = logging.getLogger("consumer")
 
 class RedisStreamConsumer:
     def __init__(self, streams: list, group: str, handlers: Dict[str, Callable]):
