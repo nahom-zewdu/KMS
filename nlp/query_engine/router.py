@@ -5,6 +5,9 @@ No LLM. No failure. 100% uptime.
 Only purpose: decide if we should prioritize graph or vector.
 """
 from typing import Literal
+import logging
+
+logger = logging.getLogger("engine.router")
 
 PathPriority = Literal["graph_first", "vector_first", "balanced"]
 
