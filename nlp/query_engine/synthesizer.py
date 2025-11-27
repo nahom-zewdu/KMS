@@ -1,65 +1,72 @@
 # nlp/query_engine/synthesizer.py
 """
-Answer Synthesizer turns raw facts into beautiful, trusted answers.
-
-Features:
-- Inline citations [1][2]
-- Confidence badges
-- Source links (record_id)
-- Never hallucinates names or ownership
+Final answer synthesis using LLM.
+Receives BOTH graph hints and vector context.
+Never hallucinates names or ownership it only reads.
 """
-
-from typing import List, Dict, Any
+from engine.llm import llm_infer
+from typing import List, Dict
 
 def synthesize(
     question: str,
-    graph_facts: List[str] = None,
-    vector_chunks: List[Dict] = None,
-    route: str = "unknown"
+    graph_facts: List[Dict],
+    vector_context: List[Dict],
+    priority: str
 ) -> str:
     """
-    Create final user-facing answer with citations and confidence.
+    Generate final answer using constrained LLM.
+    Always cites sources. Never makes up facts.
     """
-    parts = []
-    citations = []
+    # Build context
+    context_blocks = []
 
-    # 1. Graph facts (highest trust)
     if graph_facts:
-        parts.extend(graph_facts)
-        citations.append("Knowledge graph (100% confidence)")
+        context_blocks.append("=== OWNERSHIP & STRUCTURED FACTS (HIGH CONFIDENCE) ===")
+        for f in graph_facts[:3]:
+            context_blocks.append(f"• {f['content']} (from {f['source']})")
 
-    # 2. Vector context
-    if vector_chunks:
-        for i, chunk in enumerate(vector_chunks[:4], 1):
-            content = chunk["content"][:600] + ("..." if len(chunk["content"]) > 600 else "")
-            source = chunk.get("source", "unknown")
-            record_id = chunk.get("record_id", "unknown")
-            parts.append(f"[{i}] {content}")
-            citations.append(f"Source: {source} • record:{record_id}")
+    if vector_context:
+        context_blocks.append("\n=== RELEVANT HISTORY & CONTEXT ===")
+        for c in vector_context[:4]:
+            context_blocks.append(f"• {c['content']} (from {c['source']})")
 
-    if not parts:
-        return "I couldn't find any relevant information yet."
+    context = "\n".join(context_blocks) if context_blocks else "No prior context found."
 
-    # Final answer via LLM (constrained)
-    context = "\n\n".join(parts)
-    citation_note = "\n\n" + " | ".join(f"[{i}] {c}" for i, c in enumerate(citations, 1))
+    priority_hint = {
+        "graph_first": "Prioritize ownership, names, and responsibility.",
+        "vector_first": "Focus on timeline, reasons, and context.",
+        "balanced": "Use both structured and historical context."
+    }[priority]
 
     prompt = f"""
-You are a precise engineering assistant at a fintech startup.
+You are KMS, the engineering memory system.
+Answer the question using ONLY the context below.
+Never guess names, ownership, or facts.
+If unsure, say "I don't know yet" or "Not enough context".
 
-Answer in 1-3 short sentences using ONLY the context below.
-Never make up names, ownership, or facts.
-Use casual but professional tone.
+{priority_hint}
 
 Context:
 {context}
 
 Question: {question}
 
+Answer in 1-3 short sentences. End with sources if available.
 Answer:
 """.strip()
 
-    from engine.llm import llm_infer
-    answer = llm_infer(prompt, temperature=0.3, max_tokens=150) or "I don't know."
+    answer = llm_infer(prompt)
 
-    return f"{answer.strip()}{citation_note}"
+    if not answer or "I don't know" in answer.lower():
+        return "I couldn't find clear information on that yet."
+
+    # Add citations
+    sources = set()
+    for item in (graph_facts + vector_context):
+        src = item.get("source")
+        rid = item.get("record_id")
+        if src and rid:
+            sources.add(f"{src}:{rid[:8]}")
+
+    citation = "\n\nSources: " + ", ".join(sorted(sources)) if sources else ""
+    return answer.strip() + citation
