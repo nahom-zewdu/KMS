@@ -1,6 +1,6 @@
 # nlp/query_engine/synthesizer.py
 """
-Final answer synthesis — returns clean JSON.
+Final answer synthesis returns clean JSON.
 Never crashes. Always valid.
 """
 from engine.llm import llm_infer
@@ -37,7 +37,6 @@ def synthesize(
         "balanced": "Use both structured and historical data."
     }[priority]
 
-    # ←←← THE FIX: Escape braces with {{ and }}
     prompt = f"""
 You are KMS, the engineering memory system.
 Answer using ONLY the context below. Never make up facts.
