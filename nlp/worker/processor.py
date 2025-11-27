@@ -8,6 +8,8 @@ from .ingestion import IngestionHandler
 from .query import QueryHandler
 from utils import setup_structured_logging
 
+logger = logging.getLogger("processor")
+
 class NLPProcessor:
     def __init__(self):
         setup_structured_logging()
