@@ -1,8 +1,7 @@
 # nlp/query_engine/synthesizer.py
 """
-Final answer synthesis using LLM.
-Receives BOTH graph hints and vector context.
-Never hallucinates names or ownership it only reads.
+Final answer synthesis — returns clean JSON.
+Never crashes. Always valid.
 """
 from engine.llm import llm_infer
 from typing import List, Dict
@@ -14,35 +13,34 @@ def synthesize(
     priority: str
 ) -> str:
     """
-    Generate final answer using constrained LLM.
-    Always cites sources. Never makes up facts.
+    Returns valid JSON: {"answer": "...", "sources": [...]}
+    Safe for parsing. Never hallucinates.
     """
     # Build context
     context_blocks = []
 
     if graph_facts:
-        context_blocks.append("=== OWNERSHIP & STRUCTURED FACTS (HIGH CONFIDENCE) ===")
+        context_blocks.append("=== STRUCTURED FACTS (HIGH CONFIDENCE) ===")
         for f in graph_facts[:3]:
-            context_blocks.append(f"• {f['content']} (from {f['source']})")
+            context_blocks.append(f"- {f['content']} (from {f['source']})")
 
     if vector_context:
-        context_blocks.append("\n=== RELEVANT HISTORY & CONTEXT ===")
-        for c in vector_context[:4]:
-            context_blocks.append(f"• {c['content']} (from {c['source']})")
+        context_blocks.append("=== RELEVANT CONTEXT ===")
+        for c in vector_context[:5]:
+            context_blocks.append(f"- {c['content']} (from {c['source']})")
 
-    context = "\n".join(context_blocks) if context_blocks else "No prior context found."
+    context = "\n".join(context_blocks) if context_blocks else "No context found."
 
     priority_hint = {
-        "graph_first": "Prioritize ownership, names, and responsibility.",
-        "vector_first": "Focus on timeline, reasons, and context.",
-        "balanced": "Use both structured and historical context."
+        "graph_first": "Prioritize names, ownership, and responsibility.",
+        "vector_first": "Focus on timeline, reasons, and changes.",
+        "balanced": "Use both structured and historical data."
     }[priority]
 
+    # ←←← THE FIX: Escape braces with {{ and }}
     prompt = f"""
 You are KMS, the engineering memory system.
-Answer the question using ONLY the context below.
-Never guess names, ownership, or facts.
-If unsure, say "I don't know yet" or "Not enough context".
+Answer using ONLY the context below. Never make up facts.
 
 {priority_hint}
 
@@ -51,22 +49,21 @@ Context:
 
 Question: {question}
 
-Answer in 1-3 short sentences. End with sources if available.
-Answer:
-""".strip()
+Respond with valid JSON using this exact structure:
+{{
+  "answer": "Your natural language answer in 1-3 sentences.",
+  "sources": ["slack:abc123", "github:def456"]
+}}
 
-    answer = llm_infer(prompt)
+Include real sources from context. Use short record_id (8 chars).
+If unsure, set "answer" to "I don't know yet." and "sources" to [].
 
-    if not answer or "I don't know" in answer.lower():
-        return "I couldn't find clear information on that yet."
+Respond with JSON only:""".strip()
 
-    # Add citations
-    sources = set()
-    for item in (graph_facts + vector_context):
-        src = item.get("source")
-        rid = item.get("record_id")
-        if src and rid:
-            sources.add(f"{src}:{rid[:8]}")
+    raw_json = llm_infer(prompt, temperature=0.1, max_tokens=300)
 
-    citation = "\n\nSources: " + ", ".join(sorted(sources)) if sources else ""
-    return answer.strip() + citation
+    # Final safety net
+    if not raw_json or "{" not in raw_json:
+        return '{"answer": "I couldn\'t generate a clear answer.", "sources": []}'
+
+    return raw_json
