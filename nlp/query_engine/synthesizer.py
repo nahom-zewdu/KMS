@@ -22,47 +22,43 @@ def synthesize(
     if graph_facts:
         context_blocks.append("=== STRUCTURED FACTS (HIGH CONFIDENCE) ===")
         for f in graph_facts[:3]:
-            context_blocks.append(f"- {f['content']} (from {f['source']})")
+            context_blocks.append(f"- {f['content']} (source: {f['source']})")
 
     if vector_context:
         context_blocks.append("=== RELEVANT CONTEXT ===")
         for c in vector_context[:5]:
-            context_blocks.append(f"- {c['content']} (from {c['source']})")
+            context_blocks.append(f"- {c['content']} (source: {c['source']})")
 
-    context = "\n".join(context_blocks) if context_blocks else "No context found."
-
-    priority_hint = {
-        "graph_first": "Prioritize names, ownership, and responsibility.",
-        "vector_first": "Focus on timeline, reasons, and changes.",
-        "balanced": "Use both structured and historical data."
-    }[priority]
+    context = "\n".join(context_blocks) if context_blocks else "No context available."
 
     prompt = f"""
 You are KMS, the engineering memory system.
-Answer using ONLY the context below. Never make up facts.
 
-{priority_hint}
+Answer the question using ONLY the context below.
+Never make up names, ownership, or facts.
 
 Context:
 {context}
 
 Question: {question}
 
-Respond with valid JSON using this exact structure:
+Respond with valid JSON in this exact format:
 {{
-  "answer": "Your natural language answer in 1-3 sentences.",
-  "sources": ["slack:abc123", "github:def456"]
+  "answer": "Your clear, direct answer in 1-3 sentences.",
+  "sources": ["slack:17641759", "github:abc123def"]
 }}
 
-Include real sources from context. Use short record_id (8 chars).
-If unsure, set "answer" to "I don't know yet." and "sources" to [].
+- Use real sources from context
+- Use only first 8 chars of record_id
+- If no clear answer, use: "answer": "I don't know yet.", "sources": []
 
-Respond with JSON only:""".strip()
+Respond only with JSON:
+""".strip()
 
-    raw_json = llm_infer(prompt, temperature=0.1, max_tokens=300)
+    result = llm_infer(prompt)
 
-    # Final safety net
-    if not raw_json or "{" not in raw_json:
+    # Final safety
+    if not result or "{" not in result:
         return '{"answer": "I couldn\'t generate a clear answer.", "sources": []}'
 
-    return raw_json
+    return result
