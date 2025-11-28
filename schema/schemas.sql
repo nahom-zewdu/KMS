@@ -50,7 +50,7 @@ CREATE TABLE public.raw_data (
     id UUID PRIMARY KEY,
     source TEXT CHECK (source IN ('slack', 'github')) NOT NULL,
     content TEXT NOT NULL,
-    record_id TEXT NOT NULL,
+    record_id TEXT UNIQUE NOT NULL,
     event_id UUID REFERENCES public.events(id),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
