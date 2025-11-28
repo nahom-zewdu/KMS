@@ -118,7 +118,7 @@ def insert_raw_data(supabase: Client, raw_job: Dict[str, Any]) -> None:
         rec["id"] = str(uuid.uuid4())
 
     try:
-        supabase.table("raw_data").upsert(rec, on_conflict="id").execute()
+        supabase.table("raw_data").upsert(rec, on_conflict="record_id").execute()
         logger.info("Inserted raw_data + embedding | id=%s", rec["id"])
     except Exception as e:
         logger.exception("raw_data upsert failed: %s", e)
