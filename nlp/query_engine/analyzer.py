@@ -1,6 +1,6 @@
 # nlp/query_engine/analyzer.py
 """
-Query Analyzer — the single most important component.
+Query Analyzer the single most important component.
 Uses LLM once to deeply understand the question.
 """
 from engine.llm import llm_infer
