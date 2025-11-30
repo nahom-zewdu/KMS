@@ -18,7 +18,7 @@ def analyze_query(question: str) -> QueryAnalysis:
     One LLM call → full understanding of the query.
     """
     prompt = f"""
-You are KMS, the engineering knowledge system.
+You are KMS, the engineering knowledge system for startup/fintech/saas companies.
 
 Analyze this user question and extract structured intent.
 
