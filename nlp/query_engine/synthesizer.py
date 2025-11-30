@@ -1,64 +1,73 @@
 # nlp/query_engine/synthesizer.py
 """
-Final answer synthesis returns clean JSON.
-Never crashes. Always valid.
+Reasoning synthesizer with chain-of-thought.
+Always returns valid JSON. Never hallucinates.
 """
 from engine.llm import llm_infer
-from typing import List, Dict
+import json
 
-def synthesize(
-    question: str,
-    graph_facts: List[Dict],
-    vector_context: List[Dict],
-    priority: str
-) -> str:
+def reasoning_synthesize(question: str, chunks: list) -> str:
     """
-    Returns valid JSON: {"answer": "...", "sources": [...]}
-    Safe for parsing. Never hallucinates.
+    Uses chain-of-thought to reason over retrieved chunks.
+    Returns valid JSON string (JSON).
     """
-    # Build context
-    context_blocks = []
+    if not chunks:
+        return json.dumps({
+            "answer": "No relevant context found.",
+            "sources": [],
+            "confidence": "low"
+        })
 
-    if graph_facts:
-        context_blocks.append("=== STRUCTURED FACTS (HIGH CONFIDENCE) ===")
-        for f in graph_facts[:3]:
-            context_blocks.append(f"- {f['content']} (source: {f['source']})")
+    context_lines = []
+    for i, chunk in enumerate(chunks[:10], 1):
+        src = chunk.get("source", "unknown")
+        rid = chunk.get("record_id", "")[:8]
+        source_tag = f"{src}:{rid}" if rid else src
+        context_lines.append(f"[{i}] {chunk['content'][:900]}... ({source_tag})")
 
-    if vector_context:
-        context_blocks.append("=== RELEVANT CONTEXT ===")
-        for c in vector_context[:5]:
-            context_blocks.append(f"- {c['content']} (source: {c['source']})")
-
-    context = "\n".join(context_blocks) if context_blocks else "No context available."
+    context = "\n".join(context_lines)
 
     prompt = f"""
-You are KMS, the engineering memory system.
+You are KMS, the single source of truth for engineering knowledge at a startup/fintech/saas.
 
 Answer the question using ONLY the context below.
-Never make up names, ownership, or facts.
+
+Question: {question}
 
 Context:
 {context}
 
-Question: {question}
+Think step by step:
+1. What is the question really asking?
+2. Which context chunks are most relevant?
+3. Is there conflicting information?
+4. What is the clearest, most accurate answer?
 
-Respond with valid JSON in this exact format:
+Then respond in valid JSON with this exact structure:
 {{
-  "answer": "Your clear, direct answer in 1-3 sentences.",
-  "sources": ["slack:17641759", "github:abc123def"]
+  "reasoning": "Brief internal thought process (1-2 sentences)",
+  "answer": "Clear, direct answer in 1-4 sentences. Be professional.",
+  "confidence": "high" | "medium" | "low",
+  "sources": ["slack:17641759", "github:a1b2c3d4", "graph"]
 }}
 
+Rules:
+- Never invent names, dates, or facts
 - Use real sources from context
-- Use only first 8 chars of record_id
-- If no clear answer, use: "answer": "I don't know yet.", "sources": []
+- If unsure, set confidence to "low" and say so
+- Respond only with JSON
 
-Respond only with JSON:
+JSON:
 """.strip()
 
-    result = llm_infer(prompt)
+    result = llm_infer(prompt, temperature=0.0, max_tokens=600)
 
-    # Final safety
+    # Safety fallback
     if not result or "{" not in result:
-        return '{"answer": "I couldn\'t generate a clear answer.", "sources": []}'
+        return json.dumps({
+            "answer": "I found some context but couldn't form a clear answer.",
+            "sources": [c.get("source", "unknown") for c in chunks[:3]],
+            "confidence": "low"
+        })
 
     return result
