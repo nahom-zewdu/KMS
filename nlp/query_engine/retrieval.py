@@ -1,74 +1,61 @@
 # nlp/query_engine/retrieval.py
 """
-Parallel retrieval from graph hints and vector store.
-Robust, logs errors, never crashes.
+Adaptive retrieval powered by query analysis.
 """
-from typing import List, Dict, Any, Tuple
-import logging
+from typing import List, Dict
 from supabase import Client
+from .analyzer import analyze_query
+import logging
 
-logger = logging.getLogger("engine.retrieval")
+logger = logging.getLogger(__name__)
 
-class DualRetriever:
-    """Retrieves from both structured hints and semantic context."""
-    
+class AdaptiveRetriever:
     def __init__(self, supabase: Client):
         self.supabase = supabase
 
-    def _get_graph_facts(self, question: str) -> List[Dict]:
-        """Search raw_data for high-signal ownership statements."""
-        try:
-            # Use .limit() correctly — Supabase client supports it
-            result = (
-                self.supabase.table("raw_data")
-                .select("content, source, record_id, created_at")
-                .or_(f"content.ilike.%{question.split()[-1]}%,content.ilike.%{question.split()[-2]}%")
-                .limit(6)
-                .execute()
-            )
-            return [
-                {
-                    "type": "graph_hint",
-                    "content": r["content"][:500],
-                    "source": r["source"],
-                    "record_id": r["record_id"],
-                    "score": 0.96
-                }
-                for r in (result.data or [])
-                if any(word in r["content"].lower() for word in ["owns", "own", "responsible", "maintains", "built", "working on"])
-            ]
-        except Exception as e:
-            logger.warning(f"Graph hint search failed: {e}")
-            return []
+    def retrieve(self, question: str) -> List[Dict]:
+        # 1. Deep understanding
+        analysis = analyze_query(question)
+        logger.info(f"Query analysis: {analysis}")
 
-    def _get_vector_context(self, question: str) -> List[Dict]:
-        """Semantic search via pgvector."""
+        chunks = []
+
+        # 2. Graph search using entities + relations
+        if analysis["entities"] or analysis["relations"]:
+            for entity in analysis["entities"][:3]:
+                try:
+                    res = self.supabase.table("edges")\
+                        .select("source_id:entities!source_id(name), target_id:entities!target_id(name), type, confidence")\
+                        .or_(f"source_id:entities!source_id.name.ilike.%{entity}%,target_id:entities!target_id.name.ilike.%{entity}%")\
+                        .in_("type", analysis["relations"] or ["OWNS", "FIXES", "MAINTAINS"])\
+                        .limit(5).execute()
+                    for row in res.data:
+                        chunks.append({
+                            "content": f"{row['source_id']['name']} {row['type']} {row['target_id']['name']} (confidence: {row['confidence']})",
+                            "source": "graph",
+                            "record_id": "graph-edge",
+                            "score": row.get("confidence", 0.9)
+                        })
+                except Exception as e:
+                    logger.warning(f"Graph search failed: {e}")
+
+        # 3. Vector search on rewritten query
         try:
             from .vector.retriever import VectorRetriever
-            retriever = VectorRetriever(self.supabase)
-            chunks = retriever.retrieve(question, top_k=6)
-            return [
-                {
-                    "type": "context",
-                    "content": c["content"][:600],
-                    "source": c.get("source", "unknown"),
-                    "record_id": c.get("record_id"),
-                    "score": c.get("similarity", 0.7)
-                }
-                for c in chunks
-            ]
+            vec = VectorRetriever(self.supabase)
+            vec_chunks = vec.retrieve(analysis["rewritten"], top_k=10)
+            chunks.extend(vec_chunks)
         except Exception as e:
-            logger.warning(f"Vector retrieval failed: {e}")
-            return []
+            logger.warning(f"Vector failed: {e}")
 
-    def retrieve(self, question: str) -> Tuple[List[Dict], List[Dict]]:
-        """
-        Always returns both graph hints and vector context.
-        Never returns empty — falls back gracefully.
-        """
-        graph_facts = self._get_graph_facts(question)
-        vector_context = self._get_vector_context(question)
-        
-        logger.info(f"Graph facts: {len(graph_facts)} | Vector context: {len(vector_context)}")
+        # 4. Dedupe + sort
+        seen = set()
+        unique = []
+        for c in sorted(chunks, key=lambda x: x.get("score", 0.5), reverse=True):
+            key = c.get("record_id", "") + c.get("content", "")[:50]
+            if key not in seen:
+                seen.add(key)
+                unique.append(c)
 
-        return graph_facts, vector_context
+        logger.info(f"Retrieved {len(unique)} adaptive chunks")
+        return unique[:8]
