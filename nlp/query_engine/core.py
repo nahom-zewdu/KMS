@@ -6,8 +6,10 @@ Uses query understanding + adaptive retrieval + reasoning.
 import time
 import logging
 from typing import Dict, Any, List
+import json
 from supabase import Client
 from redis import Redis
+
 from .retrieval import AdaptiveRetriever
 from .synthesizer import reasoning_synthesize
 from .cache import QueryCache
@@ -60,7 +62,6 @@ class QueryEngine:
         else:
             answer_json_str = reasoning_synthesize(question, relevant_chunks)
             try:
-                import json
                 answer_json = json.loads(answer_json_str)
             except:
                 answer_json = {"answer": answer_json_str, "sources": [], "confidence": "medium"}
