@@ -10,7 +10,7 @@ Tracks:
 - success/failure
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from supabase import Client
 import logging
 import hashlib
@@ -37,7 +37,7 @@ def log_query(
             "latency_ms": round(latency_ms, 2),
             "cache_hit": cache_hit,
             "answer_length": answer_length,
-            "asked_at": datetime.utcnow().isoformat()
+            "asked_at": datetime.now(timezone.utc).isoformat()
         }).execute()
     except Exception as e:
         logger.warning(f"Query log failed: {e}")
