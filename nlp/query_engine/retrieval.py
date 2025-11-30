@@ -1,6 +1,7 @@
 # nlp/query_engine/retrieval.py
 """
-Adaptive retrieval powered by query analysis.
+Parallel retrieval from graph hints and vector store.
+Robust, logs errors, never crashes.
 """
 from typing import List, Dict
 from supabase import Client
