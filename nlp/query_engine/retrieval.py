@@ -1,7 +1,6 @@
 # nlp/query_engine/retrieval.py
 """
-FINAL VERSION — Works perfectly with your actual Supabase schema.
-Uses proper PostgREST syntax for nested foreign tables.
+Simplified & Reliable Retrieval — No more complex nested or() failures.
 """
 from typing import List, Dict
 from supabase import Client
@@ -22,60 +21,76 @@ class AdaptiveRetriever:
 
         chunks: List[Dict] = []
 
+        # === SIMPLE GRAPH SEARCH (Reliable) ===
         if analysis.get("entities"):
-            relations = analysis["relations"] or ["OWNS", "MAINTAINS", "FIXES", "ASSIGNED_TO", "PART_OF", "DEPLOYED_IN", "MOVED_TO", "MIGRATED_TO", "IMPLEMENTED"]
-            
             for entity in analysis["entities"][:4]:
                 try:
-                    res = self.supabase.rpc("search_edges_by_entity", {
-                        "search_term": entity,
-                        "relation_types": relations
-                    }).execute()
+                    # Search entities first (uses search_vector)
+                    entity_res = (
+                        self.supabase.table("entities")
+                        .select("id, name, type")
+                        .or_(f"name.ilike.%{entity}%,search_vector.ilike.%{entity}%")
+                        .limit(5)
+                        .execute()
+                    )
 
-                    for row in res.data or []:
-                        src = row.get("source_name", "Unknown")
-                        tgt = row.get("target_name", "Unknown")
-                        rel_type = row.get("type", "RELATED_TO")
-                        conf = row.get("confidence", 0.9)
+                    entity_ids = [e["id"] for e in entity_res.data or []]
 
-                        chunks.append({
-                            "content": f"{src} {rel_type} {tgt}",
-                            "source": "graph",
-                            "record_id": f"edge-{row.get('id', '')[:8]}",
-                            "score": conf
-                        })
+                    if entity_ids:
+                        # Then find edges connected to these entities
+                        edge_res = (
+                            self.supabase.table("edges")
+                            .select(
+                                "source:entities!source_id(name)",
+                                "target:entities!target_id(name)",
+                                "type",
+                                "confidence"
+                            )
+                            .in_("source_id", entity_ids)
+                            .or_("target_id.in.(" + ",".join(entity_ids) + ")")  # safer syntax
+                            .limit(8)
+                            .execute()
+                        )
+
+                        for row in edge_res.data or []:
+                            src = row.get("source", {}).get("name", "Unknown")
+                            tgt = row.get("target", {}).get("name", "Unknown")
+                            rel = row.get("type", "RELATED")
+                            conf = row.get("confidence", 0.9)
+
+                            chunks.append({
+                                "content": f"{src} {rel} {tgt}",
+                                "source": "graph",
+                                "record_id": "graph",
+                                "score": conf
+                            })
                 except Exception as e:
-                    logger.warning(f"Graph RPC search failed for '{entity}': {e}")
+                    logger.warning(f"Graph search failed for '{entity}': {e}")
 
-        # === 2. VECTOR SEARCH on rewritten query ===
+        # === VECTOR SEARCH ===
         try:
-            vec_retriever = VectorRetriever(self.supabase)
-            vec_chunks = vec_retriever.retrieve(
-                analysis.get("rewritten", question),
-                top_k=10
-            )
+            vec = VectorRetriever(self.supabase)
+            vec_chunks = vec.retrieve(analysis.get("rewritten", question), top_k=8)
             for c in vec_chunks:
                 chunks.append({
-                    "content": c["content"][:900],
-                    "source": c.get("source", "unknown"),
-                    "record_id": c.get("record_id", "")[:8],
+                    "content": c.get("content", "")[:900],
+                    "source": c.get("source", "raw"),
+                    "record_id": c.get("record_id", ""),
                     "score": c.get("similarity", 0.7)
                 })
         except Exception as e:
-            logger.warning(f"Vector retrieval failed: {e}")
+            logger.warning(f"Vector failed: {e}")
 
-        # === 3. DEDUPE & RANK ===
+        # Rank and dedupe
         seen = set()
-        unique_chunks = []
-        for chunk in sorted(chunks, key=lambda x: x.get("score", 0.5), reverse=True):
-            key = (chunk.get("source"), chunk.get("record_id"), chunk["content"][:100])
+        unique = []
+        for c in sorted(chunks, key=lambda x: x.get("score", 0.5), reverse=True):
+            key = c.get("content", "")[:150]
             if key not in seen:
-                continue
-            seen.add(key)
-            unique_chunks.append(chunk)
-            if len(unique_chunks) >= 10:
-                break
+                seen.add(key)
+                unique.append(c)
+                if len(unique) >= 10:
+                    break
 
-        logger.info(f"Retrieved {len(unique_chunks)} adaptive chunks")
-        logger.info(f"Chunks retrieved: {unique_chunks}")
-        return unique_chunks
+        logger.info(f"Retrieved {len(unique)} adaptive chunks")
+        return unique
