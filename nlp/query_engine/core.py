@@ -61,6 +61,8 @@ class QueryEngine:
             }
         else:
             answer_json_str = reasoning_synthesize(question, relevant_chunks)
+            logger.info("------------------------------")
+            logger.info(f"Synthesized answer JSON: {answer_json_str}")
             try:
                 answer_json = json.loads(answer_json_str)
             except:
@@ -70,7 +72,8 @@ class QueryEngine:
         final_answer = json.dumps(answer_json, indent=2)
 
         # 5. Cache + log + publish
-        self.cache.set(question, final_answer)
+        if relevant_chunks: 
+            self.cache.set(question, final_answer)
         latency_ms = (time.time() - start_time) * 1000
 
         log_query(
