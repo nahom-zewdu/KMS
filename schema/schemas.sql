@@ -148,7 +148,7 @@ create table if not exists public.query_logs (
     id uuid primary key default gen_random_uuid(),
     query_id text not null,
     question_hash text not null,
-    route text check (route in ('graph', 'vector', 'hybrid', 'balanced', 'cached', 'error', 'unknown', )),
+    route text check (route in ('graph', 'vector', 'hybrid', 'balanced', 'adaptive', 'cached', 'error', 'unknown', )),
     latency_ms double precision,
     cache_hit boolean default false,
     answer_length integer,
