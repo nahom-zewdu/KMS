@@ -54,6 +54,27 @@ func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, 
 		return nil
 	}
 
+	if strings.Contains(strings.ToLower(cleanQuery), "onboard") ||
+		strings.Contains(strings.ToLower(cleanQuery), "playbook") {
+
+		role := extractRole(cleanQuery)
+		if role == "" {
+			role = "backend-engineer" // default
+		}
+
+		log.Printf("QueryID: %s - Playbook request detected for role: %s", queryID, role)
+
+		playbookMsg, err := sb.playbookService.GeneratePlaybook(ctx, role, "")
+		if err != nil {
+			playbookMsg = "Sorry, I couldn't generate the playbook right now."
+		}
+
+		_, _, err = sb.client.PostMessage(channel,
+			slack.MsgOptionText(playbookMsg, false),
+			slack.MsgOptionTS(threadTs))
+		return err
+	}
+
 	// Generate query ID
 	queryID := eventTs + "-" + uuid.New().String()
 	log.Printf("QueryID: %s, Channel: %s, Thread: %s - Processing query: %s", queryID, channel, threadTs, cleanQuery)
