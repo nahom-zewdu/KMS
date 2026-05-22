@@ -19,6 +19,8 @@ from utils.db_helpers import (
     mark_event_processed,
 )
 
+logger = logging.getLogger("ingestion")
+
 supabase = init_supabase()
 
 class IngestionHandler:

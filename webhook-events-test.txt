@@ -1,1 +1,17 @@
 jUst to  test github webhooks works on events 
+nlp/query_engine/
+├── __init__.py
+├── router.py              # Intent classifier (lightweight LLM or regex+keywords)
+├── graph/
+│   ├── traverser.py       # Multi-hop traversal with confidence + TTL
+│   └── patterns.py        # Predefined ownership/fix/maintain queries
+├── vector/
+│   ├── retriever.py       # pgvector RPC + filtering
+│   └── embedder.py        # Cached sentence-transformers
+├── synthesizer.py         # Final LLM answer + citations
+├── router.py         # Final LLM answer + citations
+├── analytics.py         # Final LLM answer + citations
+├── cache.py               # Redis result cache (24h TTL)
+├── decay.py               # Redis result cache (24h TTL)
+├── errors.py               # Redis result cache (24h TTL)
+└── core.py                # Public handle_query() entrypoint

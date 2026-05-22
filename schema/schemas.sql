@@ -50,7 +50,7 @@ CREATE TABLE public.raw_data (
     id UUID PRIMARY KEY,
     source TEXT CHECK (source IN ('slack', 'github')) NOT NULL,
     content TEXT NOT NULL,
-    record_id TEXT NOT NULL,
+    record_id TEXT UNIQUE NOT NULL,
     event_id UUID REFERENCES public.events(id),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -142,6 +142,21 @@ CREATE TABLE public.issues (
 CREATE INDEX idx_issues_repo_name ON public.issues (repo_name);
 COMMENT ON TABLE public.issues IS 'Stores detailed GitHub issue data, linked to events.';
 
+
+-- Query Logs: tracks user queries for analytics
+create table if not exists public.query_logs (
+    id uuid primary key default gen_random_uuid(),
+    query_id text not null,
+    question_hash text not null,
+    route text check (route in ('graph', 'vector', 'hybrid', 'balanced', 'adaptive', 'cached', 'error', 'unknown')),
+    latency_ms double precision,
+    cache_hit boolean default false,
+    answer_length integer,
+    asked_at timestamptz default now()
+);
+
+create index idx_query_logs_asked_at on query_logs(asked_at);
+create index idx_query_logs_route on query_logs(route);
 
 -- ============================================================
 --  GRANT PERMISSIONS (SUPABASE COMPATIBLE)

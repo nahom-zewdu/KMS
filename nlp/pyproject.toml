@@ -10,5 +10,7 @@ dependencies = [
     "python-dotenv>=1.2.1",
     "python-json-logger>=4.0.0",
     "redis==5.0.8",
+    "sentence-transformers>=5.1.2",
     "supabase>=2.24.0",
+    "tqdm>=4.67.1",
 ]
