@@ -1,10 +1,8 @@
 # nlp/playbooks/generator.py
 """
-KMS Onboard Playbook Generator
-Generates high-quality, structured onboarding playbooks.
-
-Uses a custom prompt + real company knowledge context.
-Saves results to DB for later retrieval.
+KMS Onboard Intelligent Playbook Generator
+Generates a comprehensive onboarding playbook for new hires based on their role.
+Integrates with the knowledge graph to pull relevant context about people, systems, and recent activity.
 """
 from typing import Dict, Any
 import logging
@@ -18,31 +16,33 @@ class PlaybookGenerator:
     def __init__(self, supabase: Client):
         self.supabase = supabase
 
-    async def generate(self, role: str, company_id: str = "default") -> Dict[str, Any]:
+    async def generate(self, role: str, company_id: str = "default", employee_name: str = None) -> Dict[str, Any]:
         """
-        Generate a full playbook for a role.
-        Returns structured data + saves to DB.
+        Generate a complete onboarding playbook for a role.
         """
-        context = await self._gather_knowledge_context(role)
+        context = await self._gather_context(role)
 
         prompt = f"""
-You are an elite engineering onboarding designer.
+You are an elite onboarding designer for a fast-growing fintech/SaaS company.
 
-Create a professional, engaging onboarding playbook for:
+Create a world-class onboarding playbook for:
 
 **Role**: {role}
+**Employee**: {employee_name or 'New Team Member'}
 
-Use the following real company knowledge:
+Use this real company knowledge:
 
 {context}
 
-Output valid JSON with this exact structure:
+Output **valid JSON only** with this structure:
+
 {{
   "title": "Onboarding Playbook - {role}",
+  "welcome_message": "Friendly welcome...",
   "sections": [
     {{
-      "title": "Welcome & First Week",
-      "content": "..."
+      "title": "Week 1 Goals",
+      "content": "Detailed content here..."
     }},
     {{
       "title": "Key People & Ownership",
@@ -64,23 +64,42 @@ Output valid JSON with this exact structure:
 }}
 """
 
-        raw = llm_infer(prompt, temperature=0.3, max_tokens=1500)
-        
+        raw_response = llm_infer(prompt, temperature=0.3, max_tokens=1800)
+
         try:
-            playbook_data = eval(raw) if isinstance(raw, str) else raw  # temporary safe parse
+            playbook_data = eval(raw_response) if isinstance(raw_response, str) else raw_response
         except:
             playbook_data = {"title": f"Onboarding Playbook - {role}", "sections": []}
 
         # Save to database
-        playbook_record = {
+        record = {
             "company_id": company_id,
             "role": role,
             "title": playbook_data.get("title"),
             "content": playbook_data,
+            "generated_for": employee_name,
             "expires_at": datetime.utcnow() + timedelta(days=90)
         }
 
-        result = self.supabase.table("playbooks").insert(playbook_record).execute()
+        self.supabase.table("playbooks").insert(record).execute()
 
-        logger.info(f"Generated playbook for role: {role}")
+        logger.info(f"✅ Generated playbook for role: {role}")
         return playbook_data
+
+    async def _gather_context(self, role: str) -> str:
+        """Gather relevant knowledge from the KG"""
+        context = []
+
+        # People
+        people = self.supabase.table("entities").select("name").eq("type", "PERSON").limit(12).execute()
+        context.append("**Key People:** " + ", ".join([p["name"] for p in people.data or []]))
+
+        # Systems
+        systems = self.supabase.table("entities").select("name").eq("type", "SYSTEM").limit(20).execute()
+        context.append("**Core Systems:** " + ", ".join([s["name"] for s in systems.data or []]))
+
+        # Recent activity
+        recent = self.supabase.table("raw_data").select("content").order("created_at", desc=True).limit(10).execute()
+        context.append("**Recent Activity:** " + " | ".join([r["content"][:150] for r in recent.data or []]))
+
+        return "\n\n".join(context)
