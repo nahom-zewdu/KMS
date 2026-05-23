@@ -56,7 +56,9 @@ func (p *PlaybookService) GeneratePlaybook(ctx context.Context, role string, emp
 	}
 	defer resp.Body.Close()
 
-	_, _ = io.ReadAll(resp.Body)
+	body, _ := io.ReadAll(resp.Body)
+
+	log.Printf("Python service response status: %d, body: %s", resp.StatusCode, string(body))
 
 	if resp.StatusCode != http.StatusOK {
 		log.Printf("Python service returned status %d", resp.StatusCode)
