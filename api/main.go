@@ -61,7 +61,8 @@ func main() {
 	coreIngestService := services.NewCoreIngest(supabaseRepo, redisStream)
 	slackIngestService := services.NewSlackIngest(coreIngestService)
 	githubIngestService := services.NewGitHubIngest(coreIngestService)
-	slackBotService := services.NewSlackBot(slackBotToken, coreIngestService, redisStream)
+	playbookService := services.NewPlaybookService()
+	slackBotService := services.NewSlackBot(slackBotToken, coreIngestService, redisStream, playbookService)
 
 	// Setup routes
 	router := handlers.SetupRoutes(slackIngestService, slackBotService, githubIngestService, slackBotToken, slackSignKey, githubSecret)
