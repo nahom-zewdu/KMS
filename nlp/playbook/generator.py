@@ -4,6 +4,7 @@ KMS Onboard Intelligent Playbook Generator
 Generates a comprehensive onboarding playbook for new hires based on their role.
 Integrates with the knowledge graph to pull relevant context about people, systems, and recent activity.
 """
+import json
 from typing import Dict, Any
 import logging
 from datetime import datetime, timedelta
@@ -67,9 +68,20 @@ Output **valid JSON only** with this structure:
         raw_response = llm_infer(prompt, temperature=0.3, max_tokens=1800)
 
         try:
-            playbook_data = eval(raw_response) if isinstance(raw_response, str) else raw_response
+            # Clean and parse JSON
+            cleaned = raw_response.strip()
+            if cleaned.startswith("```json"):
+                cleaned = cleaned[7:]
+            if cleaned.endswith("```"):
+                cleaned = cleaned[:-3]
+            playbook_data = json.loads(cleaned)
         except:
-            playbook_data = {"title": f"Onboarding Playbook - {role}", "sections": []}
+            logger.warning("Failed to parse playbook JSON, using fallback")
+            playbook_data = {
+                "title": f"Onboarding Playbook - {role}",
+                "welcome_message": f"Welcome to the team as a {role}!",
+                "sections": []
+            }
 
         # Save to database
         record = {
