@@ -1,7 +1,7 @@
 # nlp/playbooks/generator.py
 """
-KMS Onboard — Enhanced Playbook Generator
-Improved prompt, richer context, better structure, and cleaner JSON handling.
+KMS Onboard Enhanced & Production-Ready Playbook Generator
+This module defines the PlaybookGenerator class, which creates rich, actionable onboarding playbooks for new hires based on their role. It gathers real company context (people, systems, recent activity) from the Supabase database and uses a large language model to generate a detailed playbook. The generated playbook is then saved back to the database for future reference.
 """
 import json
 from typing import Dict, Any
@@ -17,58 +17,55 @@ class PlaybookGenerator:
         self.supabase = supabase
 
     async def generate(self, role: str, company_id: str = "default", employee_name: str = None) -> Dict[str, Any]:
-        """
-        Generate a high-quality, structured onboarding playbook.
-        """
         context = await self._gather_rich_context(role)
 
         prompt = f"""
-        You are an elite onboarding designer at a high-growth fintech/SaaS company.
+          You are a world-class engineering onboarding designer.
 
-        Create a **world-class** onboarding playbook for:
+          Create an outstanding, specific, and actionable onboarding playbook.
 
-        **Role**: {role}
-        **New Hire**: {employee_name or 'New Team Member'}
+          **Role**: {role}
+          **New Hire**: {employee_name or "New Engineer"}
 
-        Use this real company knowledge to make it specific and useful:
+          Use this real company data:
 
-        {context}
+          {context}
 
-        ### Requirements:
-        - Make it professional, encouraging, and actionable.
-        - Use real names, systems, and recent activity from the data.
-        - Be specific (no generic advice).
-        - Keep tone friendly but professional.
+          ### Output Requirements:
+          - Professional yet friendly tone
+          - Very specific (use real names and systems)
+          - Actionable advice
+          - No generic filler content
 
-        Output **valid JSON only** with this exact structure:
+          Return **valid JSON only**:
 
-        {{
-          "title": "Onboarding Playbook - {role}",
-          "welcome_message": "Warm, personalized welcome message...",
-          "sections": [
-            {{
-              "title": "Week 1 Goals & Priorities",
-              "content": "Clear, actionable goals..."
-            }},
-            {{
-              "title": "Key People & Who to Talk To",
-              "content": "List of important people with their responsibilities..."
-            }},
-            {{
-              "title": "Core Systems & Architecture",
-              "content": "Most important services and how they connect..."
-            }},
-            {{
-              "title": "Recent Changes & Context",
-              "content": "Important recent updates..."
-            }},
-            {{
-              "title": "First Tasks & Milestones",
-              "content": "Suggested first contributions..."
-            }}
-          ]
-        }}
-        """
+          {{
+            "title": "Onboarding Playbook — {role}",
+            "welcome_message": "Warm and motivating welcome...",
+            "sections": [
+              {{
+                "title": "Welcome & First Week",
+                "content": "..."
+              }},
+              {{
+                "title": "Key People & Ownership",
+                "content": "..."
+              }},
+              {{
+                "title": "Core Systems You Should Know",
+                "content": "..."
+              }},
+              {{
+                "title": "Recent Context & Changes",
+                "content": "..."
+              }},
+              {{
+                "title": "Your First Tasks",
+                "content": "..."
+              }}
+            ]
+          }}
+          """
 
         raw_response = llm_infer(prompt, temperature=0.3, max_tokens=2000)
 
@@ -80,18 +77,14 @@ class PlaybookGenerator:
                 cleaned = cleaned[:-3]
             playbook_data = json.loads(cleaned)
         except Exception as e:
-            logger.warning(f"JSON parse failed: {e}. Using fallback.")
-            playbook_data = {
-                "title": f"Onboarding Playbook - {role}",
-                "welcome_message": f"Welcome to the team as a {role}!",
-                "sections": []
-            }
+            logger.warning(f"JSON parsing failed: {e}")
+            playbook_data = self._fallback_playbook(role)
 
-        # Save to database
+        # Save to DB
         record = {
             "company_id": company_id,
             "role": role.lower().replace(" ", "-"),
-            "title": playbook_data.get("title"),
+            "title": playbook_data.get("title", f"Onboarding Playbook - {role}"),
             "content": playbook_data,
             "generated_for": employee_name,
             "expires_at": (datetime.utcnow() + timedelta(days=90)).isoformat()
@@ -99,33 +92,36 @@ class PlaybookGenerator:
 
         try:
             self.supabase.table("playbooks").insert(record).execute()
-            logger.info(f"✅ Saved playbook for role: {role}")
         except Exception as e:
             logger.error(f"Failed to save playbook: {e}")
 
-        logger.info(f"✅ Generated rich playbook for role: {role}")
+        logger.info(f"✅ Generated enhanced playbook for: {role}")
         return playbook_data
 
+    def _fallback_playbook(self, role: str) -> Dict:
+        return {
+            "title": f"Onboarding Playbook — {role}",
+            "welcome_message": f"Welcome to the team as a {role}!",
+            "sections": []
+        }
+
     async def _gather_rich_context(self, role: str) -> str:
-        """Gather rich, useful context from the KG"""
         context = []
 
-        # 1. People
-        people = self.supabase.table("entities").select("name,metadata").eq("type", "PERSON").limit(15).execute()
+        # People
+        people = self.supabase.table("entities").select("name").eq("type", "PERSON").limit(12).execute()
         if people.data:
-            people_list = [f"- {p['name']}" for p in people.data]
-            context.append("**Key People:**\n" + "\n".join(people_list))
+            context.append("**People:** " + ", ".join(p["name"] for p in people.data))
 
-        # 2. Systems
-        systems = self.supabase.table("entities").select("name,metadata").eq("type", "SYSTEM").limit(20).execute()
+        # Systems
+        systems = self.supabase.table("entities").select("name").eq("type", "SYSTEM").limit(15).execute()
         if systems.data:
-            systems_list = [f"- {s['name']}" for s in systems.data]
-            context.append("**Core Systems:**\n" + "\n".join(systems_list))
+            context.append("**Systems:** " + ", ".join(s["name"] for s in systems.data))
 
-        # 3. Recent Activity (very important)
-        recent = self.supabase.table("raw_data").select("content,created_at,source").order("created_at", desc=True).limit(12).execute()
+        # Recent Activity
+        recent = self.supabase.table("raw_data").select("content").order("created_at", desc=True).limit(12).execute()
         if recent.data:
-            recent_list = [f"- {r['content'][:180]}" for r in recent.data]
-            context.append("**Recent Activity:**\n" + "\n".join(recent_list))
+            recent_text = " | ".join(r["content"][:120] for r in recent.data)
+            context.append("**Recent Activity:** " + recent_text)
 
         return "\n\n".join(context)
