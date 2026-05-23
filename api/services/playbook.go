@@ -42,58 +42,59 @@ func (p *PlaybookService) GeneratePlaybook(ctx context.Context, role string, emp
 
 	req, err := http.NewRequestWithContext(ctx, "POST", p.pythonURL, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return "", fmt.Errorf("failed to create request: %v", err)
+		return "", err
 	}
-
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := &http.Client{Timeout: 45 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Printf("Failed to call Python playbook service: %v", err)
-		// Fallback message
 		return fmt.Sprintf("✅ Onboarding playbook for **%s** is being prepared.\n\nWe'll send you the link shortly.", role), nil
 	}
 	defer resp.Body.Close()
 
-	playbook_data, _ := io.ReadAll(resp.Body)
-
-	log.Printf("Python service response status: %d, body: %s", resp.StatusCode, string(playbook_data))
+	body, _ := io.ReadAll(resp.Body)
+	log.Printf("Python service response status: %d", resp.StatusCode)
 
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("Python service returned status %d", resp.StatusCode)
-		return fmt.Sprintf("✅ Onboarding playbook for **%s** is ready!\n\n(Generating detailed version...)", role), nil
+		return fmt.Sprintf("✅ Onboarding playbook for **%s** is ready!", role), nil
 	}
 
-	// Return success message with placeholder link
-	playbookURL := fmt.Sprintf("https://kms.company.com/onboard/%s", role)
-	log.Printf("Playbook generated in %.3fs", time.Since(start).Seconds())
+	// Parse the full response
+	var result map[string]interface{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		log.Printf("Failed to parse playbook JSON: %v", err)
+		return fmt.Sprintf("✅ Onboarding playbook for **%s** is ready!", role), nil
+	}
 
-	// Attempt to parse JSON response to extract title and welcome_message
-	var pb map[string]interface{}
-	_ = json.Unmarshal(playbook_data, &pb)
+	playbook, ok := result["playbook"].(map[string]interface{})
+	if !ok {
+		playbook = make(map[string]interface{})
+	}
 
 	title := "Onboarding Playbook"
-	if t, ok := pb["title"].(string); ok && t != "" {
+	if t, ok := playbook["title"].(string); ok && t != "" {
 		title = t
 	}
 
 	welcome := ""
-	if w, ok := pb["welcome_message"].(string); ok {
+	if w, ok := playbook["welcome_message"].(string); ok {
 		welcome = w
 	}
 
-	message := fmt.Sprintf(`✅ **Onboarding Playbook for %s is ready!**
+	// Build nice Slack message
+	message := fmt.Sprintf(`✅ **%s**
 
-	**Title**: %s
+%s
 
-	%s
+📌 **View the full interactive playbook here**: https://kms.company.com/onboard/%s
 
-	📎 View full interactive version here: %s`,
-		role,
+Would you like me to generate one for another role?`,
 		title,
 		welcome,
-		playbookURL)
+		role)
 
+	log.Printf("Playbook generated in %.3fs", time.Since(start).Seconds())
 	return message, nil
 }
