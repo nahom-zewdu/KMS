@@ -69,6 +69,20 @@ func (p *PlaybookService) GeneratePlaybook(ctx context.Context, role string, emp
 	playbookURL := fmt.Sprintf("https://kms.company.com/onboard/%s", role)
 	log.Printf("Playbook generated in %.3fs", time.Since(start).Seconds())
 
+	// Attempt to parse JSON response to extract title and welcome_message
+	var pb map[string]interface{}
+	_ = json.Unmarshal(playbook_data, &pb)
+
+	title := "Onboarding Playbook"
+	if t, ok := pb["title"].(string); ok && t != "" {
+		title = t
+	}
+
+	welcome := ""
+	if w, ok := pb["welcome_message"].(string); ok {
+		welcome = w
+	}
+
 	message := fmt.Sprintf(`✅ **Onboarding Playbook for %s is ready!**
 
 	**Title**: %s
@@ -77,8 +91,8 @@ func (p *PlaybookService) GeneratePlaybook(ctx context.Context, role string, emp
 
 	📎 View full interactive version here: %s`,
 		role,
-		playbook_data.get("title", "Onboarding Playbook"),
-		playbook_data.get("welcome_message", ""),
+		title,
+		welcome,
 		playbookURL)
 
 	return message, nil
