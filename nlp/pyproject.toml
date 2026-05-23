@@ -5,6 +5,7 @@ description = "AI-powered knowledge oracle for SaaS/fintech teams"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "fastapi>=0.136.1",
     "openai>=2.7.1",
     "pydantic>=2.12.4",
     "python-dotenv>=1.2.1",
@@ -13,4 +14,5 @@ dependencies = [
     "sentence-transformers>=5.1.2",
     "supabase>=2.24.0",
     "tqdm>=4.67.1",
+    "uvicorn>=0.47.0",
 ]
