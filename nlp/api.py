@@ -20,6 +20,8 @@ async def generate_playbook(payload: dict):
         employee_name = payload.get("employee_name")
 
         playbook = await generator.generate(role=role, employee_name=employee_name)
+        logging.info(f"Playbook generated for role: {role}")
+        logging.info(f"Playbook generated: {playbook}")
         
         return JSONResponse({
             "success": True,
