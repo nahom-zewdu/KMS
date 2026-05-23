@@ -56,6 +56,9 @@ func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, 
 		return nil
 	}
 
+	// Generate query ID
+	queryID := eventTs + "-" + uuid.New().String()
+
 	if strings.Contains(strings.ToLower(cleanQuery), "onboard") ||
 		strings.Contains(strings.ToLower(cleanQuery), "playbook") {
 
@@ -77,8 +80,6 @@ func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, 
 		return err
 	}
 
-	// Generate query ID
-	queryID := eventTs + "-" + uuid.New().String()
 	log.Printf("QueryID: %s, Channel: %s, Thread: %s - Processing query: %s", queryID, channel, threadTs, cleanQuery)
 
 	// Publish to query_jobs
@@ -161,4 +162,15 @@ func removeBotMention(query string) string {
 	cleaned = strings.TrimSpace(cleaned)
 	log.Printf("Cleaned query '%s' to '%s' in %.3fs", query, cleaned, time.Since(start).Seconds())
 	return cleaned
+}
+
+func extractRole(query string) string {
+	re := regexp.MustCompile(`(?i)\b(?:for|as|onboard)\s+([a-z0-9]+(?:[-\s][a-z0-9]+)*)`)
+	match := re.FindStringSubmatch(query)
+	if len(match) < 2 {
+		return ""
+	}
+	role := strings.TrimSpace(strings.ToLower(match[1]))
+	role = strings.ReplaceAll(role, " ", "-")
+	return role
 }
