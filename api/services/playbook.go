@@ -56,9 +56,9 @@ func (p *PlaybookService) GeneratePlaybook(ctx context.Context, role string, emp
 	}
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
+	playbook_data, _ := io.ReadAll(resp.Body)
 
-	log.Printf("Python service response status: %d, body: %s", resp.StatusCode, string(body))
+	log.Printf("Python service response status: %d, body: %s", resp.StatusCode, string(playbook_data))
 
 	if resp.StatusCode != http.StatusOK {
 		log.Printf("Python service returned status %d", resp.StatusCode)
@@ -69,5 +69,17 @@ func (p *PlaybookService) GeneratePlaybook(ctx context.Context, role string, emp
 	playbookURL := fmt.Sprintf("https://kms.company.com/onboard/%s", role)
 	log.Printf("Playbook generated in %.3fs", time.Since(start).Seconds())
 
-	return fmt.Sprintf("✅ Onboarding playbook for **%s** is ready!\n\nView it here: %s", role, playbookURL), nil
+	message := fmt.Sprintf(`✅ **Onboarding Playbook for %s is ready!**
+
+	**Title**: %s
+
+	%s
+
+	📎 View full interactive version here: %s`,
+		role,
+		playbook_data.get("title", "Onboarding Playbook"),
+		playbook_data.get("welcome_message", ""),
+		playbookURL)
+
+	return message, nil
 }
