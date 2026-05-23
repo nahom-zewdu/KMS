@@ -36,7 +36,6 @@ Use this real company knowledge:
 {context}
 
 Output **valid JSON only** with this structure:
-
 {{
   "title": "Onboarding Playbook - {role}",
   "welcome_message": "Friendly welcome...",
@@ -68,7 +67,6 @@ Output **valid JSON only** with this structure:
         raw_response = llm_infer(prompt, temperature=0.3, max_tokens=1800)
 
         try:
-            # Clean and parse JSON
             cleaned = raw_response.strip()
             if cleaned.startswith("```json"):
                 cleaned = cleaned[7:]
@@ -83,17 +81,23 @@ Output **valid JSON only** with this structure:
                 "sections": []
             }
 
-        # Save to database
+        # Save to database - FIXED: Convert datetime to string
+        expires_at = (datetime.utcnow() + timedelta(days=90)).isoformat()
+
         record = {
             "company_id": company_id,
             "role": role,
             "title": playbook_data.get("title"),
             "content": playbook_data,
             "generated_for": employee_name,
-            "expires_at": datetime.utcnow() + timedelta(days=90)
+            "expires_at": expires_at
         }
 
-        self.supabase.table("playbooks").insert(record).execute()
+        try:
+            self.supabase.table("playbooks").insert(record).execute()
+            logger.info(f"✅ Saved playbook for role: {role}")
+        except Exception as e:
+            logger.error(f"Failed to save playbook to DB: {e}")
 
         logger.info(f"✅ Generated playbook for role: {role}")
         return playbook_data
