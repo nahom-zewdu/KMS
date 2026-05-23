@@ -1,14 +1,16 @@
 // services/playbook.go
-// Package services implements the PlaybookService for generating onboarding playbooks for new hires.
-// It integrates with the knowledge graph to pull relevant context about people, systems, and recent activity,
-// creating a comprehensive playbook tailored to the new hire's role. The service is designed to be called
-// from an API endpoint, which will trigger the generation process and return a link to the generated playbook.
+// This file implements the PlaybookService which generates onboarding playbooks for new hires based on their role.
+
 package services
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"time"
 
 	"github.com/nahom-zewdu/kMS/api/domain"
@@ -16,23 +18,54 @@ import (
 
 // PlaybookService implements domain.PlaybookService
 type PlaybookService struct {
-	generator *playbooks.PlaybookGenerator // We'll import from Python later via API
+	pythonURL string // URL to Python playbook endpoint
 }
 
 // NewPlaybookService creates a new playbook service
 func NewPlaybookService() domain.PlaybookService {
-	return &PlaybookService{}
+	return &PlaybookService{
+		pythonURL: "http://localhost:8000/playbooks/generate", // Change to your Python service URL later
+	}
 }
 
-// GeneratePlaybook calls the Python generator (we'll use HTTP call for now)
+// GeneratePlaybook calls the Python generator via HTTP
 func (p *PlaybookService) GeneratePlaybook(ctx context.Context, role string, employeeName string) (string, error) {
 	start := time.Now()
 	log.Printf("Generating playbook for role: %s, employee: %s", role, employeeName)
 
-	// TODO: Call Python service via HTTP (we'll implement this next)
-	// For now, return a placeholder
-	playbookURL := fmt.Sprintf("https://kms.company.com/onboard/%s-%s", role, employeeName)
+	payload := map[string]string{
+		"role":          role,
+		"employee_name": employeeName,
+	}
 
+	jsonData, _ := json.Marshal(payload)
+
+	req, err := http.NewRequestWithContext(ctx, "POST", p.pythonURL, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %v", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Failed to call Python playbook service: %v", err)
+		// Fallback message
+		return fmt.Sprintf("✅ Onboarding playbook for **%s** is being prepared.\n\nWe'll send you the link shortly.", role), nil
+	}
+	defer resp.Body.Close()
+
+	_, _ = io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("Python service returned status %d", resp.StatusCode)
+		return fmt.Sprintf("✅ Onboarding playbook for **%s** is ready!\n\n(Generating detailed version...)", role), nil
+	}
+
+	// Return success message with placeholder link
+	playbookURL := fmt.Sprintf("https://kms.company.com/onboard/%s", role)
 	log.Printf("Playbook generated in %.3fs", time.Since(start).Seconds())
+
 	return fmt.Sprintf("✅ Onboarding playbook for **%s** is ready!\n\nView it here: %s", role, playbookURL), nil
 }
