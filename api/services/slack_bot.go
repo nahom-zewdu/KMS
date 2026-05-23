@@ -16,19 +16,21 @@ import (
 
 // SlackBot handles Slack bot interactions for queries.
 type SlackBot struct {
-	client     *slack.Client
-	botToken   string
-	coreIngest domain.CoreIngestService
-	redis      domain.RedisStream
+	client          *slack.Client
+	botToken        string
+	coreIngest      domain.CoreIngestService
+	redis           domain.RedisStream
+	playbookService domain.PlaybookService
 }
 
 // NewSlackBot creates a new SlackBot service.
-func NewSlackBot(botToken string, coreIngest domain.CoreIngestService, redis domain.RedisStream) domain.SlackBotService {
+func NewSlackBot(botToken string, coreIngest domain.CoreIngestService, redis domain.RedisStream, playbookService domain.PlaybookService) domain.SlackBotService {
 	return &SlackBot{
-		client:     slack.New(botToken),
-		botToken:   botToken,
-		coreIngest: coreIngest,
-		redis:      redis,
+		client:          slack.New(botToken),
+		botToken:        botToken,
+		coreIngest:      coreIngest,
+		redis:           redis,
+		playbookService: playbookService,
 	}
 }
 
