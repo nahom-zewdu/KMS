@@ -65,7 +65,7 @@ func main() {
 	slackBotService := services.NewSlackBot(slackBotToken, coreIngestService, redisStream, playbookService)
 
 	// Setup routes
-	router := handlers.SetupRoutes(slackIngestService, slackBotService, githubIngestService, slackBotToken, slackSignKey, githubSecret)
+	router := handlers.SetupRoutes(slackIngestService, slackBotService, githubIngestService, slackBotToken, slackSignKey, githubSecret, redisStream)
 
 	// Start server
 	log.Printf("Starting server on port %s", port)
