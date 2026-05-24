@@ -20,13 +20,15 @@ as $$
         s.name as source_name,
         t.name as target_name,
         e.type,
-        coalesce((e.metadata->>'confidence')::float, 0.9) as confidence
+        coalesce((e.metadata->>'confidence')::float, e.confidence, 0.9) as confidence
     from edges e
     join entities s on e.source_id = s.id
     join entities t on e.target_id = t.id
     where 
-        lower(s.name) like '%' || lower(search_term) || '%'
-        or lower(t.name) like '%' || lower(search_term) || '%'
+        (
+          lower(s.name) like '%' || lower(search_term) || '%'
+          or lower(t.name) like '%' || lower(search_term) || '%'
+        )
         and (cardinality(relation_types) = 0 or e.type = any(relation_types))
     limit 10;
 $$;
