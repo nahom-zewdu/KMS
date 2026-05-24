@@ -25,8 +25,9 @@ class AdaptiveRetriever:
         if analysis.get("entities"):
             for entity in analysis["entities"][:5]:
                 try:
-                    # Search by name only (avoid tsvector issue)
-                    res = (
+                    # Search by name only — use two separate queries instead of .or_()
+                    # Query 1: source.name matches entity
+                    res1 = (
                         self.supabase.table("edges")
                         .select(
                             "source:entities!source_id(name)",
@@ -34,25 +35,43 @@ class AdaptiveRetriever:
                             "type",
                             "confidence"
                         )
-                        .or_(
-                            f"source.name.ilike.%{entity}%,target.name.ilike.%{entity}%"
-                        )
+                        .ilike("source.name", f"%{entity}%")
                         .limit(8)
                         .execute()
                     )
 
-                    for row in res.data or []:
-                        src = row.get("source", {}).get("name", "Unknown")
-                        tgt = row.get("target", {}).get("name", "Unknown")
-                        rel = row.get("type", "RELATED")
-                        conf = row.get("confidence", 0.9)
+                    # Query 2: target.name matches entity
+                    res2 = (
+                        self.supabase.table("edges")
+                        .select(
+                            "source:entities!source_id(name)",
+                            "target:entities!target_id(name)",
+                            "type",
+                            "confidence"
+                        )
+                        .ilike("target.name", f"%{entity}%")
+                        .limit(8)
+                        .execute()
+                    )
 
-                        chunks.append({
-                            "content": f"{src} {rel} {tgt}",
-                            "source": "graph",
-                            "record_id": "graph",
-                            "score": conf
-                        })
+                    # Merge and deduplicate results
+                    seen_edges = set()
+                    for res in [res1, res2]:
+                        for row in res.data or []:
+                            src = row.get("source", {}).get("name", "Unknown")
+                            tgt = row.get("target", {}).get("name", "Unknown")
+                            rel = row.get("type", "RELATED")
+                            conf = row.get("confidence", 0.9)
+
+                            edge_key = (src, rel, tgt)
+                            if edge_key not in seen_edges:
+                                seen_edges.add(edge_key)
+                                chunks.append({
+                                    "content": f"{src} {rel} {tgt}",
+                                    "source": "graph",
+                                    "record_id": "graph",
+                                    "score": conf
+                                })
                 except Exception as e:
                     logger.warning(f"Graph search failed for '{entity}': {e}")
 
