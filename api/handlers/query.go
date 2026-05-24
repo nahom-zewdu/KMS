@@ -62,13 +62,13 @@ func (h *QueryHandler) HandleQuery(c *gin.Context) {
 		return
 	}
 
-	// Wait for answer with timeout
+	// Wait for answer with timeout (30s to allow sentence transformer model load on first query)
 	select {
 	case answer := <-answerChan:
 		c.JSON(http.StatusOK, gin.H{
 			"answer": answer,
 		})
-	case <-time.After(15 * time.Second):
-		c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Query timeout"})
+	case <-time.After(30 * time.Second):
+		c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Query timeout after 30 seconds"})
 	}
 }
