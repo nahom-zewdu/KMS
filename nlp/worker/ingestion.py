@@ -43,26 +43,35 @@ class IngestionHandler:
 
     def _process_sync(self, job: dict):
         """Main processing logic (kept sync where possible)."""
+        record_id = job.get("record_id", "")
+        source = job.get("source", "")
+        event_type = job.get("event_type", "")
+        event_id = job.get("event_id", ""),
+        content = job.get("content", "")
+        payload = job.get("payload", {})
+
+        logger.info(f"Processing ingestion | {record_id} | {source}")
+
         created_at = job.get("created_at") or datetime.now(timezone.utc).isoformat()
 
         # --- NER ---
         entities = extract_entities(
-            text=job["content"],
-            record_id=job["record_id"],
-            source=job["source"],
+            text=content,
+            record_id=record_id,
+            source=source,
             created_at=created_at,
         )
 
         if not entities:
             logging.info("No entities found, skipping RE.")
             insert_raw_data(supabase, {
-                "record_id": job["record_id"],
-                "source": job["source"],
-                "content": job["content"],
-                "event_id": job.get("event_id"),
+                "record_id": record_id,
+                "source": source,
+                "content": content,
+                "event_id": event_id,
                 "created_at": created_at,
             })
-            mark_event_processed(supabase, job["record_id"])
+            mark_event_processed(supabase, record_id)
             return
 
         # --- Insert Entities ---
@@ -75,9 +84,9 @@ class IngestionHandler:
         # --- RE ---
         entity_dicts = [e.dict() for e in entities]
         raw_relations = extract_relations(
-            text=job["content"],
+            text=content,
             entities=entity_dicts,
-            record_id=job["record_id"],
+            record_id=record_id,
             created_at=created_at,
         )
 
@@ -98,8 +107,20 @@ class IngestionHandler:
         if relations_payload:
             insert_relations(supabase, relations_payload)
 
+        # --- Insert raw data ---
+        insert_raw_data(supabase, {
+            "record_id": record_id,
+            "source": source,
+            "content": content,
+            "event_id": event_id,
+            "created_at": created_at,
+        })
+
+        # --- Mark processed ---
+        mark_event_processed(supabase, record_id)
+
         # --- Codebase Analysis (GitHub Push Only) ---
-        if job.get("source") == "github" and job.get("event_type") == "push":
+        if source == "github" and event_type == "push":
             logging.info("Starting codebase analysis for GitHub push")
             def run_async():
                 loop = asyncio.new_event_loop()
@@ -107,8 +128,8 @@ class IngestionHandler:
                 try:
                     loop.run_until_complete(
                         self.codebase_analyzer.process_push_event(
-                            job.get("payload", {}), 
-                            job["record_id"]
+                            payload, 
+                            record_id
                         )
                     )
                 except Exception as e:
@@ -118,15 +139,3 @@ class IngestionHandler:
 
             thread = threading.Thread(target=run_async, daemon=True)
             thread.start()
-
-        # --- Insert raw data ---
-        insert_raw_data(supabase, {
-            "record_id": job["record_id"],
-            "source": job["source"],
-            "content": job["content"],
-            "event_id": job.get("event_id"),
-            "created_at": created_at,
-        })
-
-        # --- Mark processed ---
-        mark_event_processed(supabase, job["record_id"])
