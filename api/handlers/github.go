@@ -229,14 +229,9 @@ func (h *GitHubHandler) HandleGitHubWebhook(c *gin.Context) {
 		return
 	}
 
-	// THIS IS THE KEY: Rich, clean, LLM-optimized content
 	content := extractRichContent(eventType, payload)
 
-	fmt.Printf("-------------------\n")
-	fmt.Printf("LLM Content → %s\n", content)
-	fmt.Printf("-------------------\n")
-
-	// Payload sent to Redis: only essential metadata (not 10KB of junk)
+	// THIS IS THE KEY: Rich, clean, LLM-optimized content
 	minimalPayload := map[string]interface{}{
 		"repo":        getString(payload, "repository", "full_name"),
 		"sender":      getString(payload, "sender", "login"),
@@ -246,11 +241,23 @@ func (h *GitHubHandler) HandleGitHubWebhook(c *gin.Context) {
 		"head_commit": extractHeadCommit(payload),
 	}
 
+	// Add full file changes for push events
+	if eventType == "push" {
+		if commits, ok := payload["commits"].([]interface{}); ok && len(commits) > 0 {
+			lastCommit := commits[len(commits)-1].(map[string]interface{})
+			minimalPayload["files"] = map[string]interface{}{
+				"added":    interfaceSlice(lastCommit["added"]),
+				"modified": interfaceSlice(lastCommit["modified"]),
+				"removed":  interfaceSlice(lastCommit["removed"]),
+			}
+		}
+	}
+
 	ingestReq := domain.IngestRequest{
 		Source:    "github",
 		EventType: eventType,
-		Content:   content,        // ← High-signal natural language
-		Payload:   minimalPayload, // ← Tiny, useful
+		Content:   content,
+		Payload:   minimalPayload,
 		RecordID:  deliveryID,
 		CreatedAt: time.Now().UTC(),
 	}
