@@ -30,14 +30,11 @@ class IngestionHandler:
         self.codebase_analyzer = CodebaseAnalyzer(supabase)
 
     def process(self, job: dict, stream: str, msg_id: str, redis_client):
-        """Sync wrapper for async operations."""
         start = time.time()
-        logging.info(f"Processing ingestion | {job['record_id']} | {job['source']}")
+        logging.info(f"Processing ingestion | {job.get('record_id')} | {job.get('source')}")
 
         try:
-            # Run the main logic synchronously
             self._process_sync(job)
-
             logging.info(f"Ingestion complete in {time.time()-start:.3f}s")
 
         except Exception as e:
@@ -101,18 +98,25 @@ class IngestionHandler:
         if relations_payload:
             insert_relations(supabase, relations_payload)
 
-        # --- Codebase Analysis (Run async in thread) ---
-        if job["source"] == "github" and job["event_type"] == "push":
-            def run_async_codebase():
+        # --- Codebase Analysis (GitHub Push Only) ---
+        if job.get("source") == "github" and job.get("event_type") == "push":
+            logging.info("Starting codebase analysis for GitHub push")
+            def run_async():
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
-                loop.run_until_complete(
-                    self.codebase_analyzer.process_push_event(job["payload"], job["record_id"])
-                )
-                loop.close()
+                try:
+                    loop.run_until_complete(
+                        self.codebase_analyzer.process_push_event(
+                            job.get("payload", {}), 
+                            job["record_id"]
+                        )
+                    )
+                except Exception as e:
+                    logger.error(f"Codebase analysis failed: {e}")
+                finally:
+                    loop.close()
 
-            thread = threading.Thread(target=run_async_codebase)
-            thread.daemon = True
+            thread = threading.Thread(target=run_async, daemon=True)
             thread.start()
 
         # --- Insert raw data ---
