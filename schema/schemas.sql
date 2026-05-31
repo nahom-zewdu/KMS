@@ -175,3 +175,14 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 GRANT ALL ON SEQUENCES TO postgres, anon, authenticated, service_role;
 
 COMMENT ON SCHEMA public IS 'Public schema for KnowSphere, containing event ingestion, knowledge graph, and metrics tables.';
+
+
+-- Extend entities for codebase
+ALTER TABLE entities 
+ADD COLUMN IF NOT EXISTS file_path TEXT,
+ADD COLUMN IF NOT EXISTS language TEXT,
+ADD COLUMN IF NOT EXISTS loc INTEGER DEFAULT 0;
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_entities_file_path ON entities(file_path);
+CREATE INDEX IF NOT EXISTS idx_entities_type_code ON entities(type) WHERE type IN ('FILE', 'MODULE', 'DIRECTORY', 'REPOSITORY');
