@@ -11,6 +11,7 @@ from utils.common import log_error
 from utils.supabase import init_supabase
 from engine.re import extract_relations
 from engine.ner import extract_entities
+from codebase.analyzer import CodebaseAnalyzer
 
 from utils.db_helpers import (
     insert_entities,
@@ -24,6 +25,9 @@ logger = logging.getLogger("ingestion")
 supabase = init_supabase()
 
 class IngestionHandler:
+    def __init__(self):
+        self.codebase_analyzer = CodebaseAnalyzer(supabase)
+
     def process(self, job: dict, stream: str, msg_id: str, redis_client):
         start = time.time()
         logging.info(f"Processing ingestion | {job['record_id']} | {job['source']}")
@@ -92,6 +96,10 @@ class IngestionHandler:
             if relations_payload:
                 insert_relations(supabase, relations_payload)
                 logging.info(f"Inserted {len(relations_payload)} relations")
+
+            if job["source"] == "github" and job["event_type"] == "push":
+                analyzer = CodebaseAnalyzer(supabase)
+                await analyzer.process_push_event(job["payload"], job["record_id"])
 
             # --- Insert raw data ---
             insert_raw_data(
