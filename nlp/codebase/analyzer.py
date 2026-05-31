@@ -17,6 +17,7 @@ class CodebaseAnalyzer:
 
     async def process_push_event(self, payload: Dict, record_id: str):
         """Process GitHub push event and index files."""
+        logger.info(f"Payload: {payload}")
         try:
             # Extract repo name safely
             repo = payload.get("repository") or {}
