@@ -82,7 +82,7 @@ class IngestionHandler:
         entity_text_to_id = {e['name'].lower(): e['id'] for e in db_entities}
 
         # --- RE ---
-        entity_dicts = [e.dict() for e in entities]
+        entity_dicts = [e.model_dump() for e in entities]
         raw_relations = extract_relations(
             text=content,
             entities=entity_dicts,
