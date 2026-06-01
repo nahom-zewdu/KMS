@@ -8,8 +8,33 @@ from pydantic import BaseModel, Field, validator
 from datetime import datetime
 from uuid import uuid4
 
-EntityType = Literal["PERSON", "SYSTEM", "TICKET", "PROJECT", "ENVIRONMENT", "FILE"]
-RelationType = Literal["OWNS", "MAINTAINS", "ASSIGNED_TO", "FIXES", "DEPLOYED_IN", "PART_OF"]
+EntityType = Literal[
+    "PERSON",
+    "SYSTEM",
+    "TICKET",
+    "PROJECT",
+    "ENVIRONMENT",
+    "FILE",
+]
+
+RelationType = Literal[
+    "OWNS",
+    "MAINTAINS",
+    "ASSIGNED_TO",
+    "FIXES",
+    "DEPLOYED_IN",
+    "PART_OF",
+]
+
+
+def deterministic_uuid(entity_type: str, name: str) -> str:
+    return str(
+        uuid5(
+            NAMESPACE_DNS,
+            f"{entity_type.lower()}:{name.lower()}",
+        )
+    )
+
 
 class Entity(BaseModel):
     text: str = Field(..., description="Exact text span")
