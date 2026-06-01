@@ -9,15 +9,12 @@ import logging
 from .llm import llm_infer
 from .prompt import get_entity_prompt
 from .schema import Entity
-from datetime import datetime, timezone
-import uuid
 
 logger = logging.getLogger("engine.ner")
 
-ALLOWED_TYPES = {"PERSON", "SYSTEM", "TICKET", "PROJECT", "ENVIRONMENT", "FILE"}
+ALLOWED_TYPES = {"PERSON", "SYSTEM", "TICKET", "PROJECT", "ENVIRONMENT"}
 
-def _normalize_text(s: str) -> str:
-    return s.strip().lower()
+FORBIDDEN_TYPES = {"FILE"}
 
 def extract_entities(
     text: str,
@@ -25,8 +22,9 @@ def extract_entities(
     source: str,
     created_at: str,
 ) -> List[Entity]:
-    """Extract entities from text using LLM, ensuring they conform to our schema and allowed types.
-    Returns list of Entity objects ready for DB insertion.
+    """
+    Extract entities using LLM.
+    NOTE: FILE entities are intentionally excluded and handled by CodebaseAnalyzer.
     """
 
     if not text.strip():
@@ -49,29 +47,22 @@ def extract_entities(
 
     for ent in ents:
         try:
-            entity_text = (
-                ent.get("text", "")
-                .strip()
-                .lower()
-            )
+            entity_text = ent.get("text", "").strip().lower()
+            entity_type = ent.get("type", "").strip().upper()
 
-            entity_type = (
-                ent.get("type", "")
-                .strip()
-                .upper()
-            )
+            if entity_type in FORBIDDEN_TYPES:
+                continue
 
             if entity_type not in ALLOWED_TYPES:
+                continue
+
+            if not entity_text:
                 continue
 
             if entity_text not in lower_text:
                 continue
 
-            key = (
-                entity_text,
-                entity_type,
-            )
-
+            key = (entity_text, entity_type)
             if key in seen:
                 continue
 
