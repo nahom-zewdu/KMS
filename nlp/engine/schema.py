@@ -3,10 +3,11 @@
 Defines the canonical schema for entities and relations.
 This is the contract between NLP and the knowledge graph.
 """
-from typing import Literal, List
-from pydantic import BaseModel, Field, validator
-from datetime import datetime
-from uuid import uuid4
+
+from typing import Literal
+from pydantic import BaseModel, Field, field_validator
+from uuid import uuid5, NAMESPACE_DNS
+import hashlib
 
 EntityType = Literal[
     "PERSON",
@@ -37,41 +38,59 @@ def deterministic_uuid(entity_type: str, name: str) -> str:
 
 
 class Entity(BaseModel):
-    text: str = Field(..., description="Exact text span")
-    type: EntityType = Field(..., description="Canonical type")
+    text: str
+    type: EntityType
     confidence: float = Field(..., ge=0, le=1)
+
     record_id: str
     source: str
     created_at: str
 
-    @validator("text")
+    @field_validator("text")
     def normalize_text(cls, v):
         return v.strip().lower()
-    
-    def dict(self, **kwargs):
-        return super().dict(**kwargs)
-    
+
     def to_db_record(self) -> dict:
-        """Convert to Supabase entities table schema."""
+        entity_id = deterministic_uuid(
+            self.type,
+            self.text,
+        )
+
         return {
-            "id": str(uuid4()),
-            "type": self.type.lower(),  # DB expects lowercase
+            "id": entity_id,
+            "type": self.type.lower(),
             "name": self.text,
             "metadata": {
                 "confidence": self.confidence,
                 "source": self.source,
                 "original_record_id": self.record_id,
-                "extracted_at": self.created_at
+                "extracted_at": self.created_at,
             },
-            "created_at": self.created_at
+            "created_at": self.created_at,
         }
 
+
 class Relation(BaseModel):
-    source: str = Field(..., description="Source entity text")
-    target: str = Field(..., description="Target entity text")
-    type: RelationType = Field(..., description="Canonical relation")
+    source: str
+    target: str
+    type: RelationType
+
     confidence: float = Field(..., ge=0, le=1)
+
     record_id: str
     source_type: EntityType
     target_type: EntityType
     created_at: str
+
+
+def deterministic_edge_id(
+    source_id: str,
+    target_id: str,
+    rel_type: str,
+) -> str:
+    return str(
+        uuid5(
+            NAMESPACE_DNS,
+            f"{source_id}:{rel_type}:{target_id}",
+        )
+    )
