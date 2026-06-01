@@ -7,7 +7,6 @@ This is the contract between NLP and the knowledge graph.
 from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 from uuid import uuid5, NAMESPACE_DNS
-import hashlib
 
 EntityType = Literal[
     "PERSON",
@@ -49,6 +48,10 @@ class Entity(BaseModel):
     @field_validator("text")
     def normalize_text(cls, v):
         return v.strip().lower()
+
+    @field_validator("type")
+    def normalize_type(cls, v):
+        return v.upper()
 
     def to_db_record(self) -> dict:
         entity_id = deterministic_uuid(
