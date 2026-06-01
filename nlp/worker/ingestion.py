@@ -43,10 +43,10 @@ class IngestionHandler:
 
     def _process_sync(self, job: dict):
         """Main processing logic (kept sync where possible)."""
-        record_id = job.get("record_id", "")
+        record_id = job.get("record_id", None)
         source = job.get("source", "")
         event_type = job.get("event_type", "")
-        event_id = job.get("event_id", "")
+        event_id = job.get("event_id", None)
         content = job.get("content", "")
         payload = job.get("payload", {})
 
