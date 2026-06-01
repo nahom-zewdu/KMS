@@ -48,7 +48,7 @@ class CodebaseAnalyzer:
         language = self._detect_language(file_path)
 
         entity = {
-            "id": f"file-{hash(file_path)}",
+            "id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"{repo_name}:{file_path}")), # deterministic ID based on repo and path
             "type": "FILE",
             "name": file_name,
             "file_path": file_path,
