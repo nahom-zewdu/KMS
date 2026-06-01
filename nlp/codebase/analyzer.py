@@ -7,6 +7,7 @@ This structured knowledge enables advanced codebase queries and insights.
 
 import logging
 from typing import Dict, List, Any
+import uuid
 from supabase import Client
 
 logger = logging.getLogger(__name__)
@@ -20,17 +21,24 @@ class CodebaseAnalyzer:
         logger.info(f"Payload: {payload}")
         try:
             # Extract repo name safely
-            repo = payload.get("repository") or payload.get("repo") or {}
-            repo_name = repo.get("full_name") or repo.get("name") or "unknown-repo"
+            repo_name = payload.get("repository") or payload.get("repo") or "unknown-repo"
 
-            commits = payload.get("commits", [])
+            files = payload.get("files", {})
+
+            changed_files = (
+                files.get("added", [])
+                + files.get("modified", [])
+                + files.get("removed", [])
+            )
             files_processed = 0
 
-            for commit in commits:
-                changed_files = commit.get("added", []) + commit.get("modified", [])
-                for file_path in changed_files[:30]:  # Limit to avoid overload
-                    await self._index_file(file_path, repo_name, record_id)
-                    files_processed += 1
+            for file_path in changed_files[:30]:
+                await self._index_file(
+                    file_path,
+                    repo_name,
+                    record_id,
+                )
+                files_processed += 1
 
             logger.info(f"CodebaseAnalyzer: Processed {files_processed} files from {repo_name}")
             return True
