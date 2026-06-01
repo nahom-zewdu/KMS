@@ -20,7 +20,7 @@ class CodebaseAnalyzer:
         logger.info(f"Payload: {payload}")
         try:
             # Extract repo name safely
-            repo = payload.get("repository") or {}
+            repo = payload.get("repository") or payload.get("repo") or {}
             repo_name = repo.get("full_name") or repo.get("name") or "unknown-repo"
 
             commits = payload.get("commits", [])
