@@ -46,7 +46,7 @@ class IngestionHandler:
         record_id = job.get("record_id", "")
         source = job.get("source", "")
         event_type = job.get("event_type", "")
-        event_id = job.get("event_id", ""),
+        event_id = job.get("event_id", "")
         content = job.get("content", "")
         payload = job.get("payload", {})
 
