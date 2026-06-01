@@ -4,6 +4,7 @@ Prompt templates with caching and schema enforcement.
 """
 
 from functools import lru_cache
+import json
 from typing import List, Dict
 from string import Template
 
@@ -120,10 +121,9 @@ def get_entity_prompt(text: str) -> str:
     return ENTITY_PROMPT.substitute(text=text.strip())
 
 
-@lru_cache(maxsize=1000)
 def get_relation_prompt(text: str, entities: List[Dict]) -> str:
-    # Turn entity list into readable JSON-like display
-    entities_repr = str(entities)
+    entities_repr = json.dumps(entities, separators=(",", ":"))
+
     return RELATION_PROMPT.substitute(
         text=text.strip(),
         entities=entities_repr
