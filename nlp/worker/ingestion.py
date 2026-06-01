@@ -14,6 +14,7 @@ from utils.common import log_error
 from utils.supabase import init_supabase
 from engine.re import extract_relations
 from engine.ner import extract_entities
+from engine.schema import Entity, deterministic_edge_id
 from codebase.analyzer import CodebaseAnalyzer
 from utils.db_helpers import (
     insert_entities,
@@ -89,6 +90,54 @@ class IngestionHandler:
             record_id=record_id,
             created_at=created_at,
         )
+        
+        if source == "github":
+            repo = payload.get("repo")
+
+            sender = payload.get("sender")
+
+            files = payload.get(
+                "files",
+                {},
+            ).get("modified", [])
+
+            deterministic_entities = []
+
+            if sender:
+                deterministic_entities.append(
+                    Entity(
+                        text=sender.lower(),
+                        type="PERSON",
+                        confidence=1.0,
+                        record_id=record_id,
+                        source=source,
+                        created_at=created_at,
+                    )
+                )
+
+            if repo:
+                deterministic_entities.append(
+                    Entity(
+                        text=repo.lower(),
+                        type="PROJECT",
+                        confidence=1.0,
+                        record_id=record_id,
+                        source=source,
+                        created_at=created_at,
+                    )
+                )
+
+            for file in files:
+                deterministic_entities.append(
+                    Entity(
+                        text=file.lower(),
+                        type="FILE",
+                        confidence=1.0,
+                        record_id=record_id,
+                        source=source,
+                        created_at=created_at,
+                    )
+                )
 
         # --- Map relations ---
         relations_payload = []
@@ -98,10 +147,19 @@ class IngestionHandler:
             if not src_id or not tgt_id:
                 continue
             relations_payload.append({
+                "id": deterministic_edge_id(
+                    src_id,
+                    tgt_id,
+                    r["type"],
+                ),
                 "source_id": src_id,
                 "target_id": tgt_id,
-                "type": r['type'],
-                "created_at": r.get("created_at") or created_at
+                "type": r["type"],
+                "confidence": 0.95,
+                "source_record_id": record_id,
+                "created_at": r.get(
+                    "created_at"
+                ) or created_at,
             })
 
         if relations_payload:
