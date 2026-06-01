@@ -21,7 +21,7 @@ Return ONLY a JSON object with this schema:
   "entities": [
     {
       "text": "<exact lowercase span from input>",
-      "type": "PERSON | SYSTEM | TICKET | PROJECT | ENVIRONMENT | FILE"
+      "type": "PERSON | SYSTEM | TICKET | PROJECT | ENVIRONMENT"
     }
   ]
 }
@@ -50,13 +50,6 @@ Output: {
   "entities": [
     {"text": "kms-123", "type": "TICKET"},
     {"text": "prod", "type": "ENVIRONMENT"}
-  ]
-}
-
-Input: "modified config/auth.yaml"
-Output: {
-  "entities": [
-    {"text": "config/auth.yaml", "type": "FILE"}
   ]
 }
 """.strip())
