@@ -19,66 +19,77 @@ ALLOWED_TYPES = {"PERSON", "SYSTEM", "TICKET", "PROJECT", "ENVIRONMENT", "FILE"}
 def _normalize_text(s: str) -> str:
     return s.strip().lower()
 
-def extract_entities(text: str, record_id: str, source: str, created_at: str) -> List[Entity]:
+def extract_entities(
+    text: str,
+    record_id: str,
+    source: str,
+    created_at: str,
+) -> List[Entity]:
+    """Extract entities from text using LLM, ensuring they conform to our schema and allowed types.
+    Returns list of Entity objects ready for DB insertion.
     """
-    Extract entities from text using LLM. Return validated List[Entity].
-    created_at should be ISO string; if missing, we fallback to now().
-    """
-    if not text or not text.strip():
-        return []
 
-    if not created_at:
-        created_at = datetime.now(timezone.utc).isoformat()
+    if not text.strip():
+        return []
 
     prompt = get_entity_prompt(text)
+
     try:
         raw = llm_infer(prompt)
-    except Exception as e:
-        logger.error("LLM call failed for NER: %s", e)
-        return []
-
-    # Expect JSON object: {"entities": [ ... ]}
-    try:
         obj = json.loads(raw)
         ents = obj.get("entities", [])
-    except Exception:
-        # Best-effort fallback: try to find a JSON array, else empty.
-        logger.warning("NER LLM did not return JSON object, trying to parse array fallback.")
-        try:
-            start = raw.find("[")
-            end = raw.rfind("]") + 1
-            if start != -1 and end > 0:
-                ents = json.loads(raw[start:end])
-            else:
-                logger.warning("NER fallback failed; returning empty list.")
-                return []
-        except Exception:
-            logger.exception("NER fallback parse failed.")
-            return []
+    except Exception as e:
+        logger.error("NER failed: %s", e)
+        return []
 
-    results: List[Entity] = []
+    seen = set()
+    results = []
+
+    lower_text = text.lower()
+
     for ent in ents:
         try:
-            text_span = ent.get("text", "")
-            typ = (ent.get("type") or "").strip().upper()
-            # Basic validation
-            if not text_span or typ not in ALLOWED_TYPES:
-                logger.debug("Skipping invalid entity: %s", ent)
-                continue
-            norm_text = _normalize_text(text_span)
-            # Build Entity model (pydantic)
-            e = Entity(
-                text=norm_text,
-                type=typ,
-                confidence=float(ent.get("score", 0.95)),
-                record_id=record_id or "",
-                source=source or "",
-                created_at=created_at
+            entity_text = (
+                ent.get("text", "")
+                .strip()
+                .lower()
             )
-            results.append(e)
-        except Exception as e:
-            logger.warning("Invalid entity entry skipped: %s -> %s", ent, e)
+
+            entity_type = (
+                ent.get("type", "")
+                .strip()
+                .upper()
+            )
+
+            if entity_type not in ALLOWED_TYPES:
+                continue
+
+            if entity_text not in lower_text:
+                continue
+
+            key = (
+                entity_text,
+                entity_type,
+            )
+
+            if key in seen:
+                continue
+
+            seen.add(key)
+
+            results.append(
+                Entity(
+                    text=entity_text,
+                    type=entity_type,
+                    confidence=0.95,
+                    record_id=record_id,
+                    source=source,
+                    created_at=created_at,
+                )
+            )
+
+        except Exception:
+            continue
 
     logger.info("NER → %d entities", len(results))
-    logger.info("Entities: %s", [e.dict() for e in results])
     return results
