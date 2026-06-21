@@ -241,15 +241,25 @@ func (h *GitHubHandler) HandleGitHubWebhook(c *gin.Context) {
 		"head_commit": extractHeadCommit(payload),
 	}
 
-	// Add full file changes for push events
+	// AGGREGATE ALL FILES ACROSS ALL COMMITS ===
 	if eventType == "push" {
+		allAdded := []string{}
+		allModified := []string{}
+		allRemoved := []string{}
+
 		if commits, ok := payload["commits"].([]interface{}); ok && len(commits) > 0 {
-			lastCommit := commits[len(commits)-1].(map[string]interface{})
-			minimalPayload["files"] = map[string]interface{}{
-				"added":    interfaceSlice(lastCommit["added"]),
-				"modified": interfaceSlice(lastCommit["modified"]),
-				"removed":  interfaceSlice(lastCommit["removed"]),
+			for _, c := range commits {
+				commit := c.(map[string]interface{})
+				allAdded = append(allAdded, interfaceSlice(commit["added"])...)
+				allModified = append(allModified, interfaceSlice(commit["modified"])...)
+				allRemoved = append(allRemoved, interfaceSlice(commit["removed"])...)
 			}
+		}
+
+		minimalPayload["files"] = map[string]interface{}{
+			"added":    allAdded,
+			"modified": allModified,
+			"removed":  allRemoved,
 		}
 	}
 
