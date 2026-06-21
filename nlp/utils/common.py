@@ -20,4 +20,5 @@ def timed(func: Callable) -> Callable:
         duration = time.time() - start
         logging.info(f"{func.__name__} completed in {duration:.3f}s")
         return result
+
     return wrapper
