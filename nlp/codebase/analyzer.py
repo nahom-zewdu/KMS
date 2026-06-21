@@ -25,14 +25,16 @@ class CodebaseAnalyzer:
         logger.info(f"Payload: {payload}")
 
         try:
+            # Robust repo name extraction
+            repo_obj = payload.get("repository") or payload.get("repo") or {}
             repo_name = (
-                payload.get("repository")
+                repo_obj.get("full_name")
+                or repo_obj.get("name")
                 or payload.get("repo")
                 or "unknown-repo"
             )
 
             files = payload.get("files", {})
-
             changed_files = (
                 files.get("added", [])
                 + files.get("modified", [])
@@ -40,18 +42,11 @@ class CodebaseAnalyzer:
             )
 
             files_processed = 0
-
-            for file_path in changed_files[:30]:
-                await self._index_file(
-                    file_path=file_path,
-                    repo_name=repo_name,
-                    record_id=record_id,
-                )
+            for file_path in changed_files[:50]:  # generous limit
+                await self._index_file(file_path, repo_name, record_id)
                 files_processed += 1
 
-            logger.info(
-                f"CodebaseAnalyzer: Processed {files_processed} files from {repo_name}"
-            )
+            logger.info(f"CodebaseAnalyzer: Processed {files_processed} files from {repo_name}")
             return True
 
         except Exception as e:
