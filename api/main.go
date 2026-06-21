@@ -29,6 +29,7 @@ func main() {
 	slackSignKey := os.Getenv("SLACK_SIGNING_SECRET")
 	githubSecret := os.Getenv("GITHUB_WEBHOOK_SECRET")
 	port := os.Getenv("PORT")
+
 	if port == "" {
 		port = "8080"
 	}
@@ -67,9 +68,9 @@ func main() {
 	// Setup routes
 	router := handlers.SetupRoutes(slackIngestService, slackBotService, githubIngestService, slackBotToken, slackSignKey, githubSecret, redisStream)
 
-	// Start server
-	log.Printf("Starting server on port %s", port)
+	// Start
 	if err := router.Run(":" + port); err != nil {
 		log.Fatalf("Server failed to start: %v", err)
 	}
+	log.Printf("kms backend server is running on port %s", port)
 }
