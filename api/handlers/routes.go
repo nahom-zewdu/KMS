@@ -15,6 +15,7 @@ func SetupRoutes(
 	slackBot domain.SlackBotService,
 	githubIngest domain.GitHubIngestService,
 	slackBotToken, slackSignKey, githubSecret string,
+	codebaseService domain.CodebaseService,
 	redis domain.RedisStream,
 ) *gin.Engine {
 	// Initialize Gin router
@@ -27,12 +28,14 @@ func SetupRoutes(
 	slackHandler := NewSlackHandler(slackIngest, slackBot, slackClient, slackSignKey)
 	githubHandler := NewGitHubHandler(githubIngest, githubSecret)
 	queryHandler := NewQueryHandler(slackBot, redis)
+	codebaseHandler := NewCodebaseHandler(codebaseService)
 
 	// Define routes
 	router.POST("/slack/events", slackHandler.HandleSlackWebhook)
 	router.POST("/slack/events/", slackHandler.HandleSlackWebhook)
 	router.POST("/github", githubHandler.HandleGitHubWebhook)
 	router.POST("/github/", githubHandler.HandleGitHubWebhook)
+	router.POST("/github/sync-baseline", codebaseHandler.SyncBaseline)
 	router.POST("/query", queryHandler.HandleQuery)
 
 	// Health check endpoint
