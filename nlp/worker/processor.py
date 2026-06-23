@@ -6,6 +6,7 @@ import logging
 from .consumer import RedisStreamConsumer
 from .ingestion import IngestionHandler
 from .query import QueryHandler
+from .baseline import BaselineHandler
 from utils import setup_structured_logging
 from query_engine.vector.retriever import get_embedder
 
@@ -25,12 +26,13 @@ class NLPProcessor:
             logging.warning(f"Failed to pre-load embedder: {e}. Will load on first query.")
 
         self.consumer = RedisStreamConsumer(
-            streams=["slack_jobs", "github_jobs", "query_jobs"],
+            streams=["slack_jobs", "github_jobs", "query_jobs", "codebase_baseline_jobs"],
             group="kms",
             handlers={
                 "slack_jobs": IngestionHandler(),
                 "github_jobs": IngestionHandler(),
-                "query_jobs": QueryHandler()
+                "query_jobs": QueryHandler(),
+                "codebase_baseline_jobs": BaselineHandler(),
             }
         )
 
