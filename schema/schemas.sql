@@ -226,3 +226,12 @@ CREATE INDEX IF NOT EXISTS idx_files_repo ON codebase_files(repository_id);
 CREATE INDEX IF NOT EXISTS idx_files_path ON codebase_files(file_path);
 CREATE INDEX IF NOT EXISTS idx_files_language ON codebase_files(language);
 
+-- Optional bridge table
+CREATE TABLE IF NOT EXISTS public.file_entity_links (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    file_id UUID REFERENCES codebase_files(id) ON DELETE CASCADE,
+    entity_id UUID REFERENCES entities(id) ON DELETE CASCADE,
+    link_type TEXT NOT NULL,           -- MENTIONED, OWNS, RELATED
+    confidence FLOAT DEFAULT 0.8,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
