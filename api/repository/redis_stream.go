@@ -12,6 +12,14 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// list of valid streams for publishing
+var validStreams = map[string]bool{
+	"slack_jobs":             true,
+	"github_jobs":            true,
+	"query_jobs":             true,
+	"codebase_baseline_jobs": true,
+}
+
 // RedisStream implements the RedisStream interface for stream and caching operations.
 type RedisStream struct {
 	client *redis.Client
@@ -25,7 +33,7 @@ func NewRedisStream(client *redis.Client) domain.RedisStream {
 // Publish sends a JobPayload to a Redis stream.
 func (r *RedisStream) Publish(ctx context.Context, stream string, payload domain.JobPayload) error {
 	start := time.Now()
-	if stream != "slack_jobs" && stream != "github_jobs" && stream != "query_jobs" {
+	if !validStreams[stream] {
 		log.Printf("RecordID: %s - Invalid stream: %s in %.3fs", payload.RecordID, stream, time.Since(start).Seconds())
 		return fmt.Errorf("invalid stream: %s", stream)
 	}
