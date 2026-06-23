@@ -4,7 +4,6 @@ package handlers
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/nahom-zewdu/kMS/api/domain"
@@ -19,22 +18,21 @@ func NewCodebaseHandler(s domain.CodebaseService) *CodebaseHandler {
 }
 
 func (h *CodebaseHandler) SyncBaseline(c *gin.Context) {
-	start := time.Now()
-	repoFullName := c.Query("repo")
-	if repoFullName == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "repo parameter is required"})
+	repo := c.Query("repo")
+	if repo == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "repo query param required"})
 		return
 	}
 
-	err := h.codebaseService.SyncRepository(c.Request.Context(), repoFullName)
+	err := h.codebaseService.SyncRepository(c.Request.Context(), repo)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"status": "baseline_sync_queued",
-		"repo":   repoFullName,
-		"time":   time.Since(start).String(),
+	c.JSON(http.StatusAccepted, gin.H{
+		"status":  "queued",
+		"repo":    repo,
+		"message": "Baseline sync has been queued",
 	})
 }
