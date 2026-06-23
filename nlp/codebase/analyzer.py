@@ -1,16 +1,16 @@
 # nlp/codebase/analyzer.py
 """
-KMS Codebase Analyzer — Processes GitHub push events.
-Extracts FILE entities and will later build relationships.
+KMS Codebase Analyzer — Baseline + Incremental model.
+Maintains physical codebase structure in dedicated tables.
 """
 
 import logging
 from typing import Dict, Any
-import uuid
 from datetime import datetime, timezone
+import uuid
 
 from supabase import Client
-from engine.schema import Entity   # Use the same schema as NER
+from engine.schema import Entity
 
 logger = logging.getLogger(__name__)
 
@@ -20,36 +20,64 @@ class CodebaseAnalyzer:
         self.supabase = supabase
 
     async def process_push_event(self, payload: Dict[str, Any], record_id: str):
-        """Process GitHub push and index all changed files."""
-        logger.info(f"Payload received: {payload}")
+        """Incremental update from GitHub push."""
+        logger.info(f"Processing incremental push | record={record_id}")
 
         try:
-            # Robust repo name extraction
-            repo_name = "unknown-repo"
-            if isinstance(payload.get("repository"), dict):
-                repo_name = payload["repository"].get("full_name") or payload["repository"].get("name", "unknown-repo")
-            elif payload.get("repo"):
-                repo_name = str(payload["repo"])
-
+            repo_name = self._extract_repo_name(payload)
             files = payload.get("files", {})
-            changed_files = (
-                files.get("added", []) +
-                files.get("modified", []) +
-                files.get("removed", [])
-            )
+            changed_files = files.get("modified", []) + files.get("added", [])
 
-            files_processed = 0
             for file_path in changed_files[:50]:
-                if file_path:
-                    await self._index_file(file_path, repo_name, record_id)
-                    files_processed += 1
+                await self._upsert_file(file_path, repo_name, record_id, payload)
 
-            logger.info(f"CodebaseAnalyzer: Processed {files_processed} files from {repo_name}")
+            logger.info(f"Incremental update complete: {len(changed_files)} files")
             return True
-
         except Exception as e:
-            logger.error(f"Codebase analysis failed for {record_id}: {e}", exc_info=True)
+            logger.error(f"Incremental push failed: {e}", exc_info=True)
             return False
+
+    def _extract_repo_name(self, payload: Dict) -> str:
+        if isinstance(payload.get("repository"), dict):
+            return payload["repository"].get("full_name") or payload["repository"].get("name", "unknown")
+        return str(payload.get("repo") or payload.get("repository") or "unknown-repo")
+
+    async def _upsert_file(self, file_path: str, repo_name: str, record_id: str, payload: Dict):
+        """the upsert_file method is responsible for inserting or updating a file record in the database. It first checks if the file path is valid and not hidden. 
+        Then, it ensures that the repository exists in the database, retrieves its ID, and constructs a file record with relevant information such as file path, name, language, last modified time, last commit SHA, and author. 
+        Finally, it upserts the file record into the 'codebase_files' table and logs the update."""
+        
+        if not file_path or file_path.startswith("."):
+            return
+
+        # First ensure repository exists
+        repo_record = {
+            "full_name": repo_name,
+            "company_id": "default",
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        self.supabase.table("repositories").upsert(repo_record, on_conflict="full_name").execute()
+
+        # Get repo id
+        repo = self.supabase.table("repositories").select("id").eq("full_name", repo_name).single().execute()
+        repo_id = repo.data["id"]
+
+        file_name = file_path.split("/")[-1]
+
+        file_record = {
+            "repository_id": repo_id,
+            "file_path": file_path,
+            "file_name": file_name,
+            "language": self._detect_language(file_path),
+            "last_modified_at": datetime.now(timezone.utc).isoformat(),
+            "last_commit_sha": payload.get("head_commit", {}).get("id"),
+            "last_author": payload.get("sender"),
+            "metadata": {"source_record_id": record_id}
+        }
+
+        self.supabase.table("codebase_files").upsert(file_record, on_conflict="repository_id,file_path").execute()
+
+        logger.info(f"Updated file: {file_path} in {repo_name}")
 
     async def _index_file(self, file_path: str, repo_name: str, record_id: str):
         """Index file using unified Entity schema."""
@@ -81,7 +109,7 @@ class CodebaseAnalyzer:
 
         try:
             self.supabase.table("entities").upsert(db_entity, on_conflict="id").execute()
-            logger.info(f"✅ Indexed file: {file_path} in {repo_name}")
+            logger.info(f"Indexed file: {file_path} in {repo_name}")
         except Exception as e:
             logger.warning(f"Failed to index {file_path}: {e}")
 
