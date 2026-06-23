@@ -35,7 +35,7 @@ func SetupRoutes(
 	router.POST("/slack/events/", slackHandler.HandleSlackWebhook)
 	router.POST("/github", githubHandler.HandleGitHubWebhook)
 	router.POST("/github/", githubHandler.HandleGitHubWebhook)
-	router.POST("/github/sync-baseline", codebaseHandler.SyncBaseline)
+	router.GET("/github/sync-baseline", codebaseHandler.SyncBaseline)
 	router.POST("/query", queryHandler.HandleQuery)
 
 	// Health check endpoint
