@@ -204,3 +204,25 @@ CREATE TABLE IF NOT EXISTS public.repositories (
 
 CREATE INDEX IF NOT EXISTS idx_repos_company ON repositories(company_id);
 CREATE INDEX IF NOT EXISTS idx_repos_full_name ON repositories(full_name);
+
+-- 2. Codebase files (physical structure)
+CREATE TABLE IF NOT EXISTS public.codebase_files (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    repository_id UUID NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+    file_path TEXT NOT NULL,
+    file_name TEXT NOT NULL,
+    language TEXT,
+    loc INT DEFAULT 0,
+    last_modified_at TIMESTAMPTZ,
+    last_commit_sha TEXT,
+    last_author TEXT,
+    metadata JSONB,                    -- complexity, owners, etc.
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(repository_id, file_path)
+);
+
+CREATE INDEX IF NOT EXISTS idx_files_repo ON codebase_files(repository_id);
+CREATE INDEX IF NOT EXISTS idx_files_path ON codebase_files(file_path);
+CREATE INDEX IF NOT EXISTS idx_files_language ON codebase_files(language);
+
