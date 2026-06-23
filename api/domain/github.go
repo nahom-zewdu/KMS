@@ -23,3 +23,8 @@ type GitHubEvent struct {
 type GitHubIngestService interface {
 	IngestGitHubEvent(ctx context.Context, req IngestRequest) error
 }
+
+// CodebaseService handles repository baseline sync and codebase intelligence.
+type CodebaseService interface {
+	SyncRepository(ctx context.Context, repoFullName string) error
+}
