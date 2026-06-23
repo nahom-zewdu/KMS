@@ -64,9 +64,10 @@ func main() {
 	githubIngestService := services.NewGitHubIngest(coreIngestService)
 	playbookService := services.NewPlaybookService()
 	slackBotService := services.NewSlackBot(slackBotToken, coreIngestService, redisStream, playbookService)
+	codebaseService := services.NewCodebaseService(redisStream)
 
 	// Setup routes
-	router := handlers.SetupRoutes(slackIngestService, slackBotService, githubIngestService, slackBotToken, slackSignKey, githubSecret, redisStream)
+	router := handlers.SetupRoutes(slackIngestService, slackBotService, githubIngestService, slackBotToken, slackSignKey, githubSecret, codebaseService, redisStream)
 
 	// Start
 	if err := router.Run(":" + port); err != nil {
