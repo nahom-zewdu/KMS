@@ -186,3 +186,21 @@ ADD COLUMN IF NOT EXISTS loc INTEGER DEFAULT 0;
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_entities_file_path ON entities(file_path);
 CREATE INDEX IF NOT EXISTS idx_entities_type_code ON entities(type) WHERE type IN ('FILE', 'MODULE', 'DIRECTORY', 'REPOSITORY');
+
+--------------------------------------------------
+-- 1. Repositories table
+CREATE TABLE IF NOT EXISTS public.repositories (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id TEXT NOT NULL DEFAULT 'default',
+    full_name TEXT UNIQUE NOT NULL,           -- e.g. "nahom-zewdu/KMS"
+    default_branch TEXT DEFAULT 'main',
+    description TEXT,
+    language TEXT,
+    last_synced_at TIMESTAMPTZ,
+    metadata JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_repos_company ON repositories(company_id);
+CREATE INDEX IF NOT EXISTS idx_repos_full_name ON repositories(full_name);
