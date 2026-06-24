@@ -21,7 +21,7 @@ class PlaybookGenerator:
         self.supabase = supabase
 
     async def generate(self, role: str, company_id: str = "default", employee_name: str = None) -> Dict[str, Any]:
-        context = await self._gather_rich_context(role)
+        context = self._gather_rich_context(role)  # synchronous for now
 
         prompt = f"""
             You are an elite engineering onboarding architect.
@@ -31,23 +31,22 @@ class PlaybookGenerator:
             {context}
 
             **Requirements**:
-            - Warm, professional, and motivating tone
-            - Extremely specific (use real names, systems, files, recent changes)
+            - Warm, professional, motivating tone
+            - Extremely specific (real names, systems, files, recent changes)
             - Actionable first-week plan
-            - Highlight ownership and key files from the codebase
-            - No generic filler
+            - Highlight key codebase files
 
             Return **only valid JSON**:
             {{
-                "title": "Onboarding Playbook — {role}",
-                "welcome_message": "Personalized welcome...",
-                "sections": [
+            "title": "Onboarding Playbook — {role}",
+            "welcome_message": "Warm welcome...",
+            "sections": [
                 {{"title": "Week 1 Goals", "content": "..."}},
                 {{"title": "Key People & Ownership", "content": "..."}},
                 {{"title": "Core Systems & Codebase", "content": "..."}},
-                {{"title": "Recent Changes & Context", "content": "..."}},
+                {{"title": "Recent Changes", "content": "..."}},
                 {{"title": "Your First Tasks", "content": "..."}}
-                ]
+            ]
             }}
             """
 
@@ -66,12 +65,13 @@ class PlaybookGenerator:
         record = {
             "company_id": company_id,
             "role": role.lower().replace(" ", "-"),
-            "title": playbook.get("title"),
+            "title": playbook.get("title", f"Onboarding Playbook — {role}"),
             "content": playbook,
             "generated_for": employee_name,
             "expires_at": (datetime.utcnow() + timedelta(days=90)).isoformat(),
             "is_active": True
         }
+
         try:
             self.supabase.table("playbooks").insert(record).execute()
         except Exception as e:
@@ -87,29 +87,33 @@ class PlaybookGenerator:
             "sections": []
         }
 
-    async def _gather_rich_context(self, role: str) -> str:
+    def _gather_rich_context(self, role: str) -> str:
+        """Synchronous context gathering."""
         parts = []
 
-        # 1. People & Ownership
-        people = await self.supabase.table("entities").select("name,metadata").eq("type", "PERSON").limit(10).execute()
+        # People
+        people = self.supabase.table("entities").select("name").eq("type", "PERSON").limit(12).execute()
         if people.data:
-            parts.append("**Team Members:** " + ", ".join(p["name"] for p in people.data))
+            parts.append("**Key People:** " + ", ".join(p["name"] for p in people.data))
 
-        # 2. Systems
-        systems = await self.supabase.table("entities").select("name").eq("type", "SYSTEM").limit(12).execute()
+        # Systems
+        systems = self.supabase.table("entities").select("name").eq("type", "SYSTEM").limit(12).execute()
         if systems.data:
             parts.append("**Core Systems:** " + ", ".join(s["name"] for s in systems.data))
 
-        # 3. Codebase (new physical layer)
-        files = await self.supabase.table("codebase_files").select("file_path,language").limit(25).execute()
+        # Codebase Files (new physical layer)
+        files = self.supabase.table("codebase_files")\
+            .select("file_path, language")\
+            .limit(25).execute()
         if files.data:
-            code_str = "\n".join(f"- {f['file_path']} ({f.get('language','?')})" for f in files.data[:15])
-            parts.append(f"**Important Codebase Files:**\n{code_str}")
+            code_list = "\n".join([f"- {f['file_path']} ({f.get('language', 'Unknown')})" for f in files.data[:15]])
+            parts.append(f"**Key Codebase Files:**\n{code_list}")
 
-        # 4. Recent Activity
-        recent = await self.supabase.table("raw_data").select("content").order("created_at", desc=True).limit(8).execute()
+        # Recent Activity
+        recent = self.supabase.table("raw_data").select("content")\
+            .order("created_at", desc=True).limit(8).execute()
         if recent.data:
-            parts.append("**Recent Changes:** " + " | ".join(r["content"][:100] for r in recent.data))
+            parts.append("**Recent Activity:** " + " | ".join(r["content"][:100] for r in recent.data))
 
         return "\n\n".join(parts)
         
