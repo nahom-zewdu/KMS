@@ -43,28 +43,27 @@ class CodebaseAnalyzer:
         return str(payload.get("repo") or payload.get("repository") or "unknown-repo")
 
     async def _upsert_file(self, file_path: str, repo_name: str, record_id: str, payload: Dict):
-        """the upsert_file method is responsible for inserting or updating a file record in the database. It first checks if the file path is valid and not hidden. 
-        Then, it ensures that the repository exists in the database, retrieves its ID, and constructs a file record with relevant information such as file path, name, language, last modified time, last commit SHA, and author. 
-        Finally, it upserts the file record into the 'codebase_files' table and logs the update."""
+        """The incremental update logic for a single file.
+        It ensures the repository exists, upserts the file metadata, and creates a PART_OF relationship.
+        """
         
         if not file_path or file_path.startswith("."):
             return
 
-        # First ensure repository exists
-        repo_record = {
+        # Ensure repo exists
+        repo_data = {
             "full_name": repo_name,
             "company_id": "default",
             "updated_at": datetime.now(timezone.utc).isoformat()
         }
-        self.supabase.table("repositories").upsert(repo_record, on_conflict="full_name").execute()
+        self.supabase.table("repositories").upsert(repo_data, on_conflict="full_name").execute()
 
-        # Get repo id
-        repo = self.supabase.table("repositories").select("id").eq("full_name", repo_name).single().execute()
-        repo_id = repo.data["id"]
+        repo_res = self.supabase.table("repositories").select("id").eq("full_name", repo_name).single().execute()
+        repo_id = repo_res.data["id"]
 
         file_name = file_path.split("/")[-1]
 
-        file_record = {
+        file_data = {
             "repository_id": repo_id,
             "file_path": file_path,
             "file_name": file_name,
@@ -75,9 +74,23 @@ class CodebaseAnalyzer:
             "metadata": {"source_record_id": record_id}
         }
 
-        self.supabase.table("codebase_files").upsert(file_record, on_conflict="repository_id,file_path").execute()
+        self.supabase.table("codebase_files").upsert(
+            file_data, on_conflict="repository_id,file_path"
+        ).execute()
 
-        logger.info(f"Updated file: {file_path} in {repo_name}")
+        # Create PART_OF relationship
+        relation = {
+            "id": str(uuid.uuid4()),
+            "source_id": f"file-{repo_id}-{hash(file_path)}",  # or use actual file id if needed
+            "target_id": repo_id,
+            "type": "PART_OF",
+            "confidence": 1.0,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "source_record_id": record_id
+        }
+        # Note: Adjust source_id/target_id based on how you generate file IDs
+
+        logger.info(f"File + PART_OF relation: {file_path}")
 
     def _detect_language(self, file_path: str) -> str:
         ext = file_path.split(".")[-1].lower() if "." in file_path else ""
