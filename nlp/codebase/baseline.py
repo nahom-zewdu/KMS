@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class CodebaseBaselineSync:
     def __init__(self, supabase: Client):
         self.supabase = supabase
-        self.gh = Github(os.getenv("GITHUB_TOKEN"))  # Set GITHUB_TOKEN in .env
+        self.gh = Github(os.getenv("GITHUB_API_TOKEN"))  # Set GITHUB_API_TOKEN in .env
 
     def sync_repository(self, repo_full_name: str) -> bool:
         """Perform full tree walk and index all files."""
@@ -58,7 +58,7 @@ class CodebaseBaselineSync:
                     continue
 
                 if item.type == "file":
-                    await self._index_file(item, repo_id, repo_full_name)
+                    self._index_file(item, repo_id, repo_full_name)
                     files_processed += 1
 
             logger.info(f"Baseline sync complete: {files_processed} files indexed for {repo_full_name}")
@@ -68,7 +68,7 @@ class CodebaseBaselineSync:
             logger.error(f"Baseline sync failed for {repo_full_name}: {e}", exc_info=True)
             return False
 
-    async def _index_file(self, gh_file, repo_id: str, repo_full_name: str):
+    def _index_file(self, gh_file, repo_id: str, repo_full_name: str):
         """Index single file from GitHub content object."""
         file_path = gh_file.path
         file_name = file_path.split("/")[-1]
