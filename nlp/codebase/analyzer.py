@@ -79,40 +79,6 @@ class CodebaseAnalyzer:
 
         logger.info(f"Updated file: {file_path} in {repo_name}")
 
-    async def _index_file(self, file_path: str, repo_name: str, record_id: str):
-        """Index file using unified Entity schema."""
-        if not file_path or file_path.startswith("."):
-            return
-
-        file_name = file_path.split("/")[-1]
-
-        entity = Entity(
-            text=file_path.lower(),
-            type="FILE",
-            confidence=1.0,
-            record_id=record_id,
-            source="github",
-            created_at=datetime.now(timezone.utc).isoformat(),
-        )
-
-        db_entity = entity.to_db_record()
-
-        db_entity.update({
-            "file_path": file_path,
-            "language": self._detect_language(file_path),
-            "metadata": {
-                **(db_entity.get("metadata") or {}),
-                "repo": repo_name,
-                "file_name": file_name,
-            }
-        })
-
-        try:
-            self.supabase.table("entities").upsert(db_entity, on_conflict="id").execute()
-            logger.info(f"Indexed file: {file_path} in {repo_name}")
-        except Exception as e:
-            logger.warning(f"Failed to index {file_path}: {e}")
-
     def _detect_language(self, file_path: str) -> str:
         ext = file_path.split(".")[-1].lower() if "." in file_path else ""
         mapping = {"go": "Go", "py": "Python", "js": "JavaScript", "ts": "TypeScript", "java": "Java",
