@@ -115,8 +115,8 @@ class CodebaseAnalyzer:
 
     def _detect_language(self, file_path: str) -> str:
         ext = file_path.split(".")[-1].lower() if "." in file_path else ""
-        mapping = {
-            "go": "Go", "py": "Python", "js": "JavaScript", "ts": "TypeScript",
-            "java": "Java", "rs": "Rust", "cpp": "C++", "cs": "C#",
-        }
+        mapping = {"go": "Go", "py": "Python", "js": "JavaScript", "ts": "TypeScript", "java": "Java",
+                   "cpp": "C++", "c": "C", "rs": "Rust", "rb": "Ruby", "php": "PHP", "swift": "Swift",
+                   "kt": "Kotlin", "scala": "Scala", "hs": "Haskell", "lua": "Lua", "pl": "Perl",
+                   "sh": "Shell", "bash": "Bash"}
         return mapping.get(ext, "Unknown")
