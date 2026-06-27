@@ -16,7 +16,7 @@ generator = PlaybookGenerator(supabase)
 @app.post("/playbooks/generate")
 async def generate_playbook(payload: dict):
     try:
-        role = payload.get("role", "backend-engineer")
+        role = payload.get("role", "software-engineer")
         employee_name = payload.get("employee_name")
 
         playbook = await generator.generate(role=role, employee_name=employee_name)
