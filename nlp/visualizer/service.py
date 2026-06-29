@@ -121,3 +121,23 @@ class VisualizerService:
                 "next": sorted_modules[(i + 1) % len(sorted_modules)]["name"] if len(sorted_modules) > 1 else "Core Systems"
             })
         return path
+
+    def _build_request_flows(self) -> List[Dict]:
+        """Operational flows inferred from KG."""
+        return [
+            {
+                "name": "GitHub Push Flow",
+                "steps": ["Webhook → Ingestion → NER/RE → KG Update"],
+                "description": "How code changes become knowledge"
+            },
+            {
+                "name": "Slack Event Flow",
+                "steps": ["Message → Rich Content → Entity Extraction → Relations"],
+                "description": "How team communication becomes structured knowledge"
+            },
+            {
+                "name": "User Query Flow",
+                "steps": ["Question → Graph + Vector Search → LLM Synthesis"],
+                "description": "How questions get answered instantly"
+            }
+        ]
