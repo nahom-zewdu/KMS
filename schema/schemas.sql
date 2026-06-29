@@ -235,3 +235,19 @@ CREATE TABLE IF NOT EXISTS public.file_entity_links (
     confidence FLOAT DEFAULT 0.8,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- 3. Codebase modules (logical structure)
+CREATE TABLE IF NOT EXISTS public.codebase_modules (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    repository_id UUID REFERENCES repositories(id) ON DELETE CASCADE,
+    module_path TEXT NOT NULL,           -- e.g. "nlp/engine", "api/handlers"
+    module_name TEXT NOT NULL,
+    inferred_type TEXT,                  -- "core", "worker", "api", "utils"
+    description TEXT,
+    importance_score FLOAT DEFAULT 0.5,  -- computed from activity, relationships
+    metadata JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_modules_repo ON codebase_modules(repository_id);
+CREATE INDEX idx_modules_path ON codebase_modules(module_path);
