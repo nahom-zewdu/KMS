@@ -173,3 +173,18 @@ class VisualizerService:
             }
         except:
             return {"safe_first": [], "high_risk": []}
+
+    def _build_dependency_impact(self) -> List[Dict]:
+        """Downstream impact examples."""
+        return [
+            {
+                "file": "nlp/engine/ingestion.py",
+                "impact": "Affects all Slack and GitHub event processing",
+                "downstream": ["Knowledge Graph", "Query Engine", "Playbooks"]
+            },
+            {
+                "file": "api/handlers/github.go",
+                "impact": "Affects all GitHub webhook ingestion",
+                "downstream": ["NER/RE", "Codebase Files"]
+            }
+        ]
