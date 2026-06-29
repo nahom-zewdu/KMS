@@ -17,71 +17,74 @@ class VisualizerService:
     def __init__(self, supabase: Client):
         self.supabase = supabase
 
-    async def build_for_role(self, role: str) -> Dict:
-        """Main entrypoint for playbook visualizer data."""
-        repo_name = "nahom-zewdu/KMS"  # TODO: make dynamic per company later
+    def build_for_role(self, role: str) -> Dict:
+        """Main entrypoint synchronous for simplicity and reliability."""
+        repo_name = "nahom-zewdu/KMS"  # Make dynamic later via company_id
 
-        # 1. Get high-level architecture (inferred from top-level dirs + entities)
-        architecture = await self._build_architecture_layers(repo_name)
-
-        # 2. Get modules with importance
-        modules = await self._build_modules(repo_name, role)
-
-        # 3. Sample key files per module
-        files = await self._build_key_files(repo_name)
+        architecture = self._build_architecture_layers(repo_name)
+        modules = self._build_modules(repo_name, role)
+        key_files = self._build_key_files(repo_name)
 
         return {
             "architecture": architecture,
             "modules": modules,
-            "key_files": files,
+            "key_files": key_files,
             "role": role
         }
 
-    async def _build_architecture_layers(self, repo_name: str) -> List[Dict]:
+    def _build_architecture_layers(self, repo_name: str) -> List[Dict]:
         """High-level layers inferred from directory structure."""
-        # Simple but effective inference from top-level folders
         layers = ["api", "nlp", "worker", "services", "domain", "utils"]
-        
         return [
             {
                 "name": layer.capitalize(),
-                "description": f"Core {layer} functionality",
-                "module_count": 0  # Will be filled later
+                "description": f"Core {layer} functionality and business logic",
+                "module_count": 0
             } for layer in layers
         ]
 
-    async def _build_modules(self, repo_name: str, role: str) -> List[Dict]:
-        """Modules with importance scoring."""
-        # For MVP, use directory-based modules from codebase_files
-        result = await self.supabase.table("codebase_files")\
-            .select("file_path")\
-            .like("file_path", f"%{role}%")\
-            .limit(50).execute()
+    def _build_modules(self, repo_name: str, role: str) -> List[Dict]:
+        """Modules with importance scoring based on file count and role relevance."""
+        try:
+            result = self.supabase.table("codebase_files")\
+                .select("file_path")\
+                .limit(80).execute()
 
-        modules = {}
-        for row in result.data or []:
-            parts = row["file_path"].split("/")
-            if len(parts) > 1:
-                mod = parts[0] + "/" + (parts[1] if len(parts) > 1 else "")
-                modules[mod] = modules.get(mod, 0) + 1
+            modules = {}
+            for row in result.data or []:
+                parts = row["file_path"].split("/")
+                if len(parts) > 1:
+                    mod = "/".join(parts[:2])  # e.g. "nlp/engine"
+                    modules[mod] = modules.get(mod, 0) + 1
 
-        return [
-            {"name": name, "file_count": count, "importance": min(1.0, count / 10)}
-            for name, count in list(modules.items())[:12]
-        ]
+            return [
+                {
+                    "name": name,
+                    "file_count": count,
+                    "importance": min(1.0, count / 8.0)
+                }
+                for name, count in list(modules.items())[:15]
+            ]
+        except Exception as e:
+            logger.warning(f"Failed to build modules: {e}")
+            return []
 
-    async def _build_key_files(self, repo_name: str) -> List[Dict]:
-        """Key files with enriched context."""
-        files = await self.supabase.table("codebase_files")\
-            .select("file_path, language, last_author, metadata")\
-            .limit(30).execute()
+    def _build_key_files(self, repo_name: str) -> List[Dict]:
+        """Key files with basic enriched context."""
+        try:
+            files = self.supabase.table("codebase_files")\
+                .select("file_path, language, last_author, metadata")\
+                .limit(40).execute()
 
-        return [
-            {
-                "path": f["file_path"],
-                "name": f["file_path"].split("/")[-1],
-                "language": f.get("language"),
-                "last_author": f.get("last_author"),
-                "context": "High importance based on recent activity"  # LLM can enrich later
-            } for f in (files.data or [])
-        ]
+            return [
+                {
+                    "path": f["file_path"],
+                    "name": f["file_path"].split("/")[-1],
+                    "language": f.get("language", "Unknown"),
+                    "last_author": f.get("last_author"),
+                    "context": "Important file based on recent activity"
+                } for f in (files.data or [])
+            ]
+        except Exception as e:
+            logger.warning(f"Failed to build key files: {e}")
+            return []
