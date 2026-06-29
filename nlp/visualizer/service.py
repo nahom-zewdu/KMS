@@ -19,20 +19,23 @@ class VisualizerService:
         self.supabase = supabase
 
     def build_for_role(self, role: str) -> Dict:
-        """Main entrypoint for progressive disclosure."""
+        """Main entrypoint."""
         try:
-            repo_name = "nahom-zewdu/KMS"  # TODO: dynamic via company_id
+            repo_name = "nahom-zewdu/KMS"
 
             architecture = self._build_architecture()
             modules = self._build_modules(role)
             key_files = self._build_key_files(role)
+            learning_path = self._build_learning_path(role, modules)
+            request_flows = self._build_request_flows()
 
             return {
                 "architecture": architecture,
                 "modules": modules,
                 "key_files": key_files,
+                "learning_path": learning_path,
+                "request_flows": request_flows,
                 "role": role,
-                "recommended_start": self._recommended_start(modules, role)
             }
         except Exception as e:
             logger.error(f"Visualizer build failed: {e}")
@@ -101,3 +104,20 @@ class VisualizerService:
         if "backend" in role.lower():
             return "Start with API Layer and Business Logic modules."
         return "Begin with the highest importance modules shown above."
+
+    def _build_learning_path(self, role: str, modules: List) -> List[Dict]:
+        """Role-aware suggested reading order."""
+        path = []
+        # Prioritize high-importance modules
+        sorted_modules = sorted(modules, key=lambda m: m.get("importance", 0), reverse=True)
+
+        for i, mod in enumerate(sorted_modules[:5]):
+            path.append({
+                "step": i + 1,
+                "title": mod["name"],
+                "why": f"Core {mod['name']} functionality is foundational for {role} work",
+                "effort": "Medium",
+                "difficulty": "Medium",
+                "next": sorted_modules[(i + 1) % len(sorted_modules)]["name"] if len(sorted_modules) > 1 else "Core Systems"
+            })
+        return path
