@@ -141,3 +141,35 @@ class VisualizerService:
                 "description": "How questions get answered instantly"
             }
         ]
+    
+    def _build_safe_zones(self, role: str) -> Dict:
+        """Safe first contributions + high-risk areas."""
+        try:
+            files = self.supabase.table("codebase_files")\
+                .select("file_path, last_author, metadata")\
+                .limit(50).execute()
+
+            safe = []
+            risky = []
+
+            for f in files.data or []:
+                path = f["file_path"]
+                if any(k in path.lower() for k in ["utils", "common", "helper"]):
+                    safe.append({
+                        "path": path,
+                        "reason": "Low dependency, high reusability",
+                        "risk": "Low"
+                    })
+                elif any(k in path.lower() for k in ["core", "auth", "payment"]):
+                    risky.append({
+                        "path": path,
+                        "reason": "High dependency and business critical",
+                        "risk": "High"
+                    })
+
+            return {
+                "safe_first": safe[:5],
+                "high_risk": risky[:5]
+            }
+        except:
+            return {"safe_first": [], "high_risk": []}
