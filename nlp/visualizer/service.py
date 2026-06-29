@@ -28,6 +28,8 @@ class VisualizerService:
             key_files = self._build_key_files(role)
             learning_path = self._build_learning_path(role, modules)
             request_flows = self._build_request_flows()
+            safe_zones = self._build_safe_zones(role)
+            dependency_impact = self._build_dependency_impact()
 
             return {
                 "architecture": architecture,
@@ -35,6 +37,8 @@ class VisualizerService:
                 "key_files": key_files,
                 "learning_path": learning_path,
                 "request_flows": request_flows,
+                "safe_zones": safe_zones,
+                "dependency_impact": dependency_impact,
                 "role": role,
             }
         except Exception as e:
