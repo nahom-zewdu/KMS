@@ -19,11 +19,11 @@ class VisualizerService:
         self.supabase = supabase
 
     def build_for_role(self, role: str) -> Dict:
-        """Main entrypoint — returns structured data for progressive disclosure."""
+        """Main entrypoint for progressive disclosure."""
         try:
-            repo_name = "nahom-zewdu/KMS"  # TODO: Make dynamic via company_id later
+            repo_name = "nahom-zewdu/KMS"  # TODO: dynamic via company_id
 
-            architecture = self._build_architecture_layers()
+            architecture = self._build_architecture()
             modules = self._build_modules(role)
             key_files = self._build_key_files(role)
 
@@ -32,28 +32,27 @@ class VisualizerService:
                 "modules": modules,
                 "key_files": key_files,
                 "role": role,
-                "recommendation": self._generate_role_recommendation(role, modules)
+                "recommended_start": self._recommended_start(modules, role)
             }
         except Exception as e:
-            logger.error(f"Visualizer build failed for {role}: {e}")
-            return {"error": "Failed to load visualizer data"}
+            logger.error(f"Visualizer build failed: {e}")
+            return {"error": "Failed to load visualizer"}
 
-    def _build_architecture_layers(self) -> List[Dict]:
-        """High-level architecture inferred from directory + entities."""
+    def _build_architecture(self) -> List[Dict]:
+        """High-level system layers inferred from data."""
         return [
             {"name": "API Layer", "description": "Handles incoming requests and routing", "importance": 0.95},
-            {"name": "Business Logic", "description": "Core domain services and workflows", "importance": 0.9},
-            {"name": "Knowledge Engine", "description": "NLP, entity extraction, and graph building", "importance": 0.85},
-            {"name": "Worker Layer", "description": "Background processing and ingestion", "importance": 0.8},
-            {"name": "Infrastructure", "description": "Storage, Redis, Supabase", "importance": 0.7},
+            {"name": "Business Logic", "description": "Core domain services", "importance": 0.9},
+            {"name": "Knowledge Engine", "description": "NLP, entity extraction, graph", "importance": 0.85},
+            {"name": "Worker Layer", "description": "Background ingestion and processing", "importance": 0.8},
         ]
 
     def _build_modules(self, role: str) -> List[Dict]:
-        """Role-aware modules with importance."""
+        """Modules inferred from codebase_files + role relevance."""
         try:
             files = self.supabase.table("codebase_files")\
-                .select("file_path, language")\
-                .limit(120).execute()
+                .select("file_path")\
+                .limit(150).execute()
 
             module_map = {}
             for f in files.data or []:
@@ -62,13 +61,12 @@ class VisualizerService:
                     mod = "/".join(parts[:2])
                     module_map[mod] = module_map.get(mod, 0) + 1
 
-            # Simple role-based boost
-            role_keywords = role.lower().split()
             modules = []
             for name, count in sorted(module_map.items(), key=lambda x: x[1], reverse=True)[:12]:
-                importance = min(1.0, count / 12)
-                if any(kw in name.lower() for kw in role_keywords):
-                    importance = min(1.0, importance + 0.3)
+                importance = min(1.0, count / 10)
+                # Role boost
+                if any(kw in name.lower() for kw in role.lower().split()):
+                    importance = min(1.0, importance + 0.35)
                 modules.append({
                     "name": name,
                     "file_count": count,
@@ -81,10 +79,10 @@ class VisualizerService:
             return []
 
     def _build_key_files(self, role: str) -> List[Dict]:
-        """Key files with context."""
+        """Key files with enriched context."""
         try:
             files = self.supabase.table("codebase_files")\
-                .select("file_path, language, last_author, metadata")\
+                .select("file_path, language, last_author")\
                 .limit(40).execute()
 
             return [
@@ -93,16 +91,13 @@ class VisualizerService:
                     "name": f["file_path"].split("/")[-1],
                     "language": f.get("language", "Unknown"),
                     "last_author": f.get("last_author"),
-                    "context": "High relevance for new developers"
                 } for f in (files.data or [])
             ]
         except:
             return []
 
-    def _generate_role_recommendation(self, role: str, modules: List) -> str:
-        """Role-specific starting advice."""
+    def _recommended_start(self, modules: List, role: str) -> str:
+        """Role-aware starting recommendation."""
         if "backend" in role.lower():
             return "Start with API Layer and Business Logic modules."
-        if "frontend" in role.lower():
-            return "Focus on UI components and API integration files."
-        return "Begin with high-importance modules shown above."
+        return "Begin with the highest importance modules shown above."
