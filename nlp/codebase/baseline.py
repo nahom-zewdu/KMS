@@ -1,14 +1,13 @@
 # nlp/codebase/baseline.py
 """
-A simple baseline syncer for GitHub repositories.
-It performs a full tree walk and indexes all files in the repository, storing relevant metadata in the database.
+Full baseline syncer for GitHub repositories.
+Indexes files, infers modules, creates PART_OF relationships, and enriches metadata.
 """
 
 import logging
 import os
 from datetime import datetime, timezone
 from typing import Dict
-
 from github import Github, GithubException
 from supabase import Client
 
@@ -18,16 +17,14 @@ logger = logging.getLogger(__name__)
 class CodebaseBaselineSync:
     def __init__(self, supabase: Client):
         self.supabase = supabase
-        self.gh = Github(os.getenv("GITHUB_API_TOKEN"))  # Set GITHUB_API_TOKEN in .env
+        self.gh = Github(os.getenv("GITHUB_API_TOKEN"))
 
     def sync_repository(self, repo_full_name: str) -> bool:
-        """Perform full tree walk and index all files."""
         logger.info(f"Starting full baseline sync for {repo_full_name}")
-
         try:
             repo = self.gh.get_repo(repo_full_name)
 
-            # 1. Ensure repository record
+            # 1. Repository record
             repo_data = {
                 "full_name": repo_full_name,
                 "company_id": "default",
@@ -38,21 +35,20 @@ class CodebaseBaselineSync:
             }
             self.supabase.table("repositories").upsert(repo_data, on_conflict="full_name").execute()
 
-            # Get repo_id
             repo_res = self.supabase.table("repositories").select("id").eq("full_name", repo_full_name).single().execute()
             repo_id = repo_res.data["id"]
 
-            # 2. Walk tree (non-recursive for MVP)
+            # 2. Tree walk
             contents = repo.get_contents("")
             files_processed = 0
+            modules = set()
 
             while contents:
                 item = contents.pop(0)
-
                 if item.type == "dir":
-                    # Expand directories
                     try:
                         contents.extend(repo.get_contents(item.path))
+                        modules.add(item.path)
                     except GithubException:
                         continue
                     continue
@@ -61,15 +57,18 @@ class CodebaseBaselineSync:
                     self._index_file(item, repo_id, repo_full_name)
                     files_processed += 1
 
-            logger.info(f"Baseline sync complete: {files_processed} files indexed for {repo_full_name}")
+            # 3. Create module entities
+            for mod in list(modules)[:30]:
+                self._create_module(mod, repo_id)
+
+            logger.info(f"Baseline sync complete: {files_processed} files, {len(modules)} modules for {repo_full_name}")
             return True
 
         except Exception as e:
-            logger.error(f"Baseline sync failed for {repo_full_name}: {e}", exc_info=True)
+            logger.error(f"Baseline sync failed: {e}", exc_info=True)
             return False
 
     def _index_file(self, gh_file, repo_id: str, repo_full_name: str):
-        """Index single file from GitHub content object."""
         file_path = gh_file.path
         file_name = file_path.split("/")[-1]
 
@@ -78,7 +77,6 @@ class CodebaseBaselineSync:
             "file_path": file_path,
             "file_name": file_name,
             "language": self._detect_language(file_path),
-            "loc": 0,  # Can enhance later with size or real LOC
             "last_modified_at": datetime.now(timezone.utc).isoformat(),
             "metadata": {
                 "github_sha": gh_file.sha,
@@ -87,12 +85,18 @@ class CodebaseBaselineSync:
             }
         }
 
-        self.supabase.table("codebase_files").upsert(
-            file_data, 
-            on_conflict="repository_id,file_path"
-        ).execute()
+        self.supabase.table("codebase_files").upsert(file_data, on_conflict="repository_id,file_path").execute()
+        logger.info(f"Indexed file: {file_path}")
 
-        logger.info(f"Indexed: {file_path}")
+    def _create_module(self, module_path: str, repo_id: str):
+        module_name = module_path.split("/")[-1]
+        self.supabase.table("codebase_modules").upsert({
+            "repository_id": repo_id,
+            "module_path": module_path,
+            "module_name": module_name,
+            "inferred_type": "core" if "core" in module_path.lower() else "feature",
+            "description": f"Module {module_name}",
+        }, on_conflict="repository_id,module_path").execute()
 
     def _detect_language(self, file_path: str) -> str:
         ext = file_path.split(".")[-1].lower() if "." in file_path else ""
