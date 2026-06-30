@@ -1,7 +1,10 @@
 # nlp/codebase/analyzer.py
 """
-KMS Codebase Analyzer — Baseline + Incremental model.
-Maintains physical codebase structure in dedicated tables.
+This module provides a service to analyze codebase changes from GitHub push events.
+It processes the payload, extracts changed files, and updates the codebase_files table in Supabase
+with metadata and PART_OF relationships.
+It is designed to handle incremental updates efficiently, ensuring that the codebase representation remains current.
+The analyzer is intended to be used in conjunction with a webhook listener that receives GitHub push events.
 """
 
 import logging
@@ -10,7 +13,6 @@ from datetime import datetime, timezone
 import uuid
 
 from supabase import Client
-from engine.schema import Entity
 
 logger = logging.getLogger(__name__)
 
@@ -20,21 +22,22 @@ class CodebaseAnalyzer:
         self.supabase = supabase
 
     async def process_push_event(self, payload: Dict[str, Any], record_id: str):
-        """Incremental update from GitHub push."""
-        logger.info(f"Processing incremental push | record={record_id}")
+        """Incremental update from push."""
+        logger.info(f"Incremental push | record={record_id}")
 
         try:
             repo_name = self._extract_repo_name(payload)
             files = payload.get("files", {})
             changed_files = files.get("modified", []) + files.get("added", [])
 
-            for file_path in changed_files[:50]:
-                await self._upsert_file(file_path, repo_name, record_id, payload)
+            for file_path in changed_files[:60]:
+                if file_path:
+                    await self._upsert_file(file_path, repo_name, record_id, payload)
 
-            logger.info(f"Incremental update complete: {len(changed_files)} files")
+            logger.info(f"Incremental update: {len(changed_files)} files for {repo_name}")
             return True
         except Exception as e:
-            logger.error(f"Incremental push failed: {e}", exc_info=True)
+            logger.error(f"Incremental failed {record_id}: {e}", exc_info=True)
             return False
 
     def _extract_repo_name(self, payload: Dict) -> str:
@@ -50,12 +53,8 @@ class CodebaseAnalyzer:
         if not file_path or file_path.startswith("."):
             return
 
-        # Ensure repo exists
-        repo_data = {
-            "full_name": repo_name,
-            "company_id": "default",
-            "updated_at": datetime.now(timezone.utc).isoformat()
-        }
+        # Ensure repo
+        repo_data = {"full_name": repo_name, "company_id": "default", "updated_at": datetime.now(timezone.utc).isoformat()}
         self.supabase.table("repositories").upsert(repo_data, on_conflict="full_name").execute()
 
         repo_res = self.supabase.table("repositories").select("id").eq("full_name", repo_name).single().execute()
@@ -74,28 +73,17 @@ class CodebaseAnalyzer:
             "metadata": {"source_record_id": record_id}
         }
 
-        self.supabase.table("codebase_files").upsert(
-            file_data, on_conflict="repository_id,file_path"
-        ).execute()
+        self.supabase.table("codebase_files").upsert(file_data, on_conflict="repository_id,file_path").execute()
 
         # Create PART_OF relationship
-        relation = {
+        self.supabase.table("edges").upsert({
             "id": str(uuid.uuid4()),
-            "source_id": f"file-{repo_id}-{hash(file_path)}",  # or use actual file id if needed
+            "source_id": f"file-{repo_id}-{hash(file_path)}",  # temporary
             "target_id": repo_id,
             "type": "PART_OF",
             "confidence": 1.0,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "source_record_id": record_id
-        }
-        # Note: Adjust source_id/target_id based on how you generate file IDs
+        }, on_conflict="id").execute()
 
-        logger.info(f"File + PART_OF relation: {file_path}")
-
-    def _detect_language(self, file_path: str) -> str:
-        ext = file_path.split(".")[-1].lower() if "." in file_path else ""
-        mapping = {"go": "Go", "py": "Python", "js": "JavaScript", "ts": "TypeScript", "java": "Java",
-                   "cpp": "C++", "c": "C", "rs": "Rust", "rb": "Ruby", "php": "PHP", "swift": "Swift",
-                   "kt": "Kotlin", "scala": "Scala", "hs": "Haskell", "lua": "Lua", "pl": "Perl",
-                   "sh": "Shell", "bash": "Bash"}
-        return mapping.get(ext, "Unknown")
+        logger.info(f"Updated file + PART_OF: {file_path}")
