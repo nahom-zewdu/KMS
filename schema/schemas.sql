@@ -211,6 +211,8 @@ CREATE TABLE IF NOT EXISTS public.codebase_files (
     repository_id UUID NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
     file_path TEXT NOT NULL,
     file_name TEXT NOT NULL,
+    module_path TEXT,                    -- e.g. "nlp/engine", "api/handlers"
+    importance_score FLOAT DEFAULT 0.5,  -- computed from activity, relationships
     language TEXT,
     loc INT DEFAULT 0,
     last_modified_at TIMESTAMPTZ,
