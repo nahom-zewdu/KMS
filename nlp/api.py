@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
+from codebase.baseline import CodebaseBaselineSync
 from playbooks.generator import PlaybookGenerator
 from visualizer.service import VisualizerService
 from utils.supabase import init_supabase
@@ -48,6 +49,21 @@ async def generate_playbook(payload: dict):
             "success": False,
             "error": str(e)
         }, status_code=500)
+    
+
+@app.get("/github/sync-baseline")
+async def sync_baseline(repo: str):
+    """Sync the baseline for a specific repository."""
+    try:
+        syncer = CodebaseBaselineSync(supabase)
+        success = syncer.sync_repository(repo)
+        if success:
+            return JSONResponse({"success": True, "message": f"Baseline synced for {repo}"})
+        else:
+            return JSONResponse({"success": False, "error": f"Failed to sync baseline for {repo}"}, status_code=500)
+    except Exception as e:
+        logging.error(f"Baseline sync failed: {e}")
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
 @app.get("/visualizer")
 async def get_visualizer(role: str = "backend-engineer"):
