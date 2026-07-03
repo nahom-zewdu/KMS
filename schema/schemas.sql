@@ -224,6 +224,9 @@ CREATE TABLE IF NOT EXISTS public.codebase_files (
     UNIQUE(repository_id, file_path)
 );
 
+-- Index for performance
+CREATE INDEX IF NOT EXISTS idx_codebase_files_module_path ON codebase_files(module_path);
+CREATE INDEX IF NOT EXISTS idx_codebase_files_importance ON codebase_files(importance_score);
 CREATE INDEX IF NOT EXISTS idx_files_repo ON codebase_files(repository_id);
 CREATE INDEX IF NOT EXISTS idx_files_path ON codebase_files(file_path);
 CREATE INDEX IF NOT EXISTS idx_files_language ON codebase_files(language);
