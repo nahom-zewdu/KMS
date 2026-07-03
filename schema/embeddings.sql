@@ -1,3 +1,4 @@
+-- schema/embeddings.sql
 -- nlp/migrations/001_query_engine_v2_final.sql
 -- Purpose: Enable KMS Query Engine v2 (Fixed: IMMUTABLE generated column)
 -- Adds pgvector embeddings, edge confidence/lifecycle, and indexes
