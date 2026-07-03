@@ -1,4 +1,5 @@
 -- schema/graph_traverser_rpc.sql
+-- schema/graph_traverser_rpc.sql
 -- supabase/functions/search_edges_by_entity.sql
 -- Graph Traverser RPC: search edges by entity name + relation types filter 
 -- Returns edges where either source or target entity name matches the search term
