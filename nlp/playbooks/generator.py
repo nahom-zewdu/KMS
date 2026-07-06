@@ -30,13 +30,13 @@ class PlaybookGenerator:
         self.visualizer = VisualizerService(supabase)
 
     def generate(self, role: str, company_id: str = "default", employee_name: str = None) -> Dict[str, Any]:
-        """Main playbook generation with token optimization."""
-        logger.info(f"Generating playbook for role: {role}")
+        """Main playbook generation."""
+        logger.info(f"Generating playbook for role: {role} (company: {company_id})")
 
-        # 1. Get visualizer data (full version kept for output)
+        # 1. Get visualizer data
         visualizer_data = self.visualizer.build_for_role(role)
 
-        # 2. Compact context for LLM prompt
+        # 2. Compact context for LLM
         compact_context = self._gather_compact_context(role)
 
         prompt = f"""
@@ -48,8 +48,8 @@ class PlaybookGenerator:
             **Real Company Context**:
             {compact_context}
 
-            **Visualizer Summary** (use this structure to make playbook specific):
-            {json.dumps(visualizer_data, indent=2)[:2800]}   # Truncated for safety
+            **Visualizer Summary** (use this structure):
+            {json.dumps(visualizer_data, indent=2)[:2600]}
 
             Create a practical, motivating, and highly actionable onboarding playbook.
             Return **only valid JSON**:
@@ -78,10 +78,10 @@ class PlaybookGenerator:
             logger.warning(f"JSON parse failed: {e}. Using fallback.")
             playbook = self._fallback_playbook(role)
 
-        # 3. Post-process: Always merge full visualizer data (no token waste)
+        # Always attach full visualizer data (post-LLM)
         playbook["visualizer"] = visualizer_data
 
-        # Save to database
+        # Save to DB (idempotent)
         record = {
             "company_id": company_id,
             "role": role.lower().replace(" ", "-"),
@@ -91,32 +91,35 @@ class PlaybookGenerator:
             "expires_at": (datetime.utcnow() + timedelta(days=90)).isoformat(),
             "is_active": True
         }
+
         try:
+            # Use upsert with correct constraint
             self.supabase.table("playbooks").upsert(record, on_conflict="company_id,role").execute()
+            logger.info(f"Playbook saved for {role}")
         except Exception as e:
             logger.error(f"Failed to save playbook: {e}")
 
-        logger.info(f"✅ Playbook generated successfully for {role}")
+        logger.info(f"Playbook generated successfully for {role}")
         return playbook
 
     def _gather_compact_context(self, role: str) -> str:
-        """Token-efficient context (short & high-signal)."""
+        """Token-efficient context."""
         parts = []
 
         # People (limited)
         people = self.supabase.table("entities").select("name").eq("type", "PERSON").limit(6).execute()
         if people.data:
-            parts.append("Key People: " + ", ".join([p["name"] for p in people.data]))
+            parts.append("Key People: " + ", ".join(p["name"] for p in people.data))
 
         # Recent activity (very short)
         recent = self.supabase.table("raw_data").select("content").order("created_at", desc=True).limit(4).execute()
         if recent.data:
-            parts.append("Recent: " + " | ".join([r["content"][:90] for r in recent.data]))
+            parts.append("Recent: " + " | ".join(r["content"][:90] for r in recent.data))
 
-        # Codebase summary
-        files = self.supabase.table("codebase_files").select("file_path").limit(10).execute()
+        # Key files (limited)
+        files = self.supabase.table("codebase_files").select("file_path").limit(8).execute()
         if files.data:
-            parts.append("Key Files: " + ", ".join([f["file_path"] for f in files.data[:6]]))
+            parts.append("Key Files: " + ", ".join(f["file_path"] for f in files.data[:5]))
 
         return "\n".join(parts)
 
