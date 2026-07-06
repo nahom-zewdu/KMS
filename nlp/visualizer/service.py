@@ -177,11 +177,27 @@ class VisualizerService:
         ]
 
     def _build_ownership(self, role: str) -> Dict:
-        """Real ownership from PERSON → OWNS → FILE / PROJECT edges (future-proof)."""
+        """Real ownership from PERSON → OWNS → FILE edges."""
         try:
-            # Query for ownership edges (expand later)
-            res = self.supabase.table("edges").select("source_id,target_id,type")\
-                .eq("type", "OWNS").limit(20).execute()
-            return {"owners": [], "note": "Ownership mapping will be enriched from PERSON entities"}
-        except:
-            return {"owners": [], "note": "No ownership data yet"}
+            # Find people who own files or systems
+            res = self.supabase.table("edges").select("source_id,target_id,type,metadata")\
+                .eq("type", "OWNS").limit(30).execute()
+
+            owners = []
+            for edge in res.data or []:
+                # Fetch source (PERSON) and target (FILE/SYSTEM)
+                source = self.supabase.table("entities").select("name,type").eq("id", edge["source_id"]).single().execute()
+                if source.data and source.data["type"] == "PERSON":
+                    owners.append({
+                        "person": source.data["name"],
+                        "owns": edge["target_id"],  # can resolve later
+                        "confidence": edge.get("confidence", 0.9)
+                    })
+
+            return {
+                "key_owners": owners[:8],
+                "note": "Ownership derived from KG edges"
+            }
+        except Exception as e:
+            logger.warning(f"Ownership query failed: {e}")
+            return {"key_owners": [], "note": "Ownership mapping in progress"}
