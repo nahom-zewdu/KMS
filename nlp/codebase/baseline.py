@@ -1,7 +1,12 @@
 # nlp/codebase/baseline.py
 """
 Full baseline syncer for GitHub repositories.
-Indexes files, creates proper FILE entities, infers modules, and builds PART_OF relationships safely.
+This module performs a complete traversal of the repository tree, indexing files and modules.
+It creates REPOSITORY entities, FILE entities, and PART_OF relationships in the knowledge graph,
+and populates the codebase_files and codebase_modules tables in Supabase.
+The sync is designed to be idempotent and can be re-run safely.
+The main entry point is the `sync_repository` method, which takes a repository full name
+Creates REPOSITORY entity + codebase_files + PART_OF edges safely.  
 """
 
 import logging
@@ -26,7 +31,21 @@ class CodebaseBaselineSync:
         try:
             repo = self.gh.get_repo(repo_full_name)
 
-            # 1. Repository record
+            # 1. REPOSITORY entity in KG
+            repo_entity_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"repo:{repo_full_name}"))
+            self.supabase.table("entities").upsert({
+                "id": repo_entity_id,
+                "type": "REPOSITORY",
+                "name": repo_full_name,
+                "metadata": {
+                    "description": repo.description or "",
+                    "language": repo.language,
+                    "default_branch": repo.default_branch
+                },
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }, on_conflict="id").execute()
+
+            # 2. repositories table
             repo_data = {
                 "full_name": repo_full_name,
                 "company_id": "default",
@@ -34,14 +53,13 @@ class CodebaseBaselineSync:
                 "language": repo.language,
                 "default_branch": repo.default_branch,
                 "last_synced_at": datetime.now(timezone.utc).isoformat(),
-                "metadata": {"size": repo.size, "stars": repo.stargazers_count}
             }
             self.supabase.table("repositories").upsert(repo_data, on_conflict="full_name").execute()
 
             repo_res = self.supabase.table("repositories").select("id").eq("full_name", repo_full_name).single().execute()
-            repo_id = repo_res.data["id"]
+            physical_repo_id = repo_res.data["id"]
 
-            # 2. Tree walk
+            # 3. Tree walk
             contents = repo.get_contents("")
             files_processed = 0
             module_map = {}
@@ -57,58 +75,54 @@ class CodebaseBaselineSync:
                     continue
 
                 if item.type == "file":
-                    self._index_file(item, repo_id, repo_full_name)
+                    self._index_file(item, repo_entity_id, physical_repo_id, repo_full_name)
                     files_processed += 1
 
-            # 3. Create modules
+            # 4. Modules
             for mod_path, file_count in module_map.items():
-                self._create_module(mod_path, repo_id, file_count)
+                self._create_module(mod_path, physical_repo_id, file_count)
 
-            logger.info(f"Baseline sync complete: {files_processed} files, {len(module_map)} modules for {repo_full_name}")
+            logger.info(f"✅ Baseline sync complete: {files_processed} files, {len(module_map)} modules")
             return True
 
         except Exception as e:
-            logger.error(f"Baseline sync failed for {repo_full_name}: {e}", exc_info=True)
+            logger.error(f"Baseline sync failed: {e}", exc_info=True)
             return False
 
-    def _index_file(self, gh_file, repo_id: str, repo_full_name: str):
-        """Create FILE entity + codebase_files entry + PART_OF edge."""
+    def _index_file(self, gh_file, repo_entity_id: str, physical_repo_id: str, repo_full_name: str):
         file_path = gh_file.path
         file_name = file_path.split("/")[-1]
         module_path = "/".join(file_path.split("/")[:-1]) if "/" in file_path else ""
 
-        # 1. Create FILE entity (required for FK on edges)
+        # FILE entity
         file_entity_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"file:{repo_full_name}:{file_path}"))
-        entity_data = {
+        self.supabase.table("entities").upsert({
             "id": file_entity_id,
             "type": "FILE",
             "name": file_name,
             "file_path": file_path,
             "language": self._detect_language(file_path),
-            "metadata": {"module_path": module_path, "repo": repo_full_name}
-        }
-        self.supabase.table("entities").upsert(entity_data, on_conflict="id").execute()
+            "metadata": {"module_path": module_path}
+        }, on_conflict="id").execute()
 
-        # 2. codebase_files entry
+        # codebase_files
         file_data = {
-            "repository_id": repo_id,
+            "repository_id": physical_repo_id,
             "file_path": file_path,
             "file_name": file_name,
             "module_path": module_path,
             "language": self._detect_language(file_path),
             "last_modified_at": datetime.now(timezone.utc).isoformat(),
             "last_commit_sha": gh_file.sha,
-            "metadata": {"github_sha": gh_file.sha}
         }
-
         self.supabase.table("codebase_files").upsert(file_data, on_conflict="repository_id,file_path").execute()
 
-        # 3. PART_OF edge (FILE → REPOSITORY)
-        edge_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"partof:{file_entity_id}:{repo_id}"))
+        # PART_OF edge
+        edge_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"partof:{file_entity_id}:{repo_entity_id}"))
         self.supabase.table("edges").upsert({
             "id": edge_id,
             "source_id": file_entity_id,
-            "target_id": repo_id,
+            "target_id": repo_entity_id,
             "type": "PART_OF",
             "confidence": 1.0,
             "created_at": datetime.now(timezone.utc).isoformat(),
@@ -148,12 +162,9 @@ class CodebaseBaselineSync:
 
     def _infer_module_type(self, module_path: str) -> str:
         lower = module_path.lower()
-        if any(k in lower for k in ["api", "handlers", "routes"]):
-            return "api"
-        if any(k in lower for k in ["nlp", "engine", "worker"]):
-            return "core"
-        if any(k in lower for k in ["utils", "common", "helper"]):
-            return "utils"
+        if any(k in lower for k in ["api", "handlers", "routes"]): return "api"
+        if any(k in lower for k in ["nlp", "engine", "worker"]): return "core"
+        if any(k in lower for k in ["utils", "common", "helper"]): return "utils"
         return "feature"
 
     def _detect_language(self, file_path: str) -> str:
