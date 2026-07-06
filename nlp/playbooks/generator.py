@@ -1,141 +1,125 @@
 # nlp/playbooks/generator.py
 """
-This module generates role-specific onboarding playbooks for new employees.
-It gathers rich context from the codebase, systems, and recent activity,
-and uses a large language model (LLM) to produce a structured, actionable playbook.
-The generated playbook is stored in the Supabase database for retrieval.
-The playbook includes:
-- Warm welcome message
-- Week 1 goals and tasks
-- Key people and ownership
-- Core systems and codebase files
-- Recent changes and activity
-The playbook is tailored to the specific role and can be generated on-demand via the API.
+Generates world-class, data-rich onboarding playbooks for new engineers.
+Uses real data from:
+- Knowledge Graph (entities + relationships)
+- Codebase structure (modules + files)
+The playbook is generated via LLM inference, with a structured prompt that includes:
+- Role-specific context
+- Visualizer data (architecture, modules, key files, learning path)
+The generated playbook is saved to Supabase for retrieval by the frontend.
 """
 
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any
 
 from engine.llm import llm_infer
 from supabase import Client
+from visualizer.service import VisualizerService
 
 logger = logging.getLogger(__name__)
 
-
 class PlaybookGenerator:
-    """Generates onboarding playbooks for specific roles."""
+    """Generates world-class, data-rich onboarding playbooks."""
+
     def __init__(self, supabase: Client):
         self.supabase = supabase
+        self.visualizer = VisualizerService(supabase)
 
     def generate(self, role: str, company_id: str = "default", employee_name: str = None) -> Dict[str, Any]:
-        """Generate a role-specific onboarding playbook."""
+        """Generate full playbook with visualizer data embedded."""
+        logger.info(f"Generating playbook for role: {role}")
+
+        # 1. Get rich visualizer data
+        visualizer_data = self.visualizer.build_for_role(role)
+
+        # 2. Gather additional context
         context = self._gather_rich_context(role)
 
+        # 3. LLM prompt with real data
         prompt = f"""
-            You are an elite engineering onboarding architect.
-            Create a world-class, highly specific onboarding playbook for a new {role}.
+            You are an elite engineering onboarding architect for a fintech/SaaS company.
 
-            **Real Company Context**:
+            **Role**: {role}
+            **Employee**: {employee_name or "New Engineer"}
+
+            **Real Context**:
             {context}
 
-            **Requirements**:
-            - Warm, professional, motivating tone
-            - Extremely specific (real names, systems, files, recent changes)
-            - Actionable first-week plan
-            - Highlight key codebase files and modules
-            - Use real data only
+            **Visualizer Data** (use this structure):
+            {json.dumps(visualizer_data, indent=2)}
 
+            Create a **highly specific, actionable onboarding playbook**.
             Return **only valid JSON**:
+
             {{
             "title": "Onboarding Playbook — {role}",
-            "welcome_message": "Warm welcome...",
+            "welcome_message": "Warm, motivating welcome...",
             "sections": [
                 {{"title": "Week 1 Goals", "content": "..."}},
                 {{"title": "Key People & Ownership", "content": "..."}},
-                {{"title": "Core Systems & Codebase", "content": "..."}},
-                {{"title": "Recent Changes", "content": "..."}},
-                {{"title": "Your First Tasks", "content": "..."}}
-            ]
+                {{"title": "Core Systems & Architecture", "content": "..."}},
+                {{"title": "Codebase Navigation", "content": "..."}},
+                {{"title": "Safe First Contributions", "content": "..."}},
+                {{"title": "Learning Path", "content": "..."}}
+            ],
+            "visualizer": {json.dumps(visualizer_data)}
             }}
-            """
+        """
 
-        raw = llm_infer(prompt, temperature=0.3, max_tokens=2500)
-        
+        raw = llm_infer(prompt, temperature=0.3, max_tokens=3000)
+
         try:
+            # Clean JSON
             cleaned = raw.strip()
             if cleaned.startswith("```json"): cleaned = cleaned[7:]
             if cleaned.endswith("```"): cleaned = cleaned[:-3]
             playbook = json.loads(cleaned)
         except Exception as e:
-            logger.warning(f"JSON parse failed: {e}")
-            playbook = self._fallback_playbook(role)
+            logger.warning(f"JSON parse failed: {e}. Using fallback.")
+            playbook = self._fallback_playbook(role, visualizer_data)
 
         # Save to DB
         record = {
             "company_id": company_id,
             "role": role.lower().replace(" ", "-"),
-            "title": playbook.get("title", f"Onboarding Playbook — {role}"),
+            "title": playbook.get("title"),
             "content": playbook,
             "generated_for": employee_name,
-            "expires_at": (datetime.utcnow() + timedelta(days=90)).isoformat(),
+            "expires_at": (datetime.now(timezone.utc) + timedelta(days=90)).isoformat(),
             "is_active": True
         }
-
         try:
-            self.supabase.table("playbooks").insert(record).execute()
+            self.supabase.table("playbooks").upsert(record, on_conflict="company_id,role").execute()
         except Exception as e:
             logger.error(f"Failed to save playbook: {e}")
 
-        logger.info(f"Playbook generated for {role}")
+        logger.info(f"✅ Playbook generated successfully for {role}")
         return playbook
 
-    def _fallback_playbook(self, role: str) -> Dict:
-        return {
-            "title": f"Onboarding Playbook — {role}",
-            "welcome_message": f"Welcome to the team as our new {role}!",
-            "sections": []
-        }
-
     def _gather_rich_context(self, role: str) -> str:
-        """Fully dynamic context gathering from real data."""
+        """Gather real context from KG and recent activity."""
         parts = []
 
         # People
-        people = self.supabase.table("entities").select("name,metadata").eq("type", "PERSON").limit(12).execute()
+        people = self.supabase.table("entities").select("name").eq("type", "PERSON").limit(10).execute()
         if people.data:
             parts.append("**Key People:** " + ", ".join(p["name"] for p in people.data))
 
-        # Systems
-        systems = self.supabase.table("entities").select("name").eq("type", "SYSTEM").limit(12).execute()
-        if systems.data:
-            parts.append("**Core Systems:** " + ", ".join(s["name"] for s in systems.data))
-
-        # Codebase Files (physical layer)
-        files = self.supabase.table("codebase_files")\
-            .select("file_path, language, last_author")\
-            .limit(30).execute()
-        if files.data:
-            code_list = "\n".join([f"- {f['file_path']} ({f.get('language', 'Unknown')}) by {f.get('last_author', 'unknown')}" for f in files.data[:20]])
-            parts.append(f"**Key Codebase Files:**\n{code_list}")
-
         # Recent Activity
-        recent = self.supabase.table("raw_data").select("content")\
-            .order("created_at", desc=True).limit(10).execute()
+        recent = self.supabase.table("raw_data").select("content").order("created_at", desc=True).limit(8).execute()
         if recent.data:
-            parts.append("**Recent Activity:** " + " | ".join(r["content"][:120] for r in recent.data))
+            parts.append("**Recent Activity:** " + " | ".join(r["content"][:150] for r in recent.data))
 
         return "\n\n".join(parts)
-        
-    def _gather_codebase_context(self, role: str) -> str:
-        # Query relevant files for this role
-        files = self.supabase.table("codebase_files")\
-            .select("file_path, language, metadata")\
-            .limit(30).execute()
 
-        context = ["### Codebase Overview"]
-        for f in files.data:
-            context.append(f"- {f['file_path']} ({f.get('language', 'Unknown')})")
-
-        return "\n".join(context)
+    def _fallback_playbook(self, role: str, visualizer_data: Dict) -> Dict:
+        """Safe fallback."""
+        return {
+            "title": f"Onboarding Playbook — {role}",
+            "welcome_message": f"Welcome to the team as our new {role}!",
+            "sections": [],
+            "visualizer": visualizer_data
+        }
