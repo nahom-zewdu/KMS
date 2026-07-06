@@ -17,7 +17,7 @@ class VisualizerService:
         self.supabase = supabase
 
     def build_for_role(self, role: str) -> Dict:
-        """Main entrypoint — builds PRD sections from real KG + codebase data."""
+        """Main entrypoint."""
         try:
             architecture = self._build_architecture()
             modules = self._build_modules(role)
@@ -38,34 +38,60 @@ class VisualizerService:
                 "role": role,
             }
         except Exception as e:
-            logger.error(f"Visualizer build failed for role '{role}': {e}")
+            logger.error(f"Visualizer build failed for '{role}': {e}")
             return {"error": "Failed to load visualizer data"}
 
     def _build_architecture(self) -> List[Dict]:
-        """Infer layers from top-level directories in codebase_files."""
+        """Top-level layers from codebase_files."""
         try:
-            res = self.supabase.table("codebase_files").select("file_path").limit(150).execute()
-            top_levels = {}
+            res = self.supabase.table("codebase_files").select("file_path").limit(200).execute()
+            layers = {}
             for row in res.data or []:
-                path = row["file_path"]
-                if "/" in path:
-                    layer = path.split("/")[0]
-                    top_levels[layer] = top_levels.get(layer, 0) + 1
+                if "/" in row["file_path"]:
+                    layer = row["file_path"].split("/")[0]
+                    layers[layer] = layers.get(layer, 0) + 1
 
             return [
                 {
                     "name": f"{layer.capitalize()} Layer",
-                    "description": f"Core {layer} functionality and services",
-                    "importance": round(count / max(top_levels.values()), 2) if top_levels else 0.8
+                    "description": f"Core {layer} functionality",
+                    "importance": round(count / max(layers.values() or [1]), 2)
                 }
-                for layer, count in sorted(top_levels.items(), key=lambda x: x[1], reverse=True)[:6]
+                for layer, count in sorted(layers.items(), key=lambda x: x[1], reverse=True)[:6]
             ]
-        except Exception as e:
-            logger.warning(f"Architecture inference failed: {e}")
-            return [{"name": "Core Systems", "description": "Main application layers", "importance": 0.9}]
+        except:
+            return [{"name": "Core Systems", "description": "Main application", "importance": 0.9}]
 
     def _build_modules(self, role: str) -> List[Dict]:
-        """Modules from directory structure + role boost + file count."""
+        """Use pre-computed modules from codebase_modules table."""
+        try:
+            res = self.supabase.table("codebase_modules")\
+                .select("module_name, module_path, importance_score, inferred_type, description")\
+                .order("importance_score", desc=True)\
+                .limit(15).execute()
+
+            modules = []
+            for m in res.data or []:
+                importance = m.get("importance_score", 0.5)
+                # Role boost
+                if any(kw in m["module_path"].lower() for kw in role.lower().split()):
+                    importance = min(1.0, importance + 0.3)
+
+                modules.append({
+                    "name": m["module_name"],
+                    "path": m["module_path"],
+                    "importance": round(importance, 2),
+                    "type": m.get("inferred_type", "feature"),
+                    "description": m.get("description", f"Core {m['module_name']} module")
+                })
+            return modules
+        except Exception as e:
+            logger.warning(f"Modules query failed: {e}")
+            # Fallback to file-based inference
+            return self._fallback_modules(role)
+
+    def _fallback_modules(self, role: str) -> List[Dict]:
+        """Fallback when modules table is empty."""
         try:
             res = self.supabase.table("codebase_files").select("file_path").limit(300).execute()
             module_map = {}
@@ -75,38 +101,32 @@ class VisualizerService:
                     mod = "/".join(parts[:2])
                     module_map[mod] = module_map.get(mod, 0) + 1
 
-            modules = []
-            for name, count in sorted(module_map.items(), key=lambda x: x[1], reverse=True)[:15]:
-                importance = min(1.0, count / 15.0)
-                # Role relevance boost
-                if any(kw in name.lower() for kw in role.lower().split()):
-                    importance = min(1.0, importance + 0.35)
-
-                modules.append({
-                    "name": name,
-                    "file_count": count,
-                    "importance": round(importance, 2),
-                    "description": f"Core {name} functionality and business logic"
-                })
-            return modules
-        except Exception as e:
-            logger.warning(f"Modules build failed: {e}")
+            return [
+                {
+                    "name": name.split("/")[-1],
+                    "path": name,
+                    "importance": round(min(1.0, count / 15.0), 2),
+                    "description": f"Core {name} functionality"
+                }
+                for name, count in sorted(module_map.items(), key=lambda x: x[1], reverse=True)[:12]
+            ]
+        except:
             return []
 
     def _build_key_files(self, role: str) -> List[Dict]:
-        """Recent / important files with metadata."""
+        """Important files from codebase_files."""
         try:
             res = self.supabase.table("codebase_files")\
-                .select("file_path, language, last_author, metadata")\
-                .limit(40).execute()
+                .select("file_path, language, last_author, module_path")\
+                .limit(30).execute()
 
             return [
                 {
-                    "path": f.get("file_path"),
-                    "name": f.get("file_path", "").split("/")[-1],
+                    "path": f["file_path"],
+                    "name": f["file_path"].split("/")[-1],
                     "language": f.get("language", "Unknown"),
-                    "last_author": f.get("last_author"),
-                    "context": "High activity or ownership relevance"
+                    "module": f.get("module_path", ""),
+                    "context": "Relevant for onboarding"
                 }
                 for f in (res.data or [])
             ]
@@ -114,49 +134,40 @@ class VisualizerService:
             return []
 
     def _build_learning_path(self, role: str, modules: List[Dict]) -> List[Dict]:
-        """Sorted by importance + role relevance."""
+        """Role-aware learning path from modules."""
         sorted_modules = sorted(modules, key=lambda m: m.get("importance", 0), reverse=True)
-        path = []
-        for i, mod in enumerate(sorted_modules[:6]):
-            path.append({
+        return [
+            {
                 "step": i + 1,
-                "title": mod["name"],
-                "why": f"Foundational {mod['name']} patterns are critical for {role} work",
+                "title": mod.get("name") or mod.get("path"),
+                "why": f"High importance for {role} responsibilities",
                 "effort": "Medium",
-                "difficulty": "Medium",
-                "next": sorted_modules[(i + 1) % len(sorted_modules)]["name"] if len(sorted_modules) > 1 else None
-            })
-        return path
+                "difficulty": "Medium"
+            }
+            for i, mod in enumerate(sorted_modules[:6])
+        ]
 
     def _build_request_flows(self) -> List[Dict]:
-        """Real flows from ingestion patterns (static for now, can be enriched later)."""
         return [
-            {"name": "GitHub Push Flow", "steps": ["Webhook → Rich Content → NER/RE → Codebase Files + KG"], "description": "Code changes → Knowledge"},
-            {"name": "Slack Communication Flow", "steps": ["Message → Entity Extraction → Relations"], "description": "Team knowledge capture"},
+            {"name": "GitHub Push Flow", "steps": ["Webhook → Ingestion → NER/RE → Codebase Update"], "description": "Code changes become knowledge"},
+            {"name": "Slack Event Flow", "steps": ["Message → Entity Extraction → Relations"], "description": "Team communication captured"},
         ]
 
     def _build_safe_zones(self) -> Dict:
-        """Safe zones from low-risk directory patterns."""
+        """Safe zones from low-risk paths."""
         try:
             res = self.supabase.table("codebase_files").select("file_path").limit(100).execute()
-            safe = []
-            risky = []
-            for f in res.data or []:
-                path = f["file_path"].lower()
-                if any(k in path for k in ["utils", "common", "helper", "test", "config"]):
-                    safe.append({"path": f["file_path"], "reason": "Low dependency, reusable"})
-                elif any(k in path for k in ["core", "auth", "payment", "main"]):
-                    risky.append({"path": f["file_path"], "reason": "High business impact"})
+            safe = [f for f in (res.data or []) if any(k in f["file_path"].lower() for k in ["utils", "common", "helper", "test"])]
+            risky = [f for f in (res.data or []) if any(k in f["file_path"].lower() for k in ["core", "auth", "main", "payment"])]
             return {
-                "safe_first": safe[:6],
-                "high_risk": risky[:4]
+                "safe_first": [{"path": f["file_path"]} for f in safe[:6]],
+                "high_risk": [{"path": f["file_path"]} for f in risky[:4]]
             }
         except:
             return {"safe_first": [], "high_risk": []}
 
     def _build_dependency_impact(self) -> List[Dict]:
-        """Basic impact from known critical files (enhance with edges later)."""
         return [
-            {"file": "nlp/worker/ingestion.py", "impact": "Affects all event processing and KG updates", "downstream": ["Entities", "Edges", "Playbooks"]},
-            {"file": "api/handlers/github.go", "impact": "Core webhook ingestion", "downstream": ["Baseline Sync", "File Indexing"]},
+            {"file": "nlp/worker/ingestion.py", "impact": "Affects all event processing", "downstream": ["KG", "Playbooks"]},
+            {"file": "api/handlers/github.go", "impact": "Core webhook handling", "downstream": ["Baseline Sync", "File Indexing"]},
         ]
