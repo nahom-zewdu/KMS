@@ -29,9 +29,9 @@ class PlaybookGenerator:
     def __init__(self, supabase: Client):
         self.supabase = supabase
 
-    async def generate(self, role: str, company_id: str = "default", employee_name: str = None) -> Dict[str, Any]:
+    def generate(self, role: str, company_id: str = "default", employee_name: str = None) -> Dict[str, Any]:
         """Generate a role-specific onboarding playbook."""
-        context = await self._gather_rich_context(role)
+        context = self._gather_rich_context(role)
 
         prompt = f"""
             You are an elite engineering onboarding architect.
@@ -98,22 +98,22 @@ class PlaybookGenerator:
             "sections": []
         }
 
-    async def _gather_rich_context(self, role: str) -> str:
+    def _gather_rich_context(self, role: str) -> str:
         """Fully dynamic context gathering from real data."""
         parts = []
 
         # People
-        people = await self.supabase.table("entities").select("name,metadata").eq("type", "PERSON").limit(12).execute()
+        people = self.supabase.table("entities").select("name,metadata").eq("type", "PERSON").limit(12).execute()
         if people.data:
             parts.append("**Key People:** " + ", ".join(p["name"] for p in people.data))
 
         # Systems
-        systems = await self.supabase.table("entities").select("name").eq("type", "SYSTEM").limit(12).execute()
+        systems = self.supabase.table("entities").select("name").eq("type", "SYSTEM").limit(12).execute()
         if systems.data:
             parts.append("**Core Systems:** " + ", ".join(s["name"] for s in systems.data))
 
         # Codebase Files (physical layer)
-        files = await self.supabase.table("codebase_files")\
+        files = self.supabase.table("codebase_files")\
             .select("file_path, language, last_author")\
             .limit(30).execute()
         if files.data:
@@ -121,14 +121,14 @@ class PlaybookGenerator:
             parts.append(f"**Key Codebase Files:**\n{code_list}")
 
         # Recent Activity
-        recent = await self.supabase.table("raw_data").select("content")\
+        recent = self.supabase.table("raw_data").select("content")\
             .order("created_at", desc=True).limit(10).execute()
         if recent.data:
             parts.append("**Recent Activity:** " + " | ".join(r["content"][:120] for r in recent.data))
 
         return "\n\n".join(parts)
         
-    async def _gather_codebase_context(self, role: str) -> str:
+    def _gather_codebase_context(self, role: str) -> str:
         # Query relevant files for this role
         files = self.supabase.table("codebase_files")\
             .select("file_path, language, metadata")\
