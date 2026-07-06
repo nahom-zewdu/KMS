@@ -1,9 +1,9 @@
 # nlp/codebase/analyzer.py
 """
 Codebase Analyzer for incremental GitHub push events.
-Processes changed files, creates FILE entities in the knowledge graph,
-populates codebase_files, and establishes PART_OF relationships.
-Ensures consistency with baseline sync.
+Processes changed files, creates proper FILE entities in the knowledge graph,
+populates codebase_files table, and establishes PART_OF relationships.
+Fully consistent with baseline sync.
 """
 
 import logging
@@ -33,7 +33,7 @@ class CodebaseAnalyzer:
                 if file_path and not file_path.startswith("."):
                     await self._upsert_file(file_path, repo_name, record_id, payload)
 
-            logger.info(f"Incremental update completed: {len(changed_files)} files for {repo_name}")
+            logger.info(f"✅ Incremental update completed: {len(changed_files)} files for {repo_name}")
             return True
         except Exception as e:
             logger.error(f"Incremental push failed for {record_id}: {e}", exc_info=True)
@@ -47,11 +47,21 @@ class CodebaseAnalyzer:
         return str(payload.get("repo") or repo or "unknown-repo")
 
     async def _upsert_file(self, file_path: str, repo_name: str, record_id: str, payload: Dict):
-        """Create FILE entity + codebase_files record + PART_OF edge."""
+        """Create FILE entity + codebase_files + PART_OF edge (consistent with baseline)."""
         file_name = file_path.split("/")[-1]
         module_path = "/".join(file_path.split("/")[:-1]) if "/" in file_path else ""
 
-        # 1. Create FILE entity (required for edges FK)
+        # 1. Create REPOSITORY entity (if not exists) - needed for FK
+        repo_entity_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"repo:{repo_name}"))
+        self.supabase.table("entities").upsert({
+            "id": repo_entity_id,
+            "type": "REPOSITORY",
+            "name": repo_name,
+            "metadata": {"source": "github_push"},
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }, on_conflict="id").execute()
+
+        # 2. Create FILE entity
         file_entity_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"file:{repo_name}:{file_path}"))
         self.supabase.table("entities").upsert({
             "id": file_entity_id,
@@ -66,10 +76,9 @@ class CodebaseAnalyzer:
             "created_at": datetime.now(timezone.utc).isoformat()
         }, on_conflict="id").execute()
 
-        # 2. Ensure repository exists and get physical ID
+        # 3. Ensure physical repository record
         repo_res = self.supabase.table("repositories").select("id").eq("full_name", repo_name).single().execute()
         if not repo_res.data:
-            # Fallback create
             self.supabase.table("repositories").upsert({
                 "full_name": repo_name,
                 "company_id": "default",
@@ -79,7 +88,7 @@ class CodebaseAnalyzer:
 
         physical_repo_id = repo_res.data["id"]
 
-        # 3. codebase_files record
+        # 4. codebase_files record
         file_data = {
             "repository_id": physical_repo_id,
             "file_path": file_path,
@@ -93,19 +102,19 @@ class CodebaseAnalyzer:
         }
         self.supabase.table("codebase_files").upsert(file_data, on_conflict="repository_id,file_path").execute()
 
-        # 4. PART_OF edge: FILE → REPOSITORY
-        edge_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"partof:{file_entity_id}:{physical_repo_id}"))
+        # 5. PART_OF edge: FILE → REPOSITORY
+        edge_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"partof:{file_entity_id}:{repo_entity_id}"))
         self.supabase.table("edges").upsert({
             "id": edge_id,
             "source_id": file_entity_id,
-            "target_id": repo_res.data.get("id"),  # Use physical repo if needed, but prefer entity
+            "target_id": repo_entity_id,   # Now points to REPOSITORY entity
             "type": "PART_OF",
             "confidence": 1.0,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "source_record_id": record_id
         }, on_conflict="id").execute()
 
-        logger.debug(f"Updated incremental file: {file_path}")
+        logger.debug(f"Updated incremental file: {file_path} (module: {module_path})")
 
     def _detect_language(self, file_path: str) -> str:
         ext = file_path.split(".")[-1].lower() if "." in file_path else ""
