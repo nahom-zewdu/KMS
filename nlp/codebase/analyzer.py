@@ -1,8 +1,8 @@
 # nlp/codebase/analyzer.py
 """
 Codebase Analyzer for incremental GitHub push events.
-Processes changed files, creates proper FILE entities in the knowledge graph,
-populates codebase_files table, and establishes PART_OF relationships.
+Creates FILE entities, codebase_files records, PART_OF edges, and OWNS relationships
+from commit authors.
 Fully consistent with baseline sync.
 """
 
@@ -21,7 +21,7 @@ class CodebaseAnalyzer:
         self.supabase = supabase
 
     async def process_push_event(self, payload: Dict[str, Any], record_id: str):
-        """Process incremental push event from GitHub."""
+        """Process incremental push event."""
         logger.info(f"Incremental push processing | record={record_id}")
 
         try:
@@ -47,11 +47,11 @@ class CodebaseAnalyzer:
         return str(payload.get("repo") or repo or "unknown-repo")
 
     async def _upsert_file(self, file_path: str, repo_name: str, record_id: str, payload: Dict):
-        """Create FILE entity + codebase_files + PART_OF edge (consistent with baseline)."""
+        """Create FILE entity + codebase_files + PART_OF + OWNS edges."""
         file_name = file_path.split("/")[-1]
         module_path = "/".join(file_path.split("/")[:-1]) if "/" in file_path else ""
 
-        # 1. Create REPOSITORY entity (if not exists) - needed for FK
+        # REPOSITORY entity (ensure exists)
         repo_entity_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"repo:{repo_name}"))
         self.supabase.table("entities").upsert({
             "id": repo_entity_id,
@@ -61,7 +61,7 @@ class CodebaseAnalyzer:
             "created_at": datetime.now(timezone.utc).isoformat()
         }, on_conflict="id").execute()
 
-        # 2. Create FILE entity
+        # FILE entity
         file_entity_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"file:{repo_name}:{file_path}"))
         self.supabase.table("entities").upsert({
             "id": file_entity_id,
@@ -69,14 +69,11 @@ class CodebaseAnalyzer:
             "name": file_name,
             "file_path": file_path,
             "language": self._detect_language(file_path),
-            "metadata": {
-                "module_path": module_path,
-                "source_record_id": record_id
-            },
+            "metadata": {"module_path": module_path, "source_record_id": record_id},
             "created_at": datetime.now(timezone.utc).isoformat()
         }, on_conflict="id").execute()
 
-        # 3. Ensure physical repository record
+        # Physical repo record
         repo_res = self.supabase.table("repositories").select("id").eq("full_name", repo_name).single().execute()
         if not repo_res.data:
             self.supabase.table("repositories").upsert({
@@ -88,7 +85,7 @@ class CodebaseAnalyzer:
 
         physical_repo_id = repo_res.data["id"]
 
-        # 4. codebase_files record
+        # codebase_files
         file_data = {
             "repository_id": physical_repo_id,
             "file_path": file_path,
@@ -102,19 +99,42 @@ class CodebaseAnalyzer:
         }
         self.supabase.table("codebase_files").upsert(file_data, on_conflict="repository_id,file_path").execute()
 
-        # 5. PART_OF edge: FILE → REPOSITORY
+        # PART_OF edge
         edge_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"partof:{file_entity_id}:{repo_entity_id}"))
         self.supabase.table("edges").upsert({
             "id": edge_id,
             "source_id": file_entity_id,
-            "target_id": repo_entity_id,   # Now points to REPOSITORY entity
+            "target_id": repo_entity_id,
             "type": "PART_OF",
             "confidence": 1.0,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "source_record_id": record_id
         }, on_conflict="id").execute()
 
-        logger.debug(f"Updated incremental file: {file_path} (module: {module_path})")
+        # OWNS edge from last author (if available)
+        author = payload.get("sender") or payload.get("last_author")
+        if author:
+            person_entity_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"person:{author}"))
+            self.supabase.table("entities").upsert({
+                "id": person_entity_id,
+                "type": "PERSON",
+                "name": author,
+                "metadata": {"source": "github_commit"},
+                "created_at": datetime.now(timezone.utc).isoformat()
+            }, on_conflict="id").execute()
+
+            owns_edge_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"owns:{person_entity_id}:{file_entity_id}"))
+            self.supabase.table("edges").upsert({
+                "id": owns_edge_id,
+                "source_id": person_entity_id,
+                "target_id": file_entity_id,
+                "type": "OWNS",
+                "confidence": 0.85,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "source_record_id": record_id
+            }, on_conflict="id").execute()
+
+        logger.debug(f"Updated file with ownership: {file_path}")
 
     def _detect_language(self, file_path: str) -> str:
         ext = file_path.split(".")[-1].lower() if "." in file_path else ""
