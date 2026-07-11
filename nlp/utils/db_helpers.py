@@ -100,10 +100,11 @@ def insert_raw_data(supabase: Client, raw_job: Dict[str, Any]) -> None:
     Safe insert for raw_data with automatic embedding generation.
     This is the ONLY place embeddings are created at ingestion time.
     """
-    rec = dict(raw_job)
+    rec = dict(raw_job)  # defensive copy
+
     content = rec.get("content", "").strip()
-    
-    # Generate embedding if content exists
+
+    # Generate embedding
     if content:
         try:
             rec["embedding"] = embed_content(content)
@@ -114,16 +115,30 @@ def insert_raw_data(supabase: Client, raw_job: Dict[str, Any]) -> None:
     else:
         rec["embedding"] = None
 
-    if not rec.get("id"):
+    # === CRITICAL: Robust ID handling ===
+    if not rec.get("id") or str(rec.get("id")).strip() in ("", "[]", "null", "None"):
         rec["id"] = str(uuid.uuid4())
 
+    # Ensure record_id exists and is valid (used for business uniqueness)
+    if not rec.get("record_id"):
+        rec["record_id"] = rec["id"]  # fallback
+
     try:
-        supabase.table("raw_data").upsert(rec, on_conflict="record_id").execute()
-        logger.info("Inserted raw_data + embedding | id=%s", rec["id"])
+        # Prefer upsert on record_id (business key) if your table has unique constraint on it
+        res = supabase.table("raw_data").upsert(
+            rec, 
+            on_conflict="record_id"   # Change to "id" if your table prefers primary key
+        ).execute()
+        logger.info("Inserted raw_data + embedding | record_id=%s", rec.get("record_id"))
+        return res
     except Exception as e:
         logger.exception("raw_data upsert failed: %s", e)
         try:
+            # Fallback: insert with generated id
+            if "id" not in rec or not rec["id"]:
+                rec["id"] = str(uuid.uuid4())
             supabase.table("raw_data").insert(rec).execute()
+            logger.info("raw_data insert fallback succeeded | id=%s", rec["id"])
         except Exception as ie:
             logger.exception("raw_data insert fallback failed: %s", ie)
 

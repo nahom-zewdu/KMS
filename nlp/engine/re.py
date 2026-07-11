@@ -14,6 +14,31 @@ from .prompt import get_relation_prompt
 logger = logging.getLogger("engine.re")
 
 VALID_REL_TYPES = {"OWNS", "MAINTAINS", "ASSIGNED_TO", "FIXES", "DEPLOYED_IN", "PART_OF"}
+VALID_RELATION_PAIRS = {
+    "OWNS": {
+        ("PERSON", "PROJECT"),
+        ("PERSON", "SYSTEM"),
+    },
+    "MAINTAINS": {
+        ("PERSON", "PROJECT"),
+        ("PERSON", "SYSTEM"),
+        ("PERSON", "FILE"),
+    },
+    "ASSIGNED_TO": {
+        ("PERSON", "TICKET"),
+    },
+    "FIXES": {
+        ("PERSON", "TICKET"),
+    },
+    "DEPLOYED_IN": {
+        ("PROJECT", "ENVIRONMENT"),
+        ("SYSTEM", "ENVIRONMENT"),
+    },
+    "PART_OF": {
+        ("FILE", "PROJECT"),
+        ("SYSTEM", "PROJECT"),
+    },
+}
 
 def _ensure_entity_list(entities: List[Any]) -> List[Dict[str, Any]]:
     """
@@ -52,11 +77,12 @@ def _cached_re(text: str, entities_json: str) -> str:
     prompt = get_relation_prompt(text, entities_list)
     return llm_infer(prompt)
 
-def extract_relations(text: str, entities: List[Any], record_id: str, created_at: str) -> List[Dict[str, Any]]:
-    """
-    Return list of relations ready for DB insertion:
-    [{ "source": "...", "target": "...", "type": "...", "record_id": ..., "created_at": ... }, ...]
-    """
+def extract_relations(
+    text,
+    entities,
+    record_id,
+    created_at,
+):
     if not entities:
         return []
 
@@ -64,49 +90,89 @@ def extract_relations(text: str, entities: List[Any], record_id: str, created_at
     if not normalized_entities:
         return []
 
-    # deterministic serialization for cache
-    entities_json = json.dumps(normalized_entities, separators=(",", ":"), sort_keys=True)
-
     try:
-        prompt = get_relation_prompt(text, entities_json)
+        prompt = get_relation_prompt(
+            text,
+            normalized_entities
+        )
+
         raw = llm_infer(prompt)
+
     except Exception as e:
         logger.error("RE LLM failed: %s", e)
         return []
 
-    # parse expected JSON object: {"relations": [ ... ]}
     try:
+        raw = llm_infer(prompt)
         obj = json.loads(raw)
-        raw_rel = obj.get("relations", [])
+        raw_relations = obj.get(
+            "relations",
+            []
+        )
     except Exception:
-        # fallback: try to extract array substring
-        try:
-            start = raw.find("[")
-            end = raw.rfind("]") + 1
-            raw_rel = json.loads(raw[start:end]) if start != -1 and end > 0 else []
-        except Exception:
-            logger.warning("Failed to parse relations JSON; returning empty list.")
-            raw_rel = []
+        return []
 
     relations = []
-    for r in raw_rel:
-        try:
-            src = (r.get("source") or "").strip().lower()
-            tgt = (r.get("target") or "").strip().lower()
-            typ = (r.get("type") or "").strip().upper()
-            if not src or not tgt or typ not in VALID_REL_TYPES:
-                logger.debug("Skipping invalid relation: %s", r)
-                continue
-            
-            relations.append({
-                "source": src,
-                "target": tgt,
-                "type": typ,
-                "created_at": created_at or ""
-            })
-        except Exception as e:
-            logger.warning("Skipping bad relation entry %s -> %s", r, e)
 
-    logger.info("RE → %d relations", len(relations))
-    logger.info("Relations: %s", relations)
+    seen = set()
+    
+    entity_map = {e["text"]: e["type"] for e in normalized_entities}
+    valid_entities = set(entity_map.keys())
+
+    for rel in raw_relations:
+
+        src = (
+            rel.get("source", "")
+            .strip()
+            .lower()
+        )
+
+        tgt = (
+            rel.get("target", "")
+            .strip()
+            .lower()
+        )
+
+        rel_type = (
+            rel.get("type", "")
+            .strip()
+            .upper()
+        )
+
+        if rel_type not in VALID_REL_TYPES:
+            continue
+
+        if src not in valid_entities:
+            continue
+
+        if tgt not in valid_entities:
+            continue
+
+        src_type = entity_map[src]
+        tgt_type = entity_map[tgt]
+
+        allowed_pairs = VALID_RELATION_PAIRS.get(
+            rel_type,
+            set(),
+        )
+
+        if (src_type, tgt_type,) not in allowed_pairs:
+            continue
+
+        key = (src, tgt, rel_type,)
+
+        if key in seen:
+            continue
+
+        seen.add(key)
+
+        relations.append({
+            "source": src,
+            "target": tgt,
+            "type": rel_type,
+            "created_at": created_at,
+        })
+
+    logger.info("RE → %d relations", len(relations),)
+
     return relations

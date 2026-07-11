@@ -229,28 +229,49 @@ func (h *GitHubHandler) HandleGitHubWebhook(c *gin.Context) {
 		return
 	}
 
-	// THIS IS THE KEY: Rich, clean, LLM-optimized content
 	content := extractRichContent(eventType, payload)
 
-	fmt.Printf("-------------------\n")
-	fmt.Printf("LLM Content → %s\n", content)
-	fmt.Printf("-------------------\n")
-
-	// Payload sent to Redis: only essential metadata (not 10KB of junk)
+	// THIS IS THE KEY: Rich, clean, LLM-optimized content
 	minimalPayload := map[string]interface{}{
 		"repo":        getString(payload, "repository", "full_name"),
 		"sender":      getString(payload, "sender", "login"),
 		"event_type":  eventType,
 		"delivery_id": deliveryID,
 		"ref":         payload["ref"],
-		"head_commit": extractHeadCommit(payload),
+	}
+
+	if eventType == "push" {
+		// Full commits list (useful for multi-commit pushes)
+		if commits, ok := payload["commits"].([]interface{}); ok {
+			minimalPayload["commits"] = commits
+		}
+
+		// Aggregated files (current analyzer uses this)
+		allAdded := []string{}
+		allModified := []string{}
+		allRemoved := []string{}
+
+		if commits, ok := payload["commits"].([]interface{}); ok {
+			for _, c := range commits {
+				commit := c.(map[string]interface{})
+				allAdded = append(allAdded, interfaceSlice(commit["added"])...)
+				allModified = append(allModified, interfaceSlice(commit["modified"])...)
+				allRemoved = append(allRemoved, interfaceSlice(commit["removed"])...)
+			}
+		}
+
+		minimalPayload["files"] = map[string]interface{}{
+			"added":    allAdded,
+			"modified": allModified,
+			"removed":  allRemoved,
+		}
 	}
 
 	ingestReq := domain.IngestRequest{
 		Source:    "github",
 		EventType: eventType,
-		Content:   content,        // ← High-signal natural language
-		Payload:   minimalPayload, // ← Tiny, useful
+		Content:   content,
+		Payload:   minimalPayload,
 		RecordID:  deliveryID,
 		CreatedAt: time.Now().UTC(),
 	}

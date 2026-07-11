@@ -114,7 +114,9 @@ class RedisStreamConsumer:
                 "record_id": raw.get("RecordID") or raw.get("record_id", ""),
                 "source": raw.get("Source") or raw.get("source", ""),
                 "content": raw.get("Content") or raw.get("content", ""),
-                "created_at": raw.get("CreatedAt") or raw.get("created_at", "")
+                "event_type": raw.get("EventType") or raw.get("event_type", ""),
+                "payload": raw.get("Payload") or raw.get("payload", {}),
+                "created_at": raw.get("CreatedAt") or raw.get("created_at", ""),
             }
         except:
             return None

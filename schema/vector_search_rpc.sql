@@ -1,3 +1,4 @@
+-- schema/vector_search_rpc.sql
 -- supabase/functions/match_documents.sql
 create or replace function public.match_documents(
   query_embedding vector(384),

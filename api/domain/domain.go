@@ -64,3 +64,8 @@ type MetricsService interface {
 	UpdateContributions(ctx context.Context, req IngestRequest) error
 	CalculateBusFactor(ctx context.Context, repoName string) (float64, error)
 }
+
+// PlaybookService defines the interface for generating onboarding playbooks.
+type PlaybookService interface {
+	GeneratePlaybook(ctx context.Context, role string, employeeName string) (string, error)
+}

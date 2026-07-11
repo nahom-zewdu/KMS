@@ -175,3 +175,84 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 GRANT ALL ON SEQUENCES TO postgres, anon, authenticated, service_role;
 
 COMMENT ON SCHEMA public IS 'Public schema for KnowSphere, containing event ingestion, knowledge graph, and metrics tables.';
+
+
+-- Extend entities for codebase
+ALTER TABLE entities 
+ADD COLUMN IF NOT EXISTS file_path TEXT,
+ADD COLUMN IF NOT EXISTS language TEXT,
+ADD COLUMN IF NOT EXISTS loc INTEGER DEFAULT 0;
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_entities_file_path ON entities(file_path);
+CREATE INDEX IF NOT EXISTS idx_entities_type_code ON entities(type) WHERE type IN ('FILE', 'MODULE', 'DIRECTORY', 'REPOSITORY');
+
+--------------------------------------------------
+-- 1. Repositories table
+CREATE TABLE IF NOT EXISTS public.repositories (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id TEXT NOT NULL DEFAULT 'default',
+    full_name TEXT UNIQUE NOT NULL,           -- e.g. "nahom-zewdu/KMS"
+    default_branch TEXT DEFAULT 'main',
+    description TEXT,
+    language TEXT,
+    last_synced_at TIMESTAMPTZ,
+    metadata JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_repos_company ON repositories(company_id);
+CREATE INDEX IF NOT EXISTS idx_repos_full_name ON repositories(full_name);
+
+-- 2. Codebase files (physical structure)
+CREATE TABLE IF NOT EXISTS public.codebase_files (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    repository_id UUID NOT NULL REFERENCES repositories(id) ON DELETE CASCADE,
+    file_path TEXT NOT NULL,
+    file_name TEXT NOT NULL,
+    module_path TEXT,                    -- e.g. "nlp/engine", "api/handlers"
+    importance_score FLOAT DEFAULT 0.5,  -- computed from activity, relationships
+    language TEXT,
+    loc INT DEFAULT 0,
+    last_modified_at TIMESTAMPTZ,
+    last_commit_sha TEXT,
+    last_author TEXT,
+    metadata JSONB,                    -- complexity, owners, etc.
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(repository_id, file_path)
+);
+
+-- Index for performance
+CREATE INDEX IF NOT EXISTS idx_codebase_files_module_path ON codebase_files(module_path);
+CREATE INDEX IF NOT EXISTS idx_codebase_files_importance ON codebase_files(importance_score);
+CREATE INDEX IF NOT EXISTS idx_files_repo ON codebase_files(repository_id);
+CREATE INDEX IF NOT EXISTS idx_files_path ON codebase_files(file_path);
+CREATE INDEX IF NOT EXISTS idx_files_language ON codebase_files(language);
+
+-- Optional bridge table
+CREATE TABLE IF NOT EXISTS public.file_entity_links (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    file_id UUID REFERENCES codebase_files(id) ON DELETE CASCADE,
+    entity_id UUID REFERENCES entities(id) ON DELETE CASCADE,
+    link_type TEXT NOT NULL,           -- MENTIONED, OWNS, RELATED
+    confidence FLOAT DEFAULT 0.8,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 3. Codebase modules (logical structure)
+CREATE TABLE IF NOT EXISTS public.codebase_modules (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    repository_id UUID REFERENCES repositories(id) ON DELETE CASCADE,
+    module_path TEXT NOT NULL,           -- e.g. "nlp/engine", "api/handlers"
+    module_name TEXT NOT NULL,
+    inferred_type TEXT,                  -- "core", "worker", "api", "utils"
+    description TEXT,
+    importance_score FLOAT DEFAULT 0.5,  -- computed from activity, relationships
+    metadata JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_modules_repo ON codebase_modules(repository_id);
+CREATE INDEX idx_modules_path ON codebase_modules(module_path);

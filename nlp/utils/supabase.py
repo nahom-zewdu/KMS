@@ -14,6 +14,7 @@ def init_supabase() -> Client:
         SUPABASE_URL
         SUPABASE_KEY
     """
+    
     url = os.getenv("SUPABASE_URL")
     key = os.getenv("SUPABASE_KEY")
     
