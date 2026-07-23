@@ -256,3 +256,22 @@ CREATE TABLE IF NOT EXISTS public.codebase_modules (
 
 CREATE INDEX idx_modules_repo ON codebase_modules(repository_id);
 CREATE INDEX idx_modules_path ON codebase_modules(module_path);
+
+
+-----------------------------------------------
+-- Companies table
+CREATE TABLE IF NOT EXISTS public.companies (
+  id TEXT PRIMARY KEY DEFAULT 'default',
+  name TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Update profiles
+ALTER TABLE public.profiles 
+ADD COLUMN IF NOT EXISTS company_id TEXT REFERENCES public.companies(id) DEFAULT 'default',
+ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'member' CHECK (role IN ('admin', 'manager', 'member'));
+
+-- RLS policies (basic)
+ALTER TABLE public.playbooks ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can only see own company data" ON public.playbooks
+  FOR ALL USING (company_id = (SELECT company_id FROM profiles WHERE id = auth.uid()));
