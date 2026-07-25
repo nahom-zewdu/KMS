@@ -275,3 +275,17 @@ ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'member' CHECK (role IN ('admin', 'ma
 ALTER TABLE public.playbooks ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can only see own company data" ON public.playbooks
   FOR ALL USING (company_id = (SELECT company_id FROM profiles WHERE id = auth.uid()));
+
+-- Junction table for multi-company membership
+CREATE TABLE IF NOT EXISTS public.company_members (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  company_id TEXT REFERENCES public.companies(id) ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK (role IN ('admin', 'manager', 'member')),
+  is_owner BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, company_id)
+);
+
+-- Remove company_id from profiles if it exists (migration)
+ALTER TABLE public.profiles DROP COLUMN IF EXISTS company_id;
