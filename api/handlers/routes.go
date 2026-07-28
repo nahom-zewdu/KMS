@@ -17,6 +17,7 @@ func SetupRoutes(
 	slackBotToken, slackSignKey, githubSecret string,
 	codebaseService domain.CodebaseService,
 	redis domain.RedisStream,
+	supabase domain.StoragePort,
 ) *gin.Engine {
 	// Initialize Gin router
 	router := gin.Default()
@@ -25,7 +26,7 @@ func SetupRoutes(
 	slackClient := slack.New(slackBotToken)
 
 	// Initialize handlers
-	slackHandler := NewSlackHandler(slackIngest, slackBot, slackClient, slackSignKey)
+	slackHandler := NewSlackHandler(slackIngest, slackBot, slackClient, slackSignKey, supabase)
 	githubHandler := NewGitHubHandler(githubIngest, githubSecret)
 	queryHandler := NewQueryHandler(slackBot, redis)
 	codebaseHandler := NewCodebaseHandler(codebaseService)
