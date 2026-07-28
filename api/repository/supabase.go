@@ -193,3 +193,44 @@ func (r *SupabaseRepo) QueryKnowledgeGraphSupabase(ctx context.Context, query st
 	log.Printf("QueryID: %s - Successfully queried Supabase in %.3fs, answer: %s", query, time.Since(start).Seconds(), answer)
 	return answer, nil
 }
+
+// ResolveCompanyByIntegration looks up company_id from company_integrations.
+// It queries Supabase for a matching provider and external_id, returning the company_id if found.
+// Args:
+//
+//	ctx: Context for cancellation and timeouts.
+//	provider: Integration provider (e.g., "github").
+//	externalID: External ID from the provider (e.g., GitHub org ID).
+//
+// Returns:
+//
+//	company_id string if found, or empty string if not found, and error if query fails.
+func (r *SupabaseRepo) ResolveCompanyByIntegration(ctx context.Context, provider, externalID string) (string, error) {
+	start := time.Now()
+
+	result, _, err := r.client.From("company_integrations").
+		Select("company_id", "", false).
+		Eq("provider", provider).
+		Eq("external_id", externalID).
+		Eq("is_active", "true").
+		Execute()
+
+	if err != nil {
+		log.Printf("Failed to resolve company for %s:%s in %.3fs: %v", provider, externalID, time.Since(start).Seconds(), err)
+		return "", fmt.Errorf("failed to resolve company: %v", err)
+	}
+
+	var records []map[string]interface{}
+	if err := json.Unmarshal(result, &records); err != nil {
+		return "", fmt.Errorf("failed to parse company resolution: %v", err)
+	}
+
+	if len(records) == 0 {
+		log.Printf("No company found for %s:%s in %.3fs", provider, externalID, time.Since(start).Seconds())
+		return "", nil // not an error — just unmapped
+	}
+
+	companyID, _ := records[0]["company_id"].(string)
+	log.Printf("Resolved company %s for %s:%s in %.3fs", companyID, provider, externalID, time.Since(start).Seconds())
+	return companyID, nil
+}
