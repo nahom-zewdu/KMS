@@ -113,13 +113,14 @@ func (r *SupabaseRepo) Query(ctx context.Context, table string, filter map[strin
 	start := time.Now()
 	// Validate table name
 	validTables := map[string]bool{
-		"raw_data":      true,
-		"events":        true,
-		"contributions": true,
-		"entities":      true,
-		"edges":         true,
-		"pull_requests": true,
-		"issues":        true,
+		"raw_data":             true,
+		"events":               true,
+		"contributions":        true,
+		"entities":             true,
+		"edges":                true,
+		"pull_requests":        true,
+		"issues":               true,
+		"company_integrations": true,
 	}
 	if !validTables[table] {
 		log.Printf("Failed to query invalid table: %s in %.3fs", table, time.Since(start).Seconds())
