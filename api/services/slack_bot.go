@@ -88,6 +88,7 @@ func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, 
 		RecordID:  queryID,
 		Source:    "slack",
 		Content:   cleanQuery,
+		CompanyID: companyID,
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	})
 	if err != nil {
