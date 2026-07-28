@@ -33,6 +33,7 @@ type SlackHandler struct {
 	slackBot    domain.SlackBotService    // Service for handling bot queries
 	slackClient *slack.Client             // For posting fallback messages
 	signKey     string                    // Slack Signing Secret
+	storage     domain.StoragePort        // For resolving company from Slack team_id
 }
 
 // NewSlackHandler creates a new SlackHandler with the provided dependencies.
@@ -46,12 +47,13 @@ type SlackHandler struct {
 // Returns:
 //
 //	Pointer to SlackHandler.
-func NewSlackHandler(slackIngest domain.SlackIngestService, slackBot domain.SlackBotService, slackClient *slack.Client, signKey string) *SlackHandler {
+func NewSlackHandler(slackIngest domain.SlackIngestService, slackBot domain.SlackBotService, slackClient *slack.Client, signKey string, supabase domain.StoragePort) *SlackHandler {
 	return &SlackHandler{
 		slackIngest: slackIngest,
 		slackBot:    slackBot,
 		slackClient: slackClient,
 		signKey:     signKey,
+		storage:     supabase,
 	}
 }
 
