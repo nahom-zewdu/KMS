@@ -289,3 +289,23 @@ CREATE TABLE IF NOT EXISTS public.company_members (
 
 -- Remove company_id from profiles if it exists (migration)
 ALTER TABLE public.profiles DROP COLUMN IF EXISTS company_id;
+
+
+-- Company service integrations
+CREATE TABLE IF NOT EXISTS public.company_integrations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id TEXT NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL CHECK (provider IN ('slack', 'github')),
+  external_id TEXT NOT NULL,          -- Slack team_id or GitHub org
+  access_token TEXT,
+  webhook_secret TEXT,
+  metadata JSONB DEFAULT '{}',
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(company_id, provider),
+  UNIQUE(provider, external_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_company_integrations_provider_external
+  ON public.company_integrations (provider, external_id);
