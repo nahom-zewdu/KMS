@@ -12,6 +12,7 @@ type IngestRequest struct {
 	EventType string                 `json:"event_type" binding:"required"` // e.g., push, pull_request
 	Content   string                 `json:"content" binding:"required"`
 	Payload   map[string]interface{} `json:"payload"` // Raw JSON payload
+	CompanyID string                 `json:"company_id"`
 	RecordID  string                 `json:"record_id" binding:"required"`
 	CreatedAt time.Time              `json:"created_at"`
 }
@@ -23,6 +24,7 @@ type JobPayload struct {
 	Source    string                 `json:"source" binding:"required,oneof=slack github"`
 	EventType string                 `json:"event_type" binding:"required"`
 	Content   string                 `json:"content" binding:"required"`
+	CompanyID string                 `json:"company_id"`
 	Payload   map[string]interface{} `json:"payload"` // Raw JSON payload
 	CreatedAt string                 `json:"created_at" binding:"required"`
 }
