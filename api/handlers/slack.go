@@ -174,6 +174,15 @@ func (h *SlackHandler) HandleSlackWebhook(c *gin.Context) {
 			botID := h.slackBot.GetBotID()
 			if ev.BotID == "" && ev.User != botID && !strings.Contains(ev.Text, "<@") && ev.User != "" {
 				log.Printf("RecordID: %s - Handling message event: %s", ev.TimeStamp, ev.Text)
+				// Resolve company from Slack team_id
+				companyID, err := h.storage.ResolveCompanyByIntegration(ctx, "slack", eventsAPIEvent.TeamID)
+				if err != nil {
+					log.Printf("RecordID: %s - Failed to resolve company: %v", ev.TimeStamp, err)
+				}
+				if companyID == "" {
+					log.Printf("RecordID: %s - No company mapped for team %s, using default", ev.TimeStamp, eventsAPIEvent.TeamID)
+					companyID = "default"
+				}
 				// Create ingest request with event_ts as record_id
 				ingestReq := domain.IngestRequest{
 					Source:    "slack",
@@ -186,6 +195,7 @@ func (h *SlackHandler) HandleSlackWebhook(c *gin.Context) {
 						"text":      ev.Text,
 					},
 					RecordID:  ev.TimeStamp,
+					CompanyID: companyID,
 					CreatedAt: slackTimestampToTime(ev.TimeStamp),
 				}
 
