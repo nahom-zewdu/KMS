@@ -140,9 +140,19 @@ func (h *SlackHandler) HandleSlackWebhook(c *gin.Context) {
 			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 			defer cancel()
 
+			// Resolve company from Slack team_id
+			companyID, err := h.storage.ResolveCompanyByIntegration(ctx, "slack", eventsAPIEvent.TeamID)
+			if err != nil {
+				log.Printf("RecordID: %s - Failed to resolve company: %v", ev.TimeStamp, err)
+			}
+			if companyID == "" {
+				log.Printf("RecordID: %s - No company mapped for team %s, using default", ev.TimeStamp, eventsAPIEvent.TeamID)
+				companyID = "default"
+			}
+
 			// Retry logic for HandleEvent
 			for attempt := 1; attempt <= 3; attempt++ {
-				err := h.slackBot.HandleEvent(ctx, eventsAPIEvent.TeamID, ev.Channel, ev.ThreadTimeStamp, ev.Text, ev.TimeStamp)
+				err := h.slackBot.HandleEvent(ctx, eventsAPIEvent.TeamID, ev.Channel, ev.ThreadTimeStamp, ev.Text, ev.TimeStamp, companyID)
 				if err == nil {
 					log.Printf("RecordID: %s - Successfully handled app_mention in %.3fs (attempt %d)", ev.TimeStamp, time.Since(start).Seconds(), attempt)
 					return
