@@ -57,13 +57,14 @@ func (r *SupabaseRepo) Insert(ctx context.Context, table string, data map[string
 	start := time.Now()
 	// Validate table name
 	validTables := map[string]bool{
-		"raw_data":      true,
-		"events":        true,
-		"contributions": true,
-		"entities":      true,
-		"edges":         true,
-		"pull_requests": true,
-		"issues":        true,
+		"raw_data":             true,
+		"events":               true,
+		"contributions":        true,
+		"entities":             true,
+		"edges":                true,
+		"pull_requests":        true,
+		"issues":               true,
+		"company_integrations": true,
 	}
 	if !validTables[table] {
 		log.Printf("RecordID: %v - Invalid table: %s in %.3fs", data["record_id"], table, time.Since(start).Seconds())
