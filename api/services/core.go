@@ -151,6 +151,7 @@ func (c *CoreIngest) Ingest(ctx context.Context, req domain.IngestRequest) error
 		Source:    req.Source,
 		EventType: req.EventType,
 		Content:   content,
+		CompanyID: req.CompanyID,
 		Payload:   payload, // Pass raw map for Python
 		CreatedAt: req.CreatedAt.Format(time.RFC3339),
 	})
