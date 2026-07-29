@@ -33,3 +33,38 @@ CREATE POLICY "Users can view all companies for now"
 ON public.companies
 FOR SELECT
 USING (true);
+
+
+-- Company integrations policies
+ALTER TABLE public.company_integrations ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Admins manage integrations" ON public.company_integrations;
+DROP POLICY IF EXISTS "Members view integrations" ON public.company_integrations;
+
+-- Members of a company can read its integrations
+CREATE POLICY "Members view integrations"
+ON public.company_integrations
+FOR SELECT
+USING (
+  company_id IN (
+    SELECT company_id FROM public.company_members
+    WHERE user_id = auth.uid()
+  )
+);
+
+-- Admins can insert/update/delete
+CREATE POLICY "Admins manage integrations"
+ON public.company_integrations
+FOR ALL
+USING (
+  company_id IN (
+    SELECT company_id FROM public.company_members
+    WHERE user_id = auth.uid() AND role = 'admin'
+  )
+)
+WITH CHECK (
+  company_id IN (
+    SELECT company_id FROM public.company_members
+    WHERE user_id = auth.uid() AND role = 'admin'
+  )
+);
