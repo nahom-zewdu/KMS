@@ -67,7 +67,7 @@ func main() {
 	codebaseService := services.NewCodebaseService(redisStream)
 
 	// Setup routes
-	router := handlers.SetupRoutes(slackIngestService, slackBotService, githubIngestService, slackBotToken, slackSignKey, githubSecret, codebaseService, redisStream)
+	router := handlers.SetupRoutes(slackIngestService, slackBotService, githubIngestService, slackBotToken, slackSignKey, githubSecret, codebaseService, redisStream, supabaseRepo)
 
 	// Start
 	if err := router.Run(":" + port); err != nil {
