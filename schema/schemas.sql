@@ -309,3 +309,17 @@ CREATE TABLE IF NOT EXISTS public.company_integrations (
 
 CREATE INDEX IF NOT EXISTS idx_company_integrations_provider_external
   ON public.company_integrations (provider, external_id);
+
+
+CREATE TABLE IF NOT EXISTS public.company_repos (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id TEXT NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+  full_name TEXT NOT NULL,              -- owner/repo
+  github_repo_id BIGINT,
+  webhook_id BIGINT,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(company_id, full_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_company_repos_company ON public.company_repos (company_id);
