@@ -60,6 +60,7 @@ type StoragePort interface {
 	Query(ctx context.Context, table string, filter map[string]interface{}) ([]map[string]interface{}, error)
 	QueryKnowledgeGraphSupabase(ctx context.Context, query string) (string, error)
 	ResolveCompanyByIntegration(ctx context.Context, provider, externalID string) (string, error)
+	ResolveCompanyByInstallation(ctx context.Context, installationID string) (string, error)
 }
 
 // MetricsService defines the interface for metrics computation.
