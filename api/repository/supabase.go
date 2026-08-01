@@ -235,3 +235,43 @@ func (r *SupabaseRepo) ResolveCompanyByIntegration(ctx context.Context, provider
 	log.Printf("Resolved company %s for %s:%s in %.3fs", companyID, provider, externalID, time.Since(start).Seconds())
 	return companyID, nil
 }
+
+// ResolveCompanyByInstallation looks up company_id from company_integrations using installation_id.
+// It queries Supabase for a matching installation_id, returning the company_id if found.
+// Args:
+//
+//	ctx: Context for cancellation and timeouts.
+//	installationID: Installation ID from the provider (e.g., GitHub App installation ID).
+//
+// Returns:
+//
+//	company_id string if found, or empty string if not found, and error if query fails.
+func (r *SupabaseRepo) ResolveCompanyByInstallation(ctx context.Context, installationID string) (string, error) {
+	start := time.Now()
+
+	result, _, err := r.client.From("company_integrations").
+		Select("company_id", "", false).
+		Eq("provider", "github").
+		Eq("installation_id", installationID).
+		Eq("is_active", "true").
+		Execute()
+
+	if err != nil {
+		log.Printf("Failed to resolve company for installation %s in %.3fs: %v", installationID, time.Since(start).Seconds(), err)
+		return "", fmt.Errorf("failed to resolve company: %v", err)
+	}
+
+	var records []map[string]interface{}
+	if err := json.Unmarshal(result, &records); err != nil {
+		return "", fmt.Errorf("failed to parse company resolution: %v", err)
+	}
+
+	if len(records) == 0 {
+		log.Printf("No company found for installation %s in %.3fs", installationID, time.Since(start).Seconds())
+		return "", nil // not an error — just unmapped
+	}
+
+	companyID, _ := records[0]["company_id"].(string)
+	log.Printf("Resolved company %s for installation %s in %.3fs", companyID, installationID, time.Since(start).Seconds())
+	return companyID, nil
+}
