@@ -269,6 +269,20 @@ func (h *GitHubHandler) HandleGitHubWebhook(c *gin.Context) {
 		}
 	}
 
+	installationID := ""
+	if inst, ok := payload["installation"].(map[string]interface{}); ok {
+		if id, ok := inst["id"].(float64); ok {
+			installationID = fmt.Sprintf("%.0f", id)
+		}
+	}
+
+	var companyID string
+
+	// Prefer installation_id lookup
+	if installationID != "" {
+		companyID, err = h.storage.ResolveCompanyByInstallation(c.Request.Context(), installationID)
+	}
+
 	ownerLogin := getString(payload, "repository", "owner", "login")
 	if ownerLogin == "" {
 		// fallback: first segment of full_name
@@ -278,8 +292,15 @@ func (h *GitHubHandler) HandleGitHubWebhook(c *gin.Context) {
 		}
 	}
 
+	if companyID == "" && ownerLogin != "" {
+		companyID, err = h.storage.ResolveCompanyByIntegration(c.Request.Context(), "github", ownerLogin)
+	}
+	if companyID == "" {
+		companyID = "default"
+	}
+
 	// Retrieve company id using the integration mapping
-	companyID, err := h.storage.ResolveCompanyByIntegration(c.Request.Context(), "github", ownerLogin)
+	companyID, err = h.storage.ResolveCompanyByIntegration(c.Request.Context(), "github", ownerLogin)
 	if err != nil {
 		log.Printf("RecordID: %s - Failed to resolve company for github:%s: %v", deliveryID, ownerLogin, err)
 	}
