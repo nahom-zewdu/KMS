@@ -51,6 +51,7 @@ class IngestionHandler:
         event_id = job.get("event_id")
         content = job.get("content", "")
         payload = job.get("payload", {})
+        company_id = job.get("company_id") or "default"
 
         created_at = job.get("created_at") or datetime.now(timezone.utc).isoformat()
 
