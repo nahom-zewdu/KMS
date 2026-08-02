@@ -31,9 +31,9 @@ class CodebaseAnalyzer:
 
             for file_path in changed_files[:60]:
                 if file_path and not file_path.startswith("."):
-                    await self._upsert_file(file_path, repo_name, record_id, payload)
+                    await self._upsert_file(file_path, repo_name, record_id, payload, company_id)
 
-            logger.info(f"✅ Incremental update completed: {len(changed_files)} files for {repo_name}")
+            logger.info(f"Incremental update completed: {len(changed_files)} files for {repo_name}")
             return True
         except Exception as e:
             logger.error(f"Incremental push failed for {record_id}: {e}", exc_info=True)
@@ -46,7 +46,7 @@ class CodebaseAnalyzer:
             return repo.get("full_name") or repo.get("name", "unknown-repo")
         return str(payload.get("repo") or repo or "unknown-repo")
 
-    async def _upsert_file(self, file_path: str, repo_name: str, record_id: str, payload: Dict):
+    async def _upsert_file(self, file_path: str, repo_name: str, record_id: str, payload: Dict, company_id: str = "default"):
         """Create FILE entity + codebase_files + PART_OF + OWNS edges."""
         file_name = file_path.split("/")[-1]
         module_path = "/".join(file_path.split("/")[:-1]) if "/" in file_path else ""
@@ -57,7 +57,7 @@ class CodebaseAnalyzer:
             "id": repo_entity_id,
             "type": "REPOSITORY",
             "name": repo_name,
-            "metadata": {"source": "github_push"},
+            "metadata": {"source": "github_push", "company_id": company_id},
             "created_at": datetime.now(timezone.utc).isoformat()
         }, on_conflict="id").execute()
 
@@ -69,7 +69,7 @@ class CodebaseAnalyzer:
             "name": file_name,
             "file_path": file_path,
             "language": self._detect_language(file_path),
-            "metadata": {"module_path": module_path, "source_record_id": record_id},
+            "metadata": {"module_path": module_path, "source_record_id": record_id, "company_id": company_id},
             "created_at": datetime.now(timezone.utc).isoformat()
         }, on_conflict="id").execute()
 
@@ -78,7 +78,7 @@ class CodebaseAnalyzer:
         if not repo_res.data:
             self.supabase.table("repositories").upsert({
                 "full_name": repo_name,
-                "company_id": "default",
+                "company_id": company_id,
                 "updated_at": datetime.now(timezone.utc).isoformat()
             }, on_conflict="full_name").execute()
             repo_res = self.supabase.table("repositories").select("id").eq("full_name", repo_name).single().execute()
@@ -95,7 +95,7 @@ class CodebaseAnalyzer:
             "last_modified_at": datetime.now(timezone.utc).isoformat(),
             "last_commit_sha": payload.get("head_commit", {}).get("id"),
             "last_author": payload.get("sender"),
-            "metadata": {"source_record_id": record_id}
+            "metadata": {"source_record_id": record_id, "company_id": company_id}
         }
         self.supabase.table("codebase_files").upsert(file_data, on_conflict="repository_id,file_path").execute()
 
@@ -108,7 +108,8 @@ class CodebaseAnalyzer:
             "type": "PART_OF",
             "confidence": 1.0,
             "created_at": datetime.now(timezone.utc).isoformat(),
-            "source_record_id": record_id
+            "source_record_id": record_id,
+            "company_id": company_id
         }, on_conflict="id").execute()
 
         # OWNS edge from last author (if available)
@@ -119,7 +120,7 @@ class CodebaseAnalyzer:
                 "id": person_entity_id,
                 "type": "PERSON",
                 "name": author,
-                "metadata": {"source": "github_commit"},
+                "metadata": {"source": "github_commit", "company_id": company_id},
                 "created_at": datetime.now(timezone.utc).isoformat()
             }, on_conflict="id").execute()
 
@@ -131,7 +132,8 @@ class CodebaseAnalyzer:
                 "type": "OWNS",
                 "confidence": 0.85,
                 "created_at": datetime.now(timezone.utc).isoformat(),
-                "source_record_id": record_id
+                "source_record_id": record_id,
+                "company_id": company_id
             }, on_conflict="id").execute()
 
         logger.debug(f"Updated file with ownership: {file_path}")
