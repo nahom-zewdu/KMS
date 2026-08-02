@@ -20,7 +20,7 @@ class CodebaseAnalyzer:
     def __init__(self, supabase: Client):
         self.supabase = supabase
 
-    async def process_push_event(self, payload: Dict[str, Any], record_id: str):
+    async def process_push_event(self, payload: Dict[str, Any], record_id: str, company_id: str = "default") -> bool:
         """Process incremental push event."""
         logger.info(f"Incremental push processing | record={record_id}")
 
