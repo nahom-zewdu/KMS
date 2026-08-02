@@ -126,6 +126,7 @@ class IngestionHandler:
             "source": source,
             "content": content,
             "event_id": event_id,
+            "company_id": company_id,
             "created_at": created_at,
         })
 
