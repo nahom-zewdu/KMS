@@ -77,6 +77,11 @@ class IngestionHandler:
 
         # 2. Insert NER Entities
         db_entities = [e.to_db_record() for e in entities]
+        for e in db_entities:
+            e["company_id"] = company_id
+            meta = e.get("metadata") or {}
+            meta["company_id"] = company_id
+            e["metadata"] = meta
         insert_entities(supabase, db_entities)
 
         entity_text_to_id = {
