@@ -69,6 +69,7 @@ class IngestionHandler:
                 "source": source,
                 "content": content,
                 "event_id": event_id,
+                "company_id": company_id,
                 "created_at": created_at,
             })
             mark_event_processed(supabase, record_id)
