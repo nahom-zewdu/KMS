@@ -145,6 +145,7 @@ class IngestionHandler:
                         self.codebase_analyzer.process_push_event(
                             payload,
                             record_id,
+                            company_id=company_id,
                         )
                     )
                 except Exception as e:
