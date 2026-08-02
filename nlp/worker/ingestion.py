@@ -114,6 +114,7 @@ class IngestionHandler:
                 "type": r["type"],
                 "confidence": 0.95,
                 "source_record_id": record_id,
+                "company_id": company_id,
                 "created_at": r.get("created_at") or created_at,
             })
 
