@@ -190,32 +190,44 @@ class AdaptiveRetriever:
                 logger.debug("Entity context lookup failed for '%s': %s", entity, e)
         return chunks
 
-    def retrieve(self, question: str) -> List[Dict]:
+    def retrieve(self, question: str, company_id: str = "default") -> List[Dict]:
         analysis = analyze_query(question)
         logger.info("------------------------------")
-        logger.info(f"Query analysis: {analysis}")
+        logger.info(f"Query analysis: {analysis} | company={company_id}")
 
         chunks: List[Dict] = []
         entities = analysis.get("entities") or []
         if not entities:
-            entities = self._find_entity_candidates(question)
+            entities = self._find_entity_candidates(question, company_id=company_id)
             logger.info("No analyzer entities found, fell back to entity search: %s", entities)
 
         if entities:
-            chunks.extend(self._entity_context_chunks(entities))
+            chunks.extend(self._entity_context_chunks(entities, company_id=company_id))
             for entity in entities[:5]:
-                chunks.extend(self._search_edges_by_entity(entity, analysis.get("relations", [])))
+                chunks.extend(
+                    self._search_edges_by_entity(
+                        entity,
+                        analysis.get("relations", []),
+                        company_id=company_id,
+                    )
+                )
 
-        # === VECTOR SEARCH ===
         try:
             vec = VectorRetriever(self.supabase)
-            vec_chunks = vec.retrieve(analysis.get("rewritten", question), top_k=8)
+            vec_chunks = vec.retrieve(
+                analysis.get("rewritten", question),
+                top_k=8,
+                company_id=company_id,  # if VectorRetriever supports it; else filter after
+            )
             for c in vec_chunks:
+                # Soft filter if RPC is still global
+                if c.get("company_id") and c.get("company_id") not in (company_id, "default"):
+                    continue
                 chunks.append({
                     "content": c.get("content", "")[:900],
                     "source": c.get("source", "raw"),
                     "record_id": c.get("record_id", ""),
-                    "score": c.get("similarity", 0.7)
+                    "score": c.get("similarity", 0.7),
                 })
         except Exception as e:
             logger.warning(f"Vector failed: {e}")
