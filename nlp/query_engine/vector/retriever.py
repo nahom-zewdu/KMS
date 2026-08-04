@@ -42,7 +42,7 @@ class VectorRetriever:
         )
         return response.data or []
 
-    def retrieve(self, question: str, top_k: int = 8) -> List[Dict]:
+    def retrieve(self, question: str, top_k: int = 8, company_id: str = "default") -> List[Dict]:
         """Fetch top-k relevant chunks."""
         embedding = self._embed(question)
         thresholds = [0.65, 0.55, 0.45]
