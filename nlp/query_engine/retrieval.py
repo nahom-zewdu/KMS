@@ -2,6 +2,7 @@
 """
 Clean & Reliable Retrieval — Fixed for your current schema.
 """
+from email.policy import default
 from typing import List, Dict, Any
 from supabase import Client
 from .analyzer import analyze_query
@@ -18,7 +19,7 @@ class AdaptiveRetriever:
     def _normalize_entity(self, text: str) -> str:
         return re.sub(r"\s+", " ", text.strip())
 
-    def _find_entity_candidates(self, question: str, limit: int = 6) -> List[str]:
+    def _find_entity_candidates(self, question: str, company_id: str = "default", limit: int = 6) -> List[str]:
         """Fallback entity candidates from the knowledge graph."""
         candidates: List[str] = []
         if not question:
@@ -28,6 +29,7 @@ class AdaptiveRetriever:
             response = (
                 self.supabase.table("entities")
                 .select("name")
+                .eq("company_id", company_id)
                 .ilike("name", f"%{question}%")
                 .limit(limit)
                 .execute()
@@ -49,6 +51,7 @@ class AdaptiveRetriever:
                     self.supabase.table("entities")
                     .select("name")
                     .ilike("name", f"%{token}%")
+                    .eq("company_id", company_id)
                     .limit(3)
                     .execute()
                 )
@@ -59,7 +62,7 @@ class AdaptiveRetriever:
 
         return list(dict.fromkeys(self._normalize_entity(c) for c in candidates if c))
 
-    def _search_edges_by_entity(self, entity: str, relation_types: Any) -> List[Dict[str, Any]]:
+    def _search_edges_by_entity(self, entity: str, relation_types: Any, company_id: str = "default") -> List[Dict[str, Any]]:
         chunks: List[Dict[str, Any]] = []
         entity = self._normalize_entity(entity)
         if not entity:
@@ -77,7 +80,8 @@ class AdaptiveRetriever:
                     "search_edges_by_entity",
                     {
                         "search_term": entity,
-                        "relation_types": relation_types
+                        "relation_types": relation_types,
+                        "company_id": company_id
                     }
                 )
                 .execute()
@@ -99,6 +103,7 @@ class AdaptiveRetriever:
             entity_rows = (
                 self.supabase.table("entities")
                 .select("id,name")
+                .eq("company_id", company_id)
                 .ilike("name", f"%{entity}%")
                 .limit(12)
                 .execute()
@@ -158,7 +163,7 @@ class AdaptiveRetriever:
 
         return chunks
 
-    def _entity_context_chunks(self, entities: List[str]) -> List[Dict[str, Any]]:
+    def _entity_context_chunks(self, entities: List[str], company_id: str = "default") -> List[Dict[str, Any]]:
         chunks: List[Dict[str, Any]] = []
         seen_names = set()
         for entity in entities[:6]:
@@ -167,6 +172,7 @@ class AdaptiveRetriever:
                     self.supabase.table("entities")
                     .select("name,type")
                     .ilike("name", f"%{entity}%")
+                    .eq("company_id", company_id)
                     .limit(4)
                     .execute()
                 )
@@ -182,7 +188,7 @@ class AdaptiveRetriever:
                         content = f"{name} is a {entity_type} entity."
                     chunks.append({
                         "content": content,
-                        "source": "graph",
+                        "source": "graph.eq("company_id", company_id)",
                         "record_id": f"entity:{name}",
                         "score": 0.75
                     })
@@ -192,7 +198,6 @@ class AdaptiveRetriever:
 
     def retrieve(self, question: str, company_id: str = "default") -> List[Dict]:
         analysis = analyze_query(question)
-        logger.info("------------------------------")
         logger.info(f"Query analysis: {analysis} | company={company_id}")
 
         chunks: List[Dict] = []
