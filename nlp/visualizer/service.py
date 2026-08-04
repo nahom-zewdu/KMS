@@ -19,16 +19,16 @@ class VisualizerService:
     def __init__(self, supabase: Client):
         self.supabase = supabase
 
-    def build_for_role(self, role: str) -> Dict:
+    def build_for_role(self, role: str, company_id: str = "default") -> Dict:
         """Main entrypoint for playbook visualizer data."""
         try:
             architecture = self._build_architecture()
-            modules = self._build_modules(role)
-            key_files = self._build_key_files(role)
-            learning_path = self._build_learning_path(role, modules)
+            modules = self._build_modules(role, company_id)
+            key_files = self._build_key_files(role, company_id)
+            learning_path = self._build_learning_path(role, modules, company_id)
             safe_zones = self._build_safe_zones()
             dependency_impact = self._build_dependency_impact()
-            ownership = self._build_ownership(role)  # New: real ownership data
+            ownership = self._build_ownership(role, company_id)  # New: real ownership data
 
             return {
                 "architecture": architecture,
@@ -66,7 +66,7 @@ class VisualizerService:
             logger.warning(f"Architecture build failed: {e}")
             return [{"name": "Core Application", "description": "Main systems", "importance": 0.9}]
 
-    def _build_modules(self, role: str) -> List[Dict]:
+    def _build_modules(self, role: str, company_id: str = "default") -> List[Dict]:
         """Real modules from codebase_modules table with role boost."""
         try:
             res = self.supabase.table("codebase_modules")\
@@ -116,11 +116,12 @@ class VisualizerService:
         except:
             return []
 
-    def _build_key_files(self, role: str) -> List[Dict]:
+    def _build_key_files(self, role: str, company_id: str = "default") -> List[Dict]:
         """Key files with ownership hints."""
         try:
             res = self.supabase.table("codebase_files")\
                 .select("file_path, language, last_author, module_path")\
+                .eq("company_id", company_id)\
                 .limit(25).execute()
 
             return [
@@ -136,7 +137,7 @@ class VisualizerService:
         except:
             return []
 
-    def _build_learning_path(self, role: str, modules: List[Dict]) -> List[Dict]:
+    def _build_learning_path(self, role: str, modules: List[Dict], company_id: str = "default") -> List[Dict]:
         """Role-aware prioritized learning path."""
         sorted_modules = sorted(modules, key=lambda m: m.get("importance", 0), reverse=True)
         return [
@@ -150,10 +151,10 @@ class VisualizerService:
             for i, mod in enumerate(sorted_modules[:7])
         ]
 
-    def _build_safe_zones(self) -> Dict:
+    def _build_safe_zones(self, company_id: str = "default") -> Dict:
         """Safe contribution zones based on directory patterns."""
         try:
-            res = self.supabase.table("codebase_files").select("file_path, module_path").limit(120).execute()
+            res = self.supabase.table("codebase_files").select("file_path, module_path").eq("company_id", company_id).limit(120).execute()
             safe = []
             risky = []
             for f in res.data or []:
@@ -176,12 +177,12 @@ class VisualizerService:
             {"file": "api/handlers/github.go", "impact": "Entry point for all code changes", "downstream": ["Baseline Sync", "File Indexing"]},
         ]
 
-    def _build_ownership(self, role: str) -> Dict:
+    def _build_ownership(self, role: str, company_id: str = "default") -> Dict:
         """Real ownership from PERSON → OWNS → FILE edges."""
         try:
             # Find people who own files or systems
             res = self.supabase.table("edges").select("source_id,target_id,type,metadata")\
-                .eq("type", "OWNS").limit(30).execute()
+                .eq("type", "OWNS").eq("company_id", company_id).limit(30).execute()
 
             owners = []
             for edge in res.data or []:
