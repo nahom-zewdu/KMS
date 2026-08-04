@@ -33,7 +33,7 @@ class PlaybookGenerator:
         """Main generation entrypoint."""
         logger.info(f"Generating playbook for role: {role}")
 
-        visualizer_data = self.visualizer.build_for_role(role)
+        visualizer_data = self.visualizer.build_for_role(role, company_id=company_id)
         compact_context = self._gather_compact_context(role, company_id)
 
         prompt = f"""
