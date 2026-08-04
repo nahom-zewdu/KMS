@@ -32,9 +32,10 @@ async def generate_playbook(payload: dict):
     """Generate a role-specific onboarding playbook."""
     try:
         role = payload.get("role", "software-engineer")
-        employee_name = payload.get("employee_name")
+        employee_name = payload.get("employee_name", "New Engineer")
+        company_id = payload.get("company_id", "default")
 
-        playbook = generator.generate(role=role, employee_name=employee_name)
+        playbook = generator.generate(role=role, employee_name=employee_name, company_id=company_id)
         logging.info(f"Role: {role}, Playbook generated: {playbook}")
         
         return JSONResponse({
