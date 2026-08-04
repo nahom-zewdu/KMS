@@ -34,7 +34,7 @@ class PlaybookGenerator:
         logger.info(f"Generating playbook for role: {role}")
 
         visualizer_data = self.visualizer.build_for_role(role)
-        compact_context = self._gather_compact_context(role)
+        compact_context = self._gather_compact_context(role, company_id)
 
         prompt = f"""
             You are an elite engineering onboarding architect at a fintech/SaaS startup.
