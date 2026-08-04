@@ -46,97 +46,166 @@ class CodebaseAnalyzer:
             return repo.get("full_name") or repo.get("name", "unknown-repo")
         return str(payload.get("repo") or repo or "unknown-repo")
 
-    async def _upsert_file(self, file_path: str, repo_name: str, record_id: str, payload: Dict, company_id: str = "default"):
-        """Create FILE entity + codebase_files + PART_OF + OWNS edges."""
+    async def _upsert_file(
+        self,
+        file_path: str,
+        repo_name: str,
+        record_id: str,
+        payload: Dict,
+        company_id: str = "default",
+    ):
+        """Create FILE entity + repositories + codebase_files + PART_OF + OWNS edges."""
         file_name = file_path.split("/")[-1]
         module_path = "/".join(file_path.split("/")[:-1]) if "/" in file_path else ""
+        now = datetime.now(timezone.utc).isoformat()
 
-        # REPOSITORY entity (ensure exists)
-        repo_entity_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"repo:{repo_name}"))
-        self.supabase.table("entities").upsert({
-            "id": repo_entity_id,
-            "type": "REPOSITORY",
-            "name": repo_name,
-            "metadata": {"source": "github_push", "company_id": company_id},
-            "created_at": datetime.now(timezone.utc).isoformat()
-        }, on_conflict="id").execute()
+        # Normalize author (payload.sender may be str or dict)
+        sender = payload.get("sender")
+        if isinstance(sender, dict):
+            author = sender.get("login") or sender.get("name")
+        else:
+            author = sender if isinstance(sender, str) else None
 
-        # FILE entity
-        file_entity_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"file:{repo_name}:{file_path}"))
-        self.supabase.table("entities").upsert({
-            "id": file_entity_id,
-            "type": "FILE",
-            "name": file_name,
-            "file_path": file_path,
-            "language": self._detect_language(file_path),
-            "metadata": {"module_path": module_path, "source_record_id": record_id, "company_id": company_id},
-            "created_at": datetime.now(timezone.utc).isoformat()
-        }, on_conflict="id").execute()
+        head = payload.get("head_commit") or {}
+        if not isinstance(head, dict):
+            head = {}
 
-        # Physical repo record
-        repo_res = self.supabase.table("repositories").select("id").eq("full_name", repo_name).single().execute()
-        if not repo_res.data:
-            self.supabase.table("repositories").upsert({
-                "full_name": repo_name,
+        # --- REPOSITORY entity ---
+        repo_entity_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"repo:{company_id}:{repo_name}"))
+        self.supabase.table("entities").upsert(
+            {
+                "id": repo_entity_id,
+                "type": "REPOSITORY",
+                "name": repo_name,
                 "company_id": company_id,
-                "updated_at": datetime.now(timezone.utc).isoformat()
-            }, on_conflict="full_name").execute()
-            repo_res = self.supabase.table("repositories").select("id").eq("full_name", repo_name).single().execute()
+                "metadata": {"source": "github_push", "company_id": company_id},
+                "created_at": now,
+            },
+            on_conflict="id",
+        ).execute()
 
-        physical_repo_id = repo_res.data["id"]
+        # --- Physical repositories row (create if missing; never use .single() first) ---
+        existing = (
+            self.supabase.table("repositories")
+            .select("id")
+            .eq("full_name", repo_name)
+            .eq("company_id", company_id)
+            .limit(1)
+            .execute()
+        )
 
-        # codebase_files
+        if existing.data:
+            physical_repo_id = existing.data[0]["id"]
+            self.supabase.table("repositories").update(
+                {"updated_at": now}
+            ).eq("id", physical_repo_id).execute()
+        else:
+            physical_repo_id = str(uuid.uuid4())
+            ref = payload.get("ref") or ""
+            default_branch = (
+                ref.replace("refs/heads/", "") if isinstance(ref, str) and ref.startswith("refs/heads/") else "main"
+            )
+            self.supabase.table("repositories").insert(
+                {
+                    "id": physical_repo_id,
+                    "full_name": repo_name,
+                    "company_id": company_id,
+                    "default_branch": default_branch,
+                    "updated_at": now,
+                }
+            ).execute()
+
+        # --- FILE entity ---
+        file_entity_id = str(
+            uuid.uuid5(uuid.NAMESPACE_URL, f"file:{company_id}:{repo_name}:{file_path}")
+        )
+        self.supabase.table("entities").upsert(
+            {
+                "id": file_entity_id,
+                "type": "FILE",
+                "name": file_name,
+                "company_id": company_id,
+                "metadata": {
+                    "file_path": file_path,
+                    "module_path": module_path,
+                    "language": self._detect_language(file_path),
+                    "source_record_id": record_id,
+                    "company_id": company_id,
+                },
+                "created_at": now,
+            },
+            on_conflict="id",
+        ).execute()
+
+        # --- codebase_files ---
         file_data = {
             "repository_id": physical_repo_id,
             "file_path": file_path,
             "file_name": file_name,
             "module_path": module_path,
             "language": self._detect_language(file_path),
-            "last_modified_at": datetime.now(timezone.utc).isoformat(),
-            "last_commit_sha": payload.get("head_commit", {}).get("id"),
-            "last_author": payload.get("sender"),
-            "metadata": {"source_record_id": record_id, "company_id": company_id}
+            "last_modified_at": now,
+            "last_commit_sha": head.get("id"),
+            "last_author": author,
+            "metadata": {"source_record_id": record_id, "company_id": company_id},
         }
-        self.supabase.table("codebase_files").upsert(file_data, on_conflict="repository_id,file_path").execute()
+        self.supabase.table("codebase_files").upsert(
+            file_data, on_conflict="repository_id,file_path"
+        ).execute()
 
-        # PART_OF edge
-        edge_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"partof:{file_entity_id}:{repo_entity_id}"))
-        self.supabase.table("edges").upsert({
-            "id": edge_id,
-            "source_id": file_entity_id,
-            "target_id": repo_entity_id,
-            "type": "PART_OF",
-            "confidence": 1.0,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "source_record_id": record_id,
-            "company_id": company_id
-        }, on_conflict="id").execute()
-
-        # OWNS edge from last author (if available)
-        author = payload.get("sender") or payload.get("last_author")
-        if author:
-            person_entity_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"person:{author}"))
-            self.supabase.table("entities").upsert({
-                "id": person_entity_id,
-                "type": "PERSON",
-                "name": author,
-                "metadata": {"source": "github_commit", "company_id": company_id},
-                "created_at": datetime.now(timezone.utc).isoformat()
-            }, on_conflict="id").execute()
-
-            owns_edge_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"owns:{person_entity_id}:{file_entity_id}"))
-            self.supabase.table("edges").upsert({
-                "id": owns_edge_id,
-                "source_id": person_entity_id,
-                "target_id": file_entity_id,
-                "type": "OWNS",
-                "confidence": 0.85,
-                "created_at": datetime.now(timezone.utc).isoformat(),
+        # --- PART_OF edge ---
+        edge_id = str(
+            uuid.uuid5(uuid.NAMESPACE_URL, f"partof:{file_entity_id}:{repo_entity_id}")
+        )
+        self.supabase.table("edges").upsert(
+            {
+                "id": edge_id,
+                "source_id": file_entity_id,
+                "target_id": repo_entity_id,
+                "type": "PART_OF",
+                "confidence": 1.0,
+                "created_at": now,
                 "source_record_id": record_id,
-                "company_id": company_id
-            }, on_conflict="id").execute()
+                "company_id": company_id,
+            },
+            on_conflict="id",
+        ).execute()
 
-        logger.debug(f"Updated file with ownership: {file_path}")
+        # --- OWNS edge ---
+        if author:
+            person_entity_id = str(
+                uuid.uuid5(uuid.NAMESPACE_URL, f"person:{company_id}:{author}")
+            )
+            self.supabase.table("entities").upsert(
+                {
+                    "id": person_entity_id,
+                    "type": "PERSON",
+                    "name": str(author).lower(),
+                    "company_id": company_id,
+                    "metadata": {"source": "github_commit", "company_id": company_id},
+                    "created_at": now,
+                },
+                on_conflict="id",
+            ).execute()
+
+            owns_edge_id = str(
+                uuid.uuid5(uuid.NAMESPACE_URL, f"owns:{person_entity_id}:{file_entity_id}")
+            )
+            self.supabase.table("edges").upsert(
+                {
+                    "id": owns_edge_id,
+                    "source_id": person_entity_id,
+                    "target_id": file_entity_id,
+                    "type": "OWNS",
+                    "confidence": 0.85,
+                    "created_at": now,
+                    "source_record_id": record_id,
+                    "company_id": company_id,
+                },
+                on_conflict="id",
+            ).execute()
+
+        logger.debug("Updated file with ownership: %s", file_path)
 
     def _detect_language(self, file_path: str) -> str:
         ext = file_path.split(".")[-1].lower() if "." in file_path else ""
