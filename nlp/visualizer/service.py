@@ -195,10 +195,23 @@ class VisualizerService:
             return {"safe_first": [], "high_risk": []}
 
     def _build_dependency_impact(self, company_id: str = "default") -> List[Dict]:
-        """High-impact files based on recent activity and structure."""
-        return [
-            {"file": "nlp/worker/ingestion.py", "impact": "Central to all knowledge ingestion", "downstream": ["KG", "Playbooks", "Query Engine"]},
-            {"file": "api/handlers/github.go", "impact": "Entry point for all code changes", "downstream": ["Baseline Sync", "File Indexing"]},
+        """Files with high downstream impact based on PART_OF edges."""
+        rows = self._files_for_company(company_id, limit=40)
+        # Heuristic: deeper / core paths
+        picks = []
+        for f in rows:
+            path = f.get("file_path") or ""
+            low = path.lower()
+            if any(k in low for k in ["ingest", "handler", "core", "auth", "payment", "main"]):
+                picks.append({
+                    "file": path,
+                    "impact": "High activity / core path in this codebase",
+                    "downstream": ["KG", "Onboarding", "Query"],
+                })
+            if len(picks) >= 5:
+                break
+        return picks or [
+            {"file": "(none indexed yet)", "impact": "Run baseline sync for this company", "downstream": []}
         ]
 
     def _build_ownership(self, role: str, company_id: str = "default") -> Dict:
