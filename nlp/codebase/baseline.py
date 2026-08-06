@@ -139,15 +139,16 @@ class CodebaseBaselineSync:
             {
                 "id": file_entity_id,
                 "type": "FILE",
-                "file_path": file_path,
-                "module_path": module_path,
-                "language": self._detect_language(file_path),
                 "name": file_name,
+                "company_id": company_id,
                 "metadata": {
-                "company_id": company_id,
+                    "file_path": file_path,
+                    "module_path": module_path,
+                    "language": self._detect_language(file_path),
+                    "company_id": company_id,
                 },
-                "created_at": now,
                 "company_id": company_id,
+                "created_at": now,
             },
             on_conflict="id",
         ).execute()
@@ -162,6 +163,7 @@ class CodebaseBaselineSync:
                 "last_modified_at": now,
                 "last_commit_sha": gh_file.sha,
                 "metadata": {"company_id": company_id},
+                "company_id": company_id,
             },
             on_conflict="repository_id,file_path",
         ).execute()
@@ -182,7 +184,7 @@ class CodebaseBaselineSync:
             on_conflict="id",
         ).execute()
 
-    def _create_module(self, module_path: str, repo_id: str, file_count: int):
+    def _create_module(self, module_path: str, repo_id: str, file_count: int, company_id: str = "default"):
         """Create/update module with computed importance."""
         module_name = module_path.split("/")[-1] if module_path else "root"
         importance = min(1.0, (file_count / 20.0) + 0.3)
@@ -194,10 +196,11 @@ class CodebaseBaselineSync:
             "inferred_type": self._infer_module_type(module_path),
             "description": f"Module containing {file_count} files",
             "importance_score": round(importance, 2),
-            "metadata": {"file_count": file_count}
+            "metadata": {"file_count": file_count, "company_id": company_id},
+            "company_id": company_id,
         }, on_conflict="repository_id,module_path").execute()
 
-    def _create_part_of_edge(self, repo_id: str, file_path: str):
+    def _create_part_of_edge(self, repo_id: str, file_path: str, company_id: str = "default"):
         """Create deterministic PART_OF edge using UUID."""
         # Use deterministic UUID based on repo + file_path
         edge_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"partof:{repo_id}:{file_path}"))
@@ -210,6 +213,7 @@ class CodebaseBaselineSync:
             "type": "PART_OF",
             "confidence": 1.0,
             "created_at": datetime.now(timezone.utc).isoformat(),
+            "company_id": company_id,
         }, on_conflict="id").execute()
 
     def _infer_module_type(self, module_path: str) -> str:
