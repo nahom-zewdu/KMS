@@ -150,25 +150,19 @@ class VisualizerService:
             return []
 
     def _build_key_files(self, role: str, company_id: str = "default") -> List[Dict]:
-        """Key files with ownership hints."""
-        try:
-            res = self.supabase.table("codebase_files")\
-                .select("file_path, language, last_author, module_path")\
-                .eq("company_id", company_id)\
-                .limit(25).execute()
-
-            return [
-                {
-                    "path": f["file_path"],
-                    "name": f["file_path"].split("/")[-1],
-                    "language": f.get("language", "Unknown"),
-                    "module": f.get("module_path", ""),
-                    "last_author": f.get("last_author"),
-                }
-                for f in (res.data or [])
-            ]
-        except:
-            return []
+        """Key files for the role, based on recent activity and module mapping."""
+        rows = self._files_for_company(company_id, limit=25)
+        return [
+            {
+                "path": f["file_path"],
+                "name": f["file_path"].split("/")[-1],
+                "language": f.get("language", "Unknown"),
+                "module": f.get("module_path", ""),
+                "last_author": f.get("last_author"),
+            }
+            for f in rows
+            if f.get("file_path")
+        ]
 
     def _build_learning_path(self, role: str, modules: List[Dict], company_id: str = "default") -> List[Dict]:
         """Role-aware prioritized learning path."""
