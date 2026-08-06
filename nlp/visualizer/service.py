@@ -215,27 +215,42 @@ class VisualizerService:
         ]
 
     def _build_ownership(self, role: str, company_id: str = "default") -> Dict:
-        """Real ownership from PERSON → OWNS → FILE edges."""
+        """Key ownership edges for the role, derived from KG."""
         try:
-            # Find people who own files or systems
-            res = self.supabase.table("edges").select("source_id,target_id,type,metadata")\
-                .eq("type", "OWNS").eq("company_id", company_id).limit(30).execute()
+            res = (
+                self.supabase.table("edges")
+                .select("source_id,target_id,type,confidence")
+                .eq("type", "OWNS")
+                .eq("company_id", company_id)
+                .limit(30)
+                .execute()
+            )
+            edges = res.data or []
+            if not edges:
+                return {"key_owners": [], "note": "No ownership edges yet"}
+
+            ids = list({e["source_id"] for e in edges} | {e["target_id"] for e in edges})
+            ent = (
+                self.supabase.table("entities")
+                .select("id,name,type")
+                .eq("company_id", company_id)
+                .in_("id", ids)
+                .execute()
+            )
+            by_id = {r["id"]: r for r in (ent.data or [])}
 
             owners = []
-            for edge in res.data or []:
-                # Fetch source (PERSON) and target (FILE/SYSTEM)
-                source = self.supabase.table("entities").select("name,type").eq("id", edge["source_id"]).single().execute()
-                if source.data and source.data["type"] == "PERSON":
-                    owners.append({
-                        "person": source.data["name"],
-                        "owns": edge["target_id"],  # can resolve later
-                        "confidence": edge.get("confidence", 0.9)
-                    })
-
-            return {
-                "key_owners": owners[:8],
-                "note": "Ownership derived from KG edges"
-            }
+            for edge in edges:
+                src = by_id.get(edge["source_id"])
+                tgt = by_id.get(edge["target_id"])
+                if not src or src.get("type", "").upper() != "PERSON":
+                    continue
+                owners.append({
+                    "person": src.get("name"),
+                    "owns": tgt.get("name") if tgt else edge["target_id"],
+                    "confidence": edge.get("confidence", 0.9),
+                })
+            return {"key_owners": owners[:8], "note": "Ownership derived from KG edges"}
         except Exception as e:
             logger.warning(f"Ownership query failed: {e}")
             return {"key_owners": [], "note": "Ownership mapping in progress"}
