@@ -106,6 +106,7 @@ class VisualizerService:
         try:
             res = self.supabase.table("codebase_modules")\
                 .select("*")\
+                .eq("company_id", company_id)\
                 .order("importance_score", desc=True)\
                 .limit(15).execute()
 
