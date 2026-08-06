@@ -125,46 +125,62 @@ class CodebaseBaselineSync:
             logger.error(f"Baseline sync failed: {e}", exc_info=True)
             return False
     
-    def _index_file(self, gh_file, repo_entity_id: str, physical_repo_id: str, repo_full_name: str):
+    def _index_file(self, gh_file, repo_entity_id: str, physical_repo_id: str, repo_full_name: str, company_id: str = "default",):
+        """Index a single file: create FILE entity, codebase_files entry, and PART_OF edge."""
         file_path = gh_file.path
         file_name = file_path.split("/")[-1]
         module_path = "/".join(file_path.split("/")[:-1]) if "/" in file_path else ""
+        now = datetime.now(timezone.utc).isoformat()
 
-        # FILE entity
-        file_entity_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"file:{repo_full_name}:{file_path}"))
-        self.supabase.table("entities").upsert({
-            "id": file_entity_id,
-            "type": "FILE",
-            "name": file_name,
-            "file_path": file_path,
-            "language": self._detect_language(file_path),
-            "metadata": {"module_path": module_path}
-        }, on_conflict="id").execute()
+        file_entity_id = str(
+            uuid.uuid5(uuid.NAMESPACE_URL, f"file:{company_id}:{repo_full_name}:{file_path}")
+        )
+        self.supabase.table("entities").upsert(
+            {
+                "id": file_entity_id,
+                "type": "FILE",
+                "name": file_name,
+                "company_id": company_id,
+                "metadata": {
+                    "file_path": file_path,
+                    "module_path": module_path,
+                    "language": self._detect_language(file_path),
+                    "company_id": company_id,
+                },
+                "created_at": now,
+            },
+            on_conflict="id",
+        ).execute()
 
-        # codebase_files
-        file_data = {
-            "repository_id": physical_repo_id,
-            "file_path": file_path,
-            "file_name": file_name,
-            "module_path": module_path,
-            "language": self._detect_language(file_path),
-            "last_modified_at": datetime.now(timezone.utc).isoformat(),
-            "last_commit_sha": gh_file.sha,
-        }
-        self.supabase.table("codebase_files").upsert(file_data, on_conflict="repository_id,file_path").execute()
+        self.supabase.table("codebase_files").upsert(
+            {
+                "repository_id": physical_repo_id,
+                "file_path": file_path,
+                "file_name": file_name,
+                "module_path": module_path,
+                "language": self._detect_language(file_path),
+                "last_modified_at": now,
+                "last_commit_sha": gh_file.sha,
+                "metadata": {"company_id": company_id},
+            },
+            on_conflict="repository_id,file_path",
+        ).execute()
 
-        # PART_OF edge
-        edge_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"partof:{file_entity_id}:{repo_entity_id}"))
-        self.supabase.table("edges").upsert({
-            "id": edge_id,
-            "source_id": file_entity_id,
-            "target_id": repo_entity_id,
-            "type": "PART_OF",
-            "confidence": 1.0,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }, on_conflict="id").execute()
-
-        logger.debug(f"Indexed file: {file_path}")
+        edge_id = str(
+            uuid.uuid5(uuid.NAMESPACE_URL, f"partof:{file_entity_id}:{repo_entity_id}")
+        )
+        self.supabase.table("edges").upsert(
+            {
+                "id": edge_id,
+                "source_id": file_entity_id,
+                "target_id": repo_entity_id,
+                "type": "PART_OF",
+                "confidence": 1.0,
+                "created_at": now,
+                "company_id": company_id,
+            },
+            on_conflict="id",
+        ).execute()
 
     def _create_module(self, module_path: str, repo_id: str, file_count: int):
         """Create/update module with computed importance."""
