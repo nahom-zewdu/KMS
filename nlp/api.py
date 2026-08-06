@@ -53,11 +53,11 @@ async def generate_playbook(payload: dict):
     
 
 @app.get("/github/sync-baseline")
-async def sync_baseline(repo: str):
+async def sync_baseline(repo: str, company_id: str = "default"):
     """Sync the baseline for a specific repository."""
     try:
         syncer = CodebaseBaselineSync(supabase)
-        success = syncer.sync_repository(repo)
+        success = syncer.sync_repository(repo, company_id=company_id)
         if success:
             return JSONResponse({"success": True, "message": f"Baseline synced for {repo}"})
         else:
