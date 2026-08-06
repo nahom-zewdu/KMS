@@ -179,22 +179,18 @@ class VisualizerService:
         ]
 
     def _build_safe_zones(self, company_id: str = "default") -> Dict:
-        """Safe contribution zones based on directory patterns."""
+        """Low-risk files for new engineers to explore."""
         try:
-            res = self.supabase.table("codebase_files").select("file_path, module_path").eq("company_id", company_id).limit(120).execute()
-            safe = []
-            risky = []
-            for f in res.data or []:
-                path = f.get("file_path", "").lower()
+            rows = self._files_for_company(company_id, limit=120)
+            safe, risky = [], []
+            for f in rows:
+                path = (f.get("file_path") or "").lower()
                 if any(k in path for k in ["utils", "common", "helper", "test", "config", "docs"]):
                     safe.append({"path": f["file_path"], "reason": "Low-risk, reusable utilities"})
                 elif any(k in path for k in ["core", "auth", "payment", "main"]):
                     risky.append({"path": f["file_path"], "reason": "High business impact"})
-            return {
-                "safe_first": safe[:8],
-                "high_risk": risky[:5]
-            }
-        except:
+            return {"safe_first": safe[:8], "high_risk": risky[:5]}
+        except Exception:
             return {"safe_first": [], "high_risk": []}
 
     def _build_dependency_impact(self, company_id: str = "default") -> List[Dict]:
