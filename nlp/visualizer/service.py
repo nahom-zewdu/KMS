@@ -19,6 +19,20 @@ class VisualizerService:
     def __init__(self, supabase: Client):
         self.supabase = supabase
 
+    def _repo_ids_for_company(self, company_id: str) -> List[str]:
+        """Repository IDs belonging to this company."""
+        try:
+            res = (
+                self.supabase.table("repositories")
+                .select("id")
+                .eq("company_id", company_id)
+                .execute()
+            )
+            return [r["id"] for r in (res.data or []) if r.get("id")]
+        except Exception as e:
+            logger.warning("repo_ids_for_company failed: %s", e)
+            return []
+
     def build_for_role(self, role: str, company_id: str = "default") -> Dict:
         """Main entrypoint for playbook visualizer data."""
         try:
