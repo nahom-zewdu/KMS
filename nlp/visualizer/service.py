@@ -33,6 +33,24 @@ class VisualizerService:
             logger.warning("repo_ids_for_company failed: %s", e)
             return []
 
+    def _files_for_company(self, company_id: str, limit: int = 200) -> List[Dict]:
+        """codebase_files scoped via repositories.company_id."""
+        repo_ids = self._repo_ids_for_company(company_id)
+        if not repo_ids:
+            return []
+        try:
+            res = (
+                self.supabase.table("codebase_files")
+                .select("file_path, language, last_author, module_path, repository_id")
+                .in_("repository_id", repo_ids[:50])  # keep request size sane
+                .limit(limit)
+                .execute()
+            )
+            return res.data or []
+        except Exception as e:
+            logger.warning("files_for_company failed: %s", e)
+            return []
+
     def build_for_role(self, role: str, company_id: str = "default") -> Dict:
         """Main entrypoint for playbook visualizer data."""
         try:
