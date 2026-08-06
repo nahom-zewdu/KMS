@@ -79,18 +79,21 @@ class VisualizerService:
     def _build_architecture(self, company_id: str = "default") -> List[Dict]:
         """Top-level architecture layers from codebase files."""
         try:
-            res = self.supabase.table("codebase_files").select("file_path").limit(200).execute()
+            rows = self._files_for_company(company_id, limit=200)
             layers = {}
-            for row in res.data or []:
-                if "/" in row.get("file_path", ""):
-                    layer = row["file_path"].split("/")[0]
+            for row in rows:
+                path = row.get("file_path") or ""
+                if "/" in path:
+                    layer = path.split("/")[0]
                     layers[layer] = layers.get(layer, 0) + 1
-
+            if not layers:
+                return [{"name": "Core Application", "description": "Main systems", "importance": 0.9}]
+            max_c = max(layers.values())
             return [
                 {
                     "name": f"{layer.capitalize()} Layer",
                     "description": f"Core {layer} services and logic",
-                    "importance": round(count / max(layers.values() or [1]), 2)
+                    "importance": round(count / max_c, 2),
                 }
                 for layer, count in sorted(layers.items(), key=lambda x: x[1], reverse=True)[:6]
             ]
