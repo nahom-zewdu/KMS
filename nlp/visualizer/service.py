@@ -128,27 +128,25 @@ class VisualizerService:
             logger.warning(f"Modules query failed, falling back: {e}")
             return self._fallback_modules(role)
 
-    def _fallback_modules(self, role: str) -> List[Dict]:
-        """Fallback inference from files if modules table is empty."""
+    def _fallback_modules(self, role: str, company_id: str = "default") -> List[Dict]:
         try:
-            res = self.supabase.table("codebase_files").select("file_path").limit(300).execute()
+            rows = self._files_for_company(company_id, limit=300)
             module_map = {}
-            for row in res.data or []:
-                parts = row.get("file_path", "").split("/")
+            for row in rows:
+                parts = (row.get("file_path") or "").split("/")
                 if len(parts) >= 2:
                     mod = "/".join(parts[:2])
                     module_map[mod] = module_map.get(mod, 0) + 1
-
             return [
                 {
                     "name": name.split("/")[-1],
                     "path": name,
                     "importance": round(min(1.0, count / 15.0), 2),
-                    "description": f"Core {name} functionality"
+                    "description": f"Core {name} functionality",
                 }
                 for name, count in sorted(module_map.items(), key=lambda x: x[1], reverse=True)[:12]
             ]
-        except:
+        except Exception:
             return []
 
     def _build_key_files(self, role: str, company_id: str = "default") -> List[Dict]:
