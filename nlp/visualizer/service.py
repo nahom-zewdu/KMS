@@ -202,7 +202,7 @@ class VisualizerService:
         except:
             return {"safe_first": [], "high_risk": []}
 
-    def _build_dependency_impact(self) -> List[Dict]:
+    def _build_dependency_impact(self, company_id: str = "default") -> List[Dict]:
         """High-impact files based on recent activity and structure."""
         return [
             {"file": "nlp/worker/ingestion.py", "impact": "Central to all knowledge ingestion", "downstream": ["KG", "Playbooks", "Query Engine"]},
