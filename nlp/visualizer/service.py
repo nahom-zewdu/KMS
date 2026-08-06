@@ -52,15 +52,14 @@ class VisualizerService:
             return []
 
     def build_for_role(self, role: str, company_id: str = "default") -> Dict:
-        """Main entrypoint for playbook visualizer data."""
         try:
-            architecture = self._build_architecture()
+            architecture = self._build_architecture(company_id)
             modules = self._build_modules(role, company_id)
             key_files = self._build_key_files(role, company_id)
             learning_path = self._build_learning_path(role, modules, company_id)
-            safe_zones = self._build_safe_zones()
-            dependency_impact = self._build_dependency_impact()
-            ownership = self._build_ownership(role, company_id)  # New: real ownership data
+            safe_zones = self._build_safe_zones(company_id)
+            dependency_impact = self._build_dependency_impact(company_id)
+            ownership = self._build_ownership(role, company_id)
 
             return {
                 "architecture": architecture,
@@ -71,12 +70,13 @@ class VisualizerService:
                 "dependency_impact": dependency_impact,
                 "ownership": ownership,
                 "role": role,
+                "company_id": company_id,
             }
         except Exception as e:
             logger.error(f"Visualizer build failed for role '{role}': {e}", exc_info=True)
             return {"error": "Failed to load visualizer data"}
 
-    def _build_architecture(self) -> List[Dict]:
+    def _build_architecture(self, company_id: str = "default") -> List[Dict]:
         """Top-level architecture layers from codebase files."""
         try:
             res = self.supabase.table("codebase_files").select("file_path").limit(200).execute()
