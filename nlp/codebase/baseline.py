@@ -139,15 +139,15 @@ class CodebaseBaselineSync:
             {
                 "id": file_entity_id,
                 "type": "FILE",
+                "file_path": file_path,
+                "module_path": module_path,
+                "language": self._detect_language(file_path),
                 "name": file_name,
-                "company_id": company_id,
                 "metadata": {
-                    "file_path": file_path,
-                    "module_path": module_path,
-                    "language": self._detect_language(file_path),
-                    "company_id": company_id,
+                "company_id": company_id,
                 },
                 "created_at": now,
+                "company_id": company_id,
             },
             on_conflict="id",
         ).execute()
