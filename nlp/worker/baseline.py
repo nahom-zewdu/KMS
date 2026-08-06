@@ -17,15 +17,13 @@ class BaselineHandler:
     Handles processing of baseline synchronization jobs.
     """
     def process(self, job: dict, stream: str, msg_id: str, redis_client):
+        """ Process a baseline sync job from the Redis stream."""
         repo = job.get("payload", {}).get("repo")
+        company_id = job.get("company_id") or job.get("payload", {}).get("company_id") or "default"
         if not repo:
             logger.error("No repo in baseline job")
             return
-
-        logger.info(f"Starting baseline sync for {repo}")
-        # Run synchronously for now (or thread if very large)
-        # In production, consider background task queue
-        success = baseline_sync.sync_repository(repo)
-        
+        logger.info(f"Starting baseline sync for {repo} | company={company_id}")
+        success = baseline_sync.sync_repository(repo, company_id=company_id)
         if success:
             logger.info(f"Baseline sync completed for {repo}")
