@@ -26,43 +26,73 @@ class CodebaseBaselineSync:
         self.supabase = supabase
         self.gh = Github(os.getenv("GITHUB_API_TOKEN"))
 
-    def sync_repository(self, repo_full_name: str) -> bool:
-        logger.info(f"Starting full baseline sync for {repo_full_name}")
+    def sync_repository(self, repo_full_name: str, company_id: str = "default") -> bool:
+        """Perform a full baseline sync for the given repository."""
+        logger.info(f"Starting full baseline sync for {repo_full_name} | company={company_id}")
         try:
             repo = self.gh.get_repo(repo_full_name)
+            now = datetime.now(timezone.utc).isoformat()
 
-            # 1. REPOSITORY entity in KG
-            repo_entity_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"repo:{repo_full_name}"))
-            self.supabase.table("entities").upsert({
-                "id": repo_entity_id,
-                "type": "REPOSITORY",
-                "name": repo_full_name,
-                "metadata": {
-                    "description": repo.description or "",
-                    "language": repo.language,
-                    "default_branch": repo.default_branch
+            # 1. REPOSITORY entity (tenant-scoped id)
+            repo_entity_id = str(
+                uuid.uuid5(uuid.NAMESPACE_URL, f"repo:{company_id}:{repo_full_name}")
+            )
+            self.supabase.table("entities").upsert(
+                {
+                    "id": repo_entity_id,
+                    "type": "REPOSITORY",
+                    "name": repo_full_name,
+                    "company_id": company_id,
+                    "metadata": {
+                        "description": repo.description or "",
+                        "language": repo.language,
+                        "default_branch": repo.default_branch,
+                        "company_id": company_id,
+                    },
+                    "created_at": now,
                 },
-                "created_at": datetime.now(timezone.utc).isoformat()
-            }, on_conflict="id").execute()
+                on_conflict="id",
+            ).execute()
 
             # 2. repositories table
-            repo_data = {
-                "full_name": repo_full_name,
-                "company_id": "default",
-                "description": repo.description or "",
-                "language": repo.language,
-                "default_branch": repo.default_branch,
-                "last_synced_at": datetime.now(timezone.utc).isoformat(),
-            }
-            self.supabase.table("repositories").upsert(repo_data, on_conflict="full_name").execute()
-
-            repo_res = self.supabase.table("repositories").select("id").eq("full_name", repo_full_name).single().execute()
-            physical_repo_id = repo_res.data["id"]
+            existing = (
+                self.supabase.table("repositories")
+                .select("id")
+                .eq("full_name", repo_full_name)
+                .eq("company_id", company_id)
+                .limit(1)
+                .execute()
+            )
+            if existing.data:
+                physical_repo_id = existing.data[0]["id"]
+                self.supabase.table("repositories").update(
+                    {
+                        "description": repo.description or "",
+                        "language": repo.language,
+                        "default_branch": repo.default_branch,
+                        "last_synced_at": now,
+                        "updated_at": now,
+                    }
+                ).eq("id", physical_repo_id).execute()
+            else:
+                physical_repo_id = str(uuid.uuid4())
+                self.supabase.table("repositories").insert(
+                    {
+                        "id": physical_repo_id,
+                        "full_name": repo_full_name,
+                        "company_id": company_id,
+                        "description": repo.description or "",
+                        "language": repo.language,
+                        "default_branch": repo.default_branch,
+                        "last_synced_at": now,
+                        "updated_at": now,
+                    }
+                ).execute()
 
             # 3. Tree walk
             contents = repo.get_contents("")
             files_processed = 0
-            module_map = {}
+            module_map: Dict[str, int] = {}
 
             while contents:
                 item = contents.pop(0)
@@ -73,22 +103,28 @@ class CodebaseBaselineSync:
                     except GithubException:
                         continue
                     continue
-
                 if item.type == "file":
-                    self._index_file(item, repo_entity_id, physical_repo_id, repo_full_name)
+                    self._index_file(
+                        item,
+                        repo_entity_id,
+                        physical_repo_id,
+                        repo_full_name,
+                        company_id,
+                    )
                     files_processed += 1
 
-            # 4. Modules
             for mod_path, file_count in module_map.items():
                 self._create_module(mod_path, physical_repo_id, file_count)
 
-            logger.info(f"✅ Baseline sync complete: {files_processed} files, {len(module_map)} modules")
+            logger.info(
+                f"Baseline sync complete: {files_processed} files, "
+                f"{len(module_map)} modules | company={company_id}"
+            )
             return True
-
         except Exception as e:
             logger.error(f"Baseline sync failed: {e}", exc_info=True)
             return False
-
+    
     def _index_file(self, gh_file, repo_entity_id: str, physical_repo_id: str, repo_full_name: str):
         file_path = gh_file.path
         file_name = file_path.split("/")[-1]
