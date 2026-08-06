@@ -114,7 +114,7 @@ class CodebaseBaselineSync:
                     files_processed += 1
 
             for mod_path, file_count in module_map.items():
-                self._create_module(mod_path, physical_repo_id, file_count)
+                self._create_module(mod_path, physical_repo_id, file_count, company_id)
 
             logger.info(
                 f"Baseline sync complete: {files_processed} files, "
