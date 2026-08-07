@@ -26,43 +26,73 @@ class CodebaseBaselineSync:
         self.supabase = supabase
         self.gh = Github(os.getenv("GITHUB_API_TOKEN"))
 
-    def sync_repository(self, repo_full_name: str) -> bool:
-        logger.info(f"Starting full baseline sync for {repo_full_name}")
+    def sync_repository(self, repo_full_name: str, company_id: str = "default") -> bool:
+        """Perform a full baseline sync for the given repository."""
+        logger.info(f"Starting full baseline sync for {repo_full_name} | company={company_id}")
         try:
             repo = self.gh.get_repo(repo_full_name)
+            now = datetime.now(timezone.utc).isoformat()
 
-            # 1. REPOSITORY entity in KG
-            repo_entity_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"repo:{repo_full_name}"))
-            self.supabase.table("entities").upsert({
-                "id": repo_entity_id,
-                "type": "REPOSITORY",
-                "name": repo_full_name,
-                "metadata": {
-                    "description": repo.description or "",
-                    "language": repo.language,
-                    "default_branch": repo.default_branch
+            # 1. REPOSITORY entity (tenant-scoped id)
+            repo_entity_id = str(
+                uuid.uuid5(uuid.NAMESPACE_URL, f"repo:{company_id}:{repo_full_name}")
+            )
+            self.supabase.table("entities").upsert(
+                {
+                    "id": repo_entity_id,
+                    "type": "REPOSITORY",
+                    "name": repo_full_name,
+                    "company_id": company_id,
+                    "metadata": {
+                        "description": repo.description or "",
+                        "language": repo.language,
+                        "default_branch": repo.default_branch,
+                        "company_id": company_id,
+                    },
+                    "created_at": now,
                 },
-                "created_at": datetime.now(timezone.utc).isoformat()
-            }, on_conflict="id").execute()
+                on_conflict="id",
+            ).execute()
 
             # 2. repositories table
-            repo_data = {
-                "full_name": repo_full_name,
-                "company_id": "default",
-                "description": repo.description or "",
-                "language": repo.language,
-                "default_branch": repo.default_branch,
-                "last_synced_at": datetime.now(timezone.utc).isoformat(),
-            }
-            self.supabase.table("repositories").upsert(repo_data, on_conflict="full_name").execute()
-
-            repo_res = self.supabase.table("repositories").select("id").eq("full_name", repo_full_name).single().execute()
-            physical_repo_id = repo_res.data["id"]
+            existing = (
+                self.supabase.table("repositories")
+                .select("id")
+                .eq("full_name", repo_full_name)
+                .eq("company_id", company_id)
+                .limit(1)
+                .execute()
+            )
+            if existing.data:
+                physical_repo_id = existing.data[0]["id"]
+                self.supabase.table("repositories").update(
+                    {
+                        "description": repo.description or "",
+                        "language": repo.language,
+                        "default_branch": repo.default_branch,
+                        "last_synced_at": now,
+                        "updated_at": now,
+                    }
+                ).eq("id", physical_repo_id).execute()
+            else:
+                physical_repo_id = str(uuid.uuid4())
+                self.supabase.table("repositories").insert(
+                    {
+                        "id": physical_repo_id,
+                        "full_name": repo_full_name,
+                        "company_id": company_id,
+                        "description": repo.description or "",
+                        "language": repo.language,
+                        "default_branch": repo.default_branch,
+                        "last_synced_at": now,
+                        "updated_at": now,
+                    }
+                ).execute()
 
             # 3. Tree walk
             contents = repo.get_contents("")
             files_processed = 0
-            module_map = {}
+            module_map: Dict[str, int] = {}
 
             while contents:
                 item = contents.pop(0)
@@ -73,64 +103,88 @@ class CodebaseBaselineSync:
                     except GithubException:
                         continue
                     continue
-
                 if item.type == "file":
-                    self._index_file(item, repo_entity_id, physical_repo_id, repo_full_name)
+                    self._index_file(
+                        item,
+                        repo_entity_id,
+                        physical_repo_id,
+                        repo_full_name,
+                        company_id,
+                    )
                     files_processed += 1
 
-            # 4. Modules
             for mod_path, file_count in module_map.items():
-                self._create_module(mod_path, physical_repo_id, file_count)
+                self._create_module(mod_path, physical_repo_id, file_count, company_id)
 
-            logger.info(f"✅ Baseline sync complete: {files_processed} files, {len(module_map)} modules")
+            logger.info(
+                f"Baseline sync complete: {files_processed} files, "
+                f"{len(module_map)} modules | company={company_id}"
+            )
             return True
-
         except Exception as e:
             logger.error(f"Baseline sync failed: {e}", exc_info=True)
             return False
-
-    def _index_file(self, gh_file, repo_entity_id: str, physical_repo_id: str, repo_full_name: str):
+    
+    def _index_file(self, gh_file, repo_entity_id: str, physical_repo_id: str, repo_full_name: str, company_id: str = "default",):
+        """Index a single file: create FILE entity, codebase_files entry, and PART_OF edge."""
         file_path = gh_file.path
         file_name = file_path.split("/")[-1]
         module_path = "/".join(file_path.split("/")[:-1]) if "/" in file_path else ""
+        now = datetime.now(timezone.utc).isoformat()
 
-        # FILE entity
-        file_entity_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"file:{repo_full_name}:{file_path}"))
-        self.supabase.table("entities").upsert({
-            "id": file_entity_id,
-            "type": "FILE",
-            "name": file_name,
-            "file_path": file_path,
-            "language": self._detect_language(file_path),
-            "metadata": {"module_path": module_path}
-        }, on_conflict="id").execute()
+        file_entity_id = str(
+            uuid.uuid5(uuid.NAMESPACE_URL, f"file:{company_id}:{repo_full_name}:{file_path}")
+        )
+        self.supabase.table("entities").upsert(
+            {
+                "id": file_entity_id,
+                "type": "FILE",
+                "name": file_name,
+                "company_id": company_id,
+                "metadata": {
+                    "file_path": file_path,
+                    "module_path": module_path,
+                    "language": self._detect_language(file_path),
+                    "company_id": company_id,
+                },
+                "company_id": company_id,
+                "created_at": now,
+            },
+            on_conflict="id",
+        ).execute()
 
-        # codebase_files
-        file_data = {
-            "repository_id": physical_repo_id,
-            "file_path": file_path,
-            "file_name": file_name,
-            "module_path": module_path,
-            "language": self._detect_language(file_path),
-            "last_modified_at": datetime.now(timezone.utc).isoformat(),
-            "last_commit_sha": gh_file.sha,
-        }
-        self.supabase.table("codebase_files").upsert(file_data, on_conflict="repository_id,file_path").execute()
+        self.supabase.table("codebase_files").upsert(
+            {
+                "repository_id": physical_repo_id,
+                "file_path": file_path,
+                "file_name": file_name,
+                "module_path": module_path,
+                "language": self._detect_language(file_path),
+                "last_modified_at": now,
+                "last_commit_sha": gh_file.sha,
+                "metadata": {"company_id": company_id},
+                "company_id": company_id,
+            },
+            on_conflict="repository_id,file_path",
+        ).execute()
 
-        # PART_OF edge
-        edge_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"partof:{file_entity_id}:{repo_entity_id}"))
-        self.supabase.table("edges").upsert({
-            "id": edge_id,
-            "source_id": file_entity_id,
-            "target_id": repo_entity_id,
-            "type": "PART_OF",
-            "confidence": 1.0,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }, on_conflict="id").execute()
+        edge_id = str(
+            uuid.uuid5(uuid.NAMESPACE_URL, f"partof:{file_entity_id}:{repo_entity_id}")
+        )
+        self.supabase.table("edges").upsert(
+            {
+                "id": edge_id,
+                "source_id": file_entity_id,
+                "target_id": repo_entity_id,
+                "type": "PART_OF",
+                "confidence": 1.0,
+                "created_at": now,
+                "company_id": company_id,
+            },
+            on_conflict="id",
+        ).execute()
 
-        logger.debug(f"Indexed file: {file_path}")
-
-    def _create_module(self, module_path: str, repo_id: str, file_count: int):
+    def _create_module(self, module_path: str, repo_id: str, file_count: int, company_id: str = "default"):
         """Create/update module with computed importance."""
         module_name = module_path.split("/")[-1] if module_path else "root"
         importance = min(1.0, (file_count / 20.0) + 0.3)
@@ -142,10 +196,11 @@ class CodebaseBaselineSync:
             "inferred_type": self._infer_module_type(module_path),
             "description": f"Module containing {file_count} files",
             "importance_score": round(importance, 2),
-            "metadata": {"file_count": file_count}
+            "metadata": {"file_count": file_count, "company_id": company_id},
+            "company_id": company_id,
         }, on_conflict="repository_id,module_path").execute()
 
-    def _create_part_of_edge(self, repo_id: str, file_path: str):
+    def _create_part_of_edge(self, repo_id: str, file_path: str, company_id: str = "default"):
         """Create deterministic PART_OF edge using UUID."""
         # Use deterministic UUID based on repo + file_path
         edge_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"partof:{repo_id}:{file_path}"))
@@ -158,6 +213,7 @@ class CodebaseBaselineSync:
             "type": "PART_OF",
             "confidence": 1.0,
             "created_at": datetime.now(timezone.utc).isoformat(),
+            "company_id": company_id,
         }, on_conflict="id").execute()
 
     def _infer_module_type(self, module_path: str) -> str:

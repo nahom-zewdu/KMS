@@ -51,6 +51,7 @@ class IngestionHandler:
         event_id = job.get("event_id")
         content = job.get("content", "")
         payload = job.get("payload", {})
+        company_id = job.get("company_id") or "default"
 
         created_at = job.get("created_at") or datetime.now(timezone.utc).isoformat()
 
@@ -68,6 +69,7 @@ class IngestionHandler:
                 "source": source,
                 "content": content,
                 "event_id": event_id,
+                "company_id": company_id,
                 "created_at": created_at,
             })
             mark_event_processed(supabase, record_id)
@@ -75,6 +77,11 @@ class IngestionHandler:
 
         # 2. Insert NER Entities
         db_entities = [e.to_db_record() for e in entities]
+        for e in db_entities:
+            e["company_id"] = company_id
+            meta = e.get("metadata") or {}
+            meta["company_id"] = company_id
+            e["metadata"] = meta
         insert_entities(supabase, db_entities)
 
         entity_text_to_id = {
@@ -107,6 +114,7 @@ class IngestionHandler:
                 "type": r["type"],
                 "confidence": 0.95,
                 "source_record_id": record_id,
+                "company_id": company_id,
                 "created_at": r.get("created_at") or created_at,
             })
 
@@ -119,6 +127,7 @@ class IngestionHandler:
             "source": source,
             "content": content,
             "event_id": event_id,
+            "company_id": company_id,
             "created_at": created_at,
         })
 
@@ -136,6 +145,7 @@ class IngestionHandler:
                         self.codebase_analyzer.process_push_event(
                             payload,
                             record_id,
+                            company_id=company_id,
                         )
                     )
                 except Exception as e:

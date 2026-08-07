@@ -12,6 +12,7 @@ type IngestRequest struct {
 	EventType string                 `json:"event_type" binding:"required"` // e.g., push, pull_request
 	Content   string                 `json:"content" binding:"required"`
 	Payload   map[string]interface{} `json:"payload"` // Raw JSON payload
+	CompanyID string                 `json:"company_id"`
 	RecordID  string                 `json:"record_id" binding:"required"`
 	CreatedAt time.Time              `json:"created_at"`
 }
@@ -23,6 +24,7 @@ type JobPayload struct {
 	Source    string                 `json:"source" binding:"required,oneof=slack github"`
 	EventType string                 `json:"event_type" binding:"required"`
 	Content   string                 `json:"content" binding:"required"`
+	CompanyID string                 `json:"company_id"`
 	Payload   map[string]interface{} `json:"payload"` // Raw JSON payload
 	CreatedAt string                 `json:"created_at" binding:"required"`
 }
@@ -57,6 +59,8 @@ type StoragePort interface {
 	Insert(ctx context.Context, table string, data map[string]interface{}) error
 	Query(ctx context.Context, table string, filter map[string]interface{}) ([]map[string]interface{}, error)
 	QueryKnowledgeGraphSupabase(ctx context.Context, query string) (string, error)
+	ResolveCompanyByIntegration(ctx context.Context, provider, externalID string) (string, error)
+	ResolveCompanyByInstallation(ctx context.Context, installationID string) (string, error)
 }
 
 // MetricsService defines the interface for metrics computation.

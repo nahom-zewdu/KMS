@@ -35,7 +35,7 @@ func NewSlackBot(botToken string, coreIngest domain.CoreIngestService, redis dom
 }
 
 // HandleEvent processes Slack app_mention events and publishes queries to Redis.
-func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, query, eventTs string) error {
+func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, query, eventTs string, companyID string) error {
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
@@ -88,6 +88,7 @@ func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, 
 		RecordID:  queryID,
 		Source:    "slack",
 		Content:   cleanQuery,
+		CompanyID: companyID,
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	})
 	if err != nil {

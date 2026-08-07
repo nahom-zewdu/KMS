@@ -25,13 +25,15 @@ import (
 type GitHubHandler struct {
 	githubIngest domain.GitHubIngestService // Service for GitHub event ingestion
 	secret       string                     // GitHub webhook secret for HMAC verification
+	storage      domain.StoragePort
 }
 
 // NewGitHubHandler creates a new GitHubHandler with the provided service and secret.
-func NewGitHubHandler(githubIngest domain.GitHubIngestService, secret string) *GitHubHandler {
+func NewGitHubHandler(githubIngest domain.GitHubIngestService, secret string, storage domain.StoragePort) *GitHubHandler {
 	return &GitHubHandler{
 		githubIngest: githubIngest,
 		secret:       secret,
+		storage:      storage,
 	}
 }
 
@@ -267,12 +269,56 @@ func (h *GitHubHandler) HandleGitHubWebhook(c *gin.Context) {
 		}
 	}
 
+	installationID := ""
+	if inst, ok := payload["installation"].(map[string]interface{}); ok {
+		if id, ok := inst["id"].(float64); ok {
+			installationID = fmt.Sprintf("%.0f", id)
+		}
+	}
+
+	var companyID string
+
+	// Prefer installation_id lookup
+	if installationID != "" {
+		companyID, err = h.storage.ResolveCompanyByInstallation(c.Request.Context(), installationID)
+	}
+
+	ownerLogin := getString(payload, "repository", "owner", "login")
+	if ownerLogin == "" {
+		// fallback: first segment of full_name
+		fullName := getString(payload, "repository", "full_name")
+		if parts := strings.SplitN(fullName, "/", 2); len(parts) == 2 {
+			ownerLogin = parts[0]
+		}
+	}
+
+	if companyID == "" && ownerLogin != "" {
+		companyID, err = h.storage.ResolveCompanyByIntegration(c.Request.Context(), "github", ownerLogin)
+	}
+	if companyID == "" {
+		companyID = "default"
+	}
+
+	// Retrieve company id using the integration mapping
+	companyID, err = h.storage.ResolveCompanyByIntegration(c.Request.Context(), "github", ownerLogin)
+	if err != nil {
+		log.Printf("RecordID: %s - Failed to resolve company for github:%s: %v", deliveryID, ownerLogin, err)
+	}
+	if companyID == "" {
+		log.Printf("RecordID: %s - No company mapped for github:%s, using default", deliveryID, ownerLogin)
+		companyID = "default"
+	}
+
+	minimalPayload["owner"] = ownerLogin
+	minimalPayload["company_id"] = companyID
+
 	ingestReq := domain.IngestRequest{
 		Source:    "github",
 		EventType: eventType,
 		Content:   content,
 		Payload:   minimalPayload,
 		RecordID:  deliveryID,
+		CompanyID: companyID,
 		CreatedAt: time.Now().UTC(),
 	}
 

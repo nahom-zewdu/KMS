@@ -32,9 +32,10 @@ async def generate_playbook(payload: dict):
     """Generate a role-specific onboarding playbook."""
     try:
         role = payload.get("role", "software-engineer")
-        employee_name = payload.get("employee_name")
+        employee_name = payload.get("employee_name", "New Engineer")
+        company_id = payload.get("company_id", "default")
 
-        playbook = generator.generate(role=role, employee_name=employee_name)
+        playbook = generator.generate(role=role, employee_name=employee_name, company_id=company_id)
         logging.info(f"Role: {role}, Playbook generated: {playbook}")
         
         return JSONResponse({
@@ -52,11 +53,11 @@ async def generate_playbook(payload: dict):
     
 
 @app.get("/github/sync-baseline")
-async def sync_baseline(repo: str):
+async def sync_baseline(repo: str, company_id: str = "default"):
     """Sync the baseline for a specific repository."""
     try:
         syncer = CodebaseBaselineSync(supabase)
-        success = syncer.sync_repository(repo)
+        success = syncer.sync_repository(repo, company_id=company_id)
         if success:
             return JSONResponse({"success": True, "message": f"Baseline synced for {repo}"})
         else:
@@ -66,10 +67,10 @@ async def sync_baseline(repo: str):
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
 @app.get("/visualizer")
-async def get_visualizer(role: str = "backend-engineer"):
+async def get_visualizer(role: str = "backend-engineer", company_id: str = "default"):
     """Get visualizer data for a specific role."""
     try:
-        data = VisualizerService(supabase).build_for_role(role)
+        data = VisualizerService(supabase).build_for_role(role, company_id=company_id)
         return JSONResponse({"success": True, "data": data})
     except Exception as e:
         logging.error(f"Visualizer failed: {e}")

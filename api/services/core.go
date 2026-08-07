@@ -106,6 +106,11 @@ func (c *CoreIngest) Ingest(ctx context.Context, req domain.IngestRequest) error
 		return nil
 	}
 
+	companyID := req.CompanyID
+	if companyID == "" {
+		companyID = "default"
+	}
+
 	// Store raw payload in events table
 	eventID := uuid.New().String()
 	err = c.storage.Insert(ctx, "events", map[string]interface{}{
@@ -114,6 +119,7 @@ func (c *CoreIngest) Ingest(ctx context.Context, req domain.IngestRequest) error
 		"event_type":  req.EventType,
 		"payload":     string(payloadBytes),
 		"delivery_id": req.RecordID,
+		"company_id":  companyID,
 		"processed":   false,
 		"truncated":   truncated,
 		"created_at":  req.CreatedAt.Format(time.RFC3339),
@@ -131,6 +137,7 @@ func (c *CoreIngest) Ingest(ctx context.Context, req domain.IngestRequest) error
 		"content":    content,
 		"record_id":  req.RecordID,
 		"event_id":   eventID,
+		"company_id": companyID,
 		"created_at": req.CreatedAt.Format(time.RFC3339),
 	})
 	if err != nil {
@@ -151,6 +158,7 @@ func (c *CoreIngest) Ingest(ctx context.Context, req domain.IngestRequest) error
 		Source:    req.Source,
 		EventType: req.EventType,
 		Content:   content,
+		CompanyID: req.CompanyID,
 		Payload:   payload, // Pass raw map for Python
 		CreatedAt: req.CreatedAt.Format(time.RFC3339),
 	})

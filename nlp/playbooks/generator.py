@@ -33,8 +33,8 @@ class PlaybookGenerator:
         """Main generation entrypoint."""
         logger.info(f"Generating playbook for role: {role}")
 
-        visualizer_data = self.visualizer.build_for_role(role)
-        compact_context = self._gather_compact_context(role)
+        visualizer_data = self.visualizer.build_for_role(role, company_id=company_id)
+        compact_context = self._gather_compact_context(role, company_id)
 
         prompt = f"""
             You are an elite engineering onboarding architect at a fintech/SaaS startup.
@@ -98,22 +98,22 @@ class PlaybookGenerator:
 
         return playbook
 
-    def _gather_compact_context(self, role: str) -> str:
+    def _gather_compact_context(self, role: str, company_id: str = "default") -> str:
         """Very compact, high-signal context for LLM."""
         parts = []
 
         # People
-        people = self.supabase.table("entities").select("name").eq("type", "PERSON").limit(5).execute()
+        people = self.supabase.table("entities").select("name").eq("type", "PERSON").eq("company_id", company_id).limit(5).execute()
         if people.data:
             parts.append("People: " + ", ".join(p["name"] for p in people.data))
 
         # Recent activity
-        recent = self.supabase.table("raw_data").select("content").order("created_at", desc=True).limit(3).execute()
+        recent = self.supabase.table("raw_data").select("content").eq("company_id", company_id).order("created_at", desc=True).limit(3).execute()
         if recent.data:
             parts.append("Recent: " + " | ".join(r["content"][:80] for r in recent.data))
 
         # Key files
-        files = self.supabase.table("codebase_files").select("file_path").limit(6).execute()
+        files = self.supabase.table("codebase_files").select("file_path").eq("company_id", company_id).limit(6).execute()
         if files.data:
             parts.append("Files: " + ", ".join(f["file_path"] for f in files.data))
 

@@ -256,3 +256,70 @@ CREATE TABLE IF NOT EXISTS public.codebase_modules (
 
 CREATE INDEX idx_modules_repo ON codebase_modules(repository_id);
 CREATE INDEX idx_modules_path ON codebase_modules(module_path);
+
+
+-----------------------------------------------
+-- Companies table
+CREATE TABLE IF NOT EXISTS public.companies (
+  id TEXT PRIMARY KEY DEFAULT 'default',
+  name TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Update profiles
+ALTER TABLE public.profiles 
+ADD COLUMN IF NOT EXISTS company_id TEXT REFERENCES public.companies(id) DEFAULT 'default',
+ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'member' CHECK (role IN ('admin', 'manager', 'member'));
+
+-- RLS policies (basic)
+ALTER TABLE public.playbooks ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can only see own company data" ON public.playbooks
+  FOR ALL USING (company_id = (SELECT company_id FROM profiles WHERE id = auth.uid()));
+
+-- Junction table for multi-company membership
+CREATE TABLE IF NOT EXISTS public.company_members (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  company_id TEXT REFERENCES public.companies(id) ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK (role IN ('admin', 'manager', 'member')),
+  is_owner BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, company_id)
+);
+
+-- Remove company_id from profiles if it exists (migration)
+ALTER TABLE public.profiles DROP COLUMN IF EXISTS company_id;
+
+
+-- Company service integrations
+CREATE TABLE IF NOT EXISTS public.company_integrations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id TEXT NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL CHECK (provider IN ('slack', 'github')),
+  external_id TEXT NOT NULL,          -- Slack team_id or GitHub org
+  access_token TEXT,
+  webhook_secret TEXT,
+  metadata JSONB DEFAULT '{}',
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(company_id, provider),
+  UNIQUE(provider, external_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_company_integrations_provider_external
+  ON public.company_integrations (provider, external_id);
+
+
+CREATE TABLE IF NOT EXISTS public.company_repos (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id TEXT NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+  full_name TEXT NOT NULL,              -- owner/repo
+  github_repo_id BIGINT,
+  webhook_id BIGINT,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(company_id, full_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_company_repos_company ON public.company_repos (company_id);

@@ -29,53 +29,45 @@ class QueryEngine:
         self.retriever = AdaptiveRetriever(supabase)
 
     def handle_query(self, job: Dict[str, Any]) -> str:
-        """
-        Main entrypoint called by the consumer.
-        Returns valid JSON string with answer + sources.
-        """
         start_time = time.time()
         query_id = job["record_id"]
         question = job["content"].strip()
+        company_id = job.get("company_id") or "default"
 
-        logger.info(f"Query {query_id} | {question}")
+        logger.info(f"Query {query_id} | company={company_id} | {question}")
 
-        # 1. Check cache first
-        if cached := self.cache.get(question):
+        cache_key = f"{company_id}:{question}"
+        if cached := self.cache.get(cache_key):
             logger.info(f"Cache hit for query {query_id}")
             self.redis.publish(f"query_results:{query_id}", cached)
             return cached
 
-        # 2. Adaptive retrieval (analyzer → retrieval → rerank
         try:
-            relevant_chunks: List[Dict] = self.retriever.retrieve(question)
+            relevant_chunks: List[Dict] = self.retriever.retrieve(question, company_id=company_id)
         except Exception as e:
             logger.error(f"Retrieval failed: {e}")
             relevant_chunks = []
 
-        # 3. Reasoning synthesis
         if not relevant_chunks:
             answer_json = {
                 "answer": "I couldn't find any relevant information in the knowledge base.",
                 "sources": [],
-                "confidence": "low"
+                "confidence": "low",
             }
         else:
             answer_json_str = reasoning_synthesize(question, relevant_chunks)
-            logger.info("------------------------------")
             logger.info(f"Synthesized answer JSON: {answer_json_str}")
             try:
                 answer_json = json.loads(answer_json_str)
-            except:
+            except Exception:
                 answer_json = {"answer": answer_json_str, "sources": [], "confidence": "medium"}
 
-        # 4. Format final output
         final_answer = json.dumps(answer_json, indent=2)
 
-        # 5. Cache + log + publish
-        if relevant_chunks: 
-            self.cache.set(question, final_answer)
-        latency_ms = (time.time() - start_time) * 1000
+        if relevant_chunks:
+            self.cache.set(cache_key, final_answer)
 
+        latency_ms = (time.time() - start_time) * 1000
         log_query(
             supabase=self.supabase,
             query_id=query_id,
@@ -85,8 +77,8 @@ class QueryEngine:
             cache_hit=False,
             answer_length=len(final_answer),
         )
-
         self.redis.publish(f"query_results:{query_id}", final_answer)
-        logger.info(f"Answer sent | {query_id} | {latency_ms:.1f}ms | chunks: {len(relevant_chunks)}")
-
+        logger.info(
+            f"Answer sent | {query_id} | {latency_ms:.1f}ms | chunks: {len(relevant_chunks)} | company={company_id}"
+        )
         return final_answer
