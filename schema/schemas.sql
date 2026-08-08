@@ -323,3 +323,22 @@ CREATE TABLE IF NOT EXISTS public.company_repos (
 );
 
 CREATE INDEX IF NOT EXISTS idx_company_repos_company ON public.company_repos (company_id);
+
+
+-- Ramp plans (new — Phase 2/3)
+CREATE TABLE IF NOT EXISTS public.ramp_plans (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id TEXT NOT NULL,
+  role TEXT NOT NULL,
+  employee_name TEXT,
+  steps JSONB NOT NULL DEFAULT '[]',
+  meta JSONB NOT NULL DEFAULT '{}',
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE (company_id, role)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ramp_plans_company_role
+  ON public.ramp_plans (company_id, role)
+  WHERE is_active = true;
