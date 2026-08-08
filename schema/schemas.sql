@@ -325,6 +325,16 @@ CREATE TABLE IF NOT EXISTS public.company_repos (
 CREATE INDEX IF NOT EXISTS idx_company_repos_company ON public.company_repos (company_id);
 
 
+-- KG tenant columns (if missing)
+ALTER TABLE public.entities
+  ADD COLUMN IF NOT EXISTS company_id TEXT NOT NULL DEFAULT 'default';
+ALTER TABLE public.edges
+  ADD COLUMN IF NOT EXISTS company_id TEXT NOT NULL DEFAULT 'default';
+
+CREATE INDEX IF NOT EXISTS idx_entities_company ON public.entities (company_id);
+CREATE INDEX IF NOT EXISTS idx_edges_company ON public.edges (company_id);
+
+
 -- Ramp plans (new — Phase 2/3)
 CREATE TABLE IF NOT EXISTS public.ramp_plans (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
