@@ -9,12 +9,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from codebase.baseline import CodebaseBaselineSync
 from playbooks.generator import PlaybookGenerator
 from visualizer.service import VisualizerService
+from ramp.generator import RampPlanGenerator
 from utils.supabase import init_supabase
 import logging
 import uvicorn
 
 app = FastAPI(title="KMS Onboard API")
 supabase = init_supabase()
+ramp_generator = RampPlanGenerator(supabase)
 generator = PlaybookGenerator(supabase)
 
 # Add CORS middleware
@@ -26,6 +28,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.post("/ramp-plans/generate")
+async def generate_ramp(payload: dict):
+    """Generate or refresh First 7 Days ramp for a company + role."""
+    try:
+        role = payload.get("role") or "software-engineer"
+        company_id = payload.get("company_id") or "default"
+        employee_name = payload.get("employee_name")
+        polish = payload.get("polish_why", True)
+        plan = ramp_generator.generate(
+            role=role,
+            company_id=company_id,
+            employee_name=employee_name,
+            polish_why=bool(polish),
+        )
+        return JSONResponse({"success": True, "plan": plan})
+    except Exception as e:
+        logging.error("Ramp generation failed: %s", e)
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
 @app.post("/playbooks/generate")
 async def generate_playbook(payload: dict):
@@ -65,6 +85,7 @@ async def sync_baseline(repo: str, company_id: str = "default"):
     except Exception as e:
         logging.error(f"Baseline sync failed: {e}")
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
 
 @app.get("/visualizer")
 async def get_visualizer(role: str = "backend-engineer", company_id: str = "default"):
