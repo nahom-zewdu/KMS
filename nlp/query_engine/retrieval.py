@@ -2,7 +2,6 @@
 """
 Clean & Reliable Retrieval — Fixed for your current schema.
 """
-from email.policy import default
 from typing import List, Dict, Any
 from supabase import Client
 from .analyzer import analyze_query
