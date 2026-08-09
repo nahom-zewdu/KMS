@@ -189,7 +189,7 @@ class AdaptiveRetriever:
                         content = f"{name} is a {entity_type} entity."
                     chunks.append({
                         "content": content,
-                        "source": "graph.eq("company_id", company_id)",
+                        "source": "graph",
                         "record_id": f"entity:{name}",
                         "source": "graph",
                         "score": 0.75
