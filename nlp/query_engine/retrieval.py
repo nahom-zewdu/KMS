@@ -1,6 +1,7 @@
 # nlp/query_engine/retrieval.py
 """
-Clean & Reliable Retrieval — Fixed for your current schema.
+This module implements the AdaptiveRetriever class, which retrieves relevant information from a knowledge graph and vector database based on a given question. 
+It uses Supabase for database interactions and includes methods for entity normalization, candidate finding, edge searching, and context chunk retrieval.
 """
 from typing import List, Dict, Any
 from supabase import Client
