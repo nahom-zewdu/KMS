@@ -10,8 +10,7 @@ import json
 from supabase import Client
 from redis import Redis
 
-from nlp.query_engine.contract import abstain, normalize_answer, owners_from_chunks, sources_from_chunks
-
+from .contract import abstain, normalize_answer, owners_from_chunks, sources_from_chunks
 from .retrieval import AdaptiveRetriever
 from .synthesizer import reasoning_synthesize
 from .cache import QueryCache
