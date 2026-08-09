@@ -42,6 +42,8 @@ class RampPlanGenerator:
         "fullstack": ("api", "app", "nlp", "handlers"),
     }
 
+    NOISE = (".gitignore", ".python-version", "go.sum", "package-lock.json", ".env")
+
     def __init__(self, supabase: Client):
         self.supabase = supabase
         self.visualizer = VisualizerService(supabase)
@@ -194,11 +196,13 @@ class RampPlanGenerator:
             used_targets.add(path)
 
             related_files = [
-                f
-                for f in key_files
-                if (f.get("module") or "").startswith(path)
-                or (f.get("path") or "").startswith(path + "/")
-                or (f.get("path") or "") == path
+                f for f in key_files
+                if f.get("path")
+                and not any(f["path"].endswith(n) or f["path"].split("/")[-1] in self.NOISE for n in self.NOISE)
+                and (
+                    (f.get("module") or "").startswith(path)
+                    or (f.get("path") or "").startswith(path + "/")
+                )
             ][:3]
 
             primary_file = related_files[0]["path"] if related_files else None
