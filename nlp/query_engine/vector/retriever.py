@@ -31,15 +31,16 @@ class VectorRetriever:
     def _embed(self, text: str) -> list:
         return self.model.encode(text, normalize_embeddings=True).tolist()
 
-    def _call_match_documents(self, embedding: list, top_k: int, threshold: float) -> List[Dict[str, Any]]:
-        response = (
-            self.supabase.rpc("match_documents", {
+    def _call_match_documents(self, embedding: list, top_k: int, threshold: float, company_id: str) -> List[Dict[str, Any]]:
+        response = self.supabase.rpc(
+            "match_documents",
+            {
                 "query_embedding": embedding,
                 "match_count": top_k,
-                "match_threshold": threshold
-            })
-            .execute()
-        )
+                "match_threshold": threshold,
+                "filter_company_id": company_id,
+            },
+        ).execute()
         return response.data or []
 
     def retrieve(self, question: str, top_k: int = 8, company_id: str = "default") -> List[Dict]:
@@ -48,7 +49,7 @@ class VectorRetriever:
         thresholds = [0.65, 0.55, 0.45]
         for threshold in thresholds:
             try:
-                chunks = self._call_match_documents(embedding, top_k, threshold)
+                chunks = self._call_match_documents(embedding, top_k, threshold, company_id)
                 if chunks:
                     if threshold != thresholds[0]:
                         logger.info("Vector retrieval low recall at %.2f, relaxing threshold to %.2f and returning %d chunks.", thresholds[0], threshold, len(chunks))
