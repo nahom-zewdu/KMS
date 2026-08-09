@@ -190,6 +190,7 @@ class AdaptiveRetriever:
                         "content": content,
                         "source": "graph.eq("company_id", company_id)",
                         "record_id": f"entity:{name}",
+                        "source": "graph",
                         "score": 0.75
                     })
             except Exception as e:
