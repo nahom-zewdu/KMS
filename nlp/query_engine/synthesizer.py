@@ -1,73 +1,56 @@
 # nlp/query_engine/synthesizer.py
 """
-Reasoning synthesizer with chain-of-thought.
-Always returns valid JSON. Never hallucinates.
+Reasoning synthesizer — company evidence only.
+Returns JSON string matching the answer contract.
 """
+
+from typing import List, Dict, Optional
 from engine.llm import llm_infer
-import json
 
-def reasoning_synthesize(question: str, chunks: list) -> str:
-    """
-    Uses chain-of-thought to reason over retrieved chunks.
-    Returns valid JSON string (JSON).
-    """
-    if not chunks:
-        return json.dumps({
-            "answer": "No relevant context found.",
-            "sources": [],
-            "confidence": "low"
-        })
 
+def reasoning_synthesize(
+    question: str,
+    chunks: List[Dict],
+    allowed_owners: Optional[List[str]] = None,) -> str:
+    """
+    Synthesize a reasoning answer from relevant chunks.
+    Returns a JSON string matching the answer contract.
+    """
     context_lines = []
-    for i, chunk in enumerate(chunks[:10], 1):
-        src = chunk.get("source", "unknown")
-        rid = chunk.get("record_id", "")[:8]
-        source_tag = f"{src}:{rid}" if rid else src
-        context_lines.append(f"[{i}] {chunk['content'][:900]}... ({source_tag})")
-
+    for i, c in enumerate(chunks[:10], 1):
+        src = c.get("source", "raw")
+        rid = c.get("record_id", "")
+        context_lines.append(
+            f"[{i}] ({src} record_id={rid}) {c.get('content', '')[:500]}"
+        )
     context = "\n".join(context_lines)
+    owners_rule = (
+        f"Owners may ONLY be chosen from this list: {allowed_owners}. "
+        if allowed_owners
+        else "Do not invent person names. If no owner in context, owners must be []. "
+    )
 
     prompt = f"""
-You are KMS, the single source of truth for engineering knowledge at a startup/fintech/saas.
+        You are KMS, the engineering memory system for one company.
 
-Answer the question using ONLY the context below.
+        Answer using ONLY the context below. Never invent people, ownership, or systems.
 
-Question: {question}
+        {owners_rule}
+        If context is insufficient, set confidence to "low" and abstain_reason to "no_relevant_evidence".
 
-Context:
-{context}
+        Context:
+        {context}
 
-Think step by step:
-1. What is the question really asking?
-2. Which context chunks are most relevant?
-3. Is there conflicting information?
-4. What is the clearest, most accurate answer?
+        Question: {question}
 
-Then respond in valid JSON with this exact structure:
-{{
-  "reasoning": "Brief internal thought process (1-2 sentences)",
-  "answer": "Clear, direct answer in 1-4 sentences. Be professional.",
-  "confidence": "high" | "medium" | "low",
-  "sources": ["slack:17641759", "github:a1b2c3d4", "graph"]
-}}
+        Respond with valid JSON only:
+        {{
+        "answer": "1-3 sentences, factual",
+        "confidence": "high|medium|low",
+        "sources": [{{"source": "graph|raw|slack|github", "record_id": "..."}}],
+        "owners": [],
+        "abstain_reason": null
+        }}
+        """.strip()
 
-Rules:
-- Never invent names, dates, or facts
-- Use real sources from context
-- If unsure, set confidence to "low" and say so
-- Respond only with JSON
-
-JSON:
-""".strip()
-
-    result = llm_infer(prompt, temperature=0.0, max_tokens=600)
-
-    # Safety fallback
-    if not result or "{" not in result:
-        return json.dumps({
-            "answer": "I found some context but couldn't form a clear answer.",
-            "sources": [c.get("source", "unknown") for c in chunks[:3]],
-            "confidence": "low"
-        })
-
-    return result
+    return llm_infer(prompt, temperature=0.0, max_tokens=400) or ""
