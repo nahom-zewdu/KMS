@@ -116,6 +116,7 @@ class AdaptiveRetriever:
             edge_rows = (
                 self.supabase.table("edges")
                 .select("id,source_id,target_id,type,confidence")
+                .eq("company_id", company_id)
                 .in_("source_id", entity_ids)
                 .limit(12)
                 .execute()
@@ -123,6 +124,7 @@ class AdaptiveRetriever:
             edge_rows2 = (
                 self.supabase.table("edges")
                 .select("id,source_id,target_id,type,confidence")
+                .eq("company_id", company_id)
                 .in_("target_id", entity_ids)
                 .limit(12)
                 .execute()
