@@ -64,7 +64,7 @@ func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, 
 
 		role := extractRole(cleanQuery)
 		if role == "" {
-			role = "backend-engineer" // default
+			role = "software-engineer" // default
 		}
 
 		log.Printf("QueryID: %s - Playbook request detected for role: %s", queryID, role)
