@@ -47,6 +47,23 @@ async def generate_ramp(payload: dict):
         logging.error("Ramp generation failed: %s", e)
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
+
+@app.get("/ramp-plans")
+async def get_ramp(company_id: str = "default", role: str = "software-engineer"):
+    """Fetch active ramp plan."""
+    try:
+        plan = ramp_generator.get_active(company_id=company_id, role=role)
+        if not plan:
+            return JSONResponse(
+                {"success": False, "error": "No active ramp plan", "plan": None},
+                status_code=404,
+            )
+        return JSONResponse({"success": True, "plan": plan})
+    except Exception as e:
+        logging.error("Ramp fetch failed: %s", e)
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+
 @app.post("/playbooks/generate")
 async def generate_playbook(payload: dict):
     """Generate a role-specific onboarding playbook."""
