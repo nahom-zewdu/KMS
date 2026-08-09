@@ -36,6 +36,12 @@ class RampPlanGenerator:
 
     MAX_STEPS = 7
 
+    ROLE_BOOST = {
+        "backend": ("api", "handlers", "services", "repository", "domain", "nlp", "worker", "engine"),
+        "frontend": ("app", "components", "ui", "web", "frontend"),
+        "fullstack": ("api", "app", "nlp", "handlers"),
+    }
+
     def __init__(self, supabase: Client):
         self.supabase = supabase
         self.visualizer = VisualizerService(supabase)
@@ -170,10 +176,10 @@ class RampPlanGenerator:
         Build a list of steps from modules and key files, with risk, owners, and evidence.
         """
         ranked = sorted(
-            modules,
-            key=lambda m: float(m.get("importance") or 0),
-            reverse=True,
-        )
+                    modules,
+                    key=lambda m: float(m.get("importance") or 0) + self._role_boost(role, m.get("path") or ""),
+                    reverse=True,
+                )
         # Role keyword boost already applied in visualizer; keep top N
         steps: List[Dict[str, Any]] = []
         used_targets = set()
@@ -459,3 +465,16 @@ Input:
         except Exception as e:
             logger.error("Ramp save failed: %s", e)
             raise
+
+    def _role_boost(self, role: str, path: str) -> float:
+        role_l = role.lower()
+        path_l = (path or "").lower()
+        boost = 0.0
+        for key, tokens in self.ROLE_BOOST.items():
+            if key in role_l:
+                if any(t in path_l for t in tokens):
+                    boost += 0.4
+                if path_l in ("doc", "docs") or path_l.startswith("doc/"):
+                    boost -= 0.35
+        return boost
+    
