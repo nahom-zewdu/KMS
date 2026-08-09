@@ -29,13 +29,6 @@ class QueryEngine:
         self.cache = QueryCache(redis)
         self.retriever = AdaptiveRetriever(supabase)
 
-    from .contract import (
-    normalize_answer,
-    abstain,
-    sources_from_chunks,
-    owners_from_chunks,
-)
-
     def handle_query(self, job: Dict[str, Any]) -> str:
         start_time = time.time()
         query_id = job["record_id"]
