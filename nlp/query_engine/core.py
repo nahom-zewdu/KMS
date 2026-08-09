@@ -10,6 +10,8 @@ import json
 from supabase import Client
 from redis import Redis
 
+from nlp.query_engine.contract import abstain
+
 from .retrieval import AdaptiveRetriever
 from .synthesizer import reasoning_synthesize
 from .cache import QueryCache
@@ -28,13 +30,26 @@ class QueryEngine:
         self.cache = QueryCache(redis)
         self.retriever = AdaptiveRetriever(supabase)
 
+    from .contract import (
+    normalize_answer,
+    abstain,
+    sources_from_chunks,
+    owners_from_chunks,
+)
+
     def handle_query(self, job: Dict[str, Any]) -> str:
         start_time = time.time()
         query_id = job["record_id"]
-        question = job["content"].strip()
-        company_id = job.get("company_id") or "default"
+        question = (job.get("content") or "").strip()
+        company_id = (job.get("company_id") or "default").strip() or "default"
 
         logger.info(f"Query {query_id} | company={company_id} | {question}")
+
+        if not question:
+            answer_json = abstain("empty_question")
+            final_answer = json.dumps(answer_json)
+            self.redis.publish(f"query_results:{query_id}", final_answer)
+            return final_answer
 
         cache_key = f"{company_id}:{question}"
         if cached := self.cache.get(cache_key):
@@ -43,42 +58,66 @@ class QueryEngine:
             return cached
 
         try:
-            relevant_chunks: List[Dict] = self.retriever.retrieve(question, company_id=company_id)
+            relevant_chunks: List[Dict] = self.retriever.retrieve(
+                question, company_id=company_id
+            )
         except Exception as e:
             logger.error(f"Retrieval failed: {e}")
             relevant_chunks = []
 
         if not relevant_chunks:
-            answer_json = {
-                "answer": "I couldn't find any relevant information in the knowledge base.",
-                "sources": [],
-                "confidence": "low",
-            }
+            answer_json = abstain("no_relevant_evidence")
         else:
-            answer_json_str = reasoning_synthesize(question, relevant_chunks)
-            logger.info(f"Synthesized answer JSON: {answer_json_str}")
+            grounded_sources = sources_from_chunks(relevant_chunks)
+            grounded_owners = owners_from_chunks(relevant_chunks)
             try:
-                answer_json = json.loads(answer_json_str)
-            except Exception:
-                answer_json = {"answer": answer_json_str, "sources": [], "confidence": "medium"}
+                raw = reasoning_synthesize(
+                    question,
+                    relevant_chunks,
+                    allowed_owners=grounded_owners,
+                )
+                answer_json = normalize_answer(raw)
+            except Exception as e:
+                logger.error(f"Synthesize failed: {e}")
+                answer_json = abstain("synthesis_failed")
+
+            # Force evidence from retrieval — model cannot invent sources/owners
+            answer_json["sources"] = grounded_sources or answer_json.get("sources") or []
+            answer_json["owners"] = [
+                o for o in (answer_json.get("owners") or [])
+                if o in grounded_owners
+            ] if grounded_owners else []
+            # If model listed owners not in graph, drop them; attach graph owners if useful
+            if not answer_json["owners"] and grounded_owners:
+                answer_json["owners"] = grounded_owners
+
+            if not answer_json.get("sources"):
+                answer_json = abstain("no_relevant_evidence")
+            else:
+                answer_json["abstain_reason"] = None
 
         final_answer = json.dumps(answer_json, indent=2)
 
-        if relevant_chunks:
+        if relevant_chunks and answer_json.get("abstain_reason") is None:
             self.cache.set(cache_key, final_answer)
 
         latency_ms = (time.time() - start_time) * 1000
-        log_query(
-            supabase=self.supabase,
-            query_id=query_id,
-            question=question,
-            route="adaptive",
-            latency_ms=latency_ms,
-            cache_hit=False,
-            answer_length=len(final_answer),
-        )
+        try:
+            log_query(
+                supabase=self.supabase,
+                query_id=query_id,
+                question=question,
+                route="adaptive",
+                latency_ms=latency_ms,
+                cache_hit=False,
+                answer_length=len(final_answer),
+            )
+        except Exception as e:
+            logger.warning(f"log_query failed: {e}")
+
         self.redis.publish(f"query_results:{query_id}", final_answer)
         logger.info(
-            f"Answer sent | {query_id} | {latency_ms:.1f}ms | chunks: {len(relevant_chunks)} | company={company_id}"
+            f"Answer sent | {query_id} | {latency_ms:.1f}ms | chunks={len(relevant_chunks)} | "
+            f"company={company_id} | abstain={answer_json.get('abstain_reason')}"
         )
         return final_answer
