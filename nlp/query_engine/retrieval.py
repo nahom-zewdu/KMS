@@ -251,5 +251,8 @@ class AdaptiveRetriever:
                 if len(unique) >= 12:
                     break
 
-        logger.info(f"Retrieved {len(unique)} adaptive chunks")
+        vec_n = sum(1 for c in unique if c.get("source") not in ("graph",) and "entity:" not in str(c.get("record_id", "")))
+        graph_n = len(unique) - vec_n
+        logger.info("Retrieved %d chunks (vector/raw≈%d graph≈%d) company=%s", len(unique), vec_n, graph_n, company_id)
+
         return unique
