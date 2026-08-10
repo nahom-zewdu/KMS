@@ -241,9 +241,19 @@ class AdaptiveRetriever:
             logger.warning(f"Vector failed: {e}")
 
         # Dedupe + Rank
+        def _rank_key(c):
+            src = (c.get("source") or "").lower()
+            base = float(c.get("score") or c.get("similarity") or 0.5)
+            if src in ("slack", "github", "raw"):
+                base += 0.35
+            if src == "graph":
+                content = (c.get("content") or "").upper()
+                if "PART_OF" in content and "OWNS" not in content and "MAINTAIN" not in content:
+                    base -= 0.25
+            return base
         seen = set()
         unique = []
-        for c in sorted(chunks, key=lambda x: x.get("score", 0.5), reverse=True):
+        for c in sorted(chunks, key=_rank_key, reverse=True):
             key = c.get("content", "")[:120]
             if key not in seen:
                 seen.add(key)
