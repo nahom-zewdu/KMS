@@ -68,3 +68,14 @@ WITH CHECK (
     WHERE user_id = auth.uid() AND role = 'admin'
   )
 );
+
+-- Ramp plans policies
+create policy "Members can read company ramp plans"
+on public.ramp_plans
+for select
+using (
+  company_id in (
+    select company_id from public.company_members
+    where user_id = auth.uid()
+  )
+);
