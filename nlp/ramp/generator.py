@@ -184,57 +184,48 @@ class RampPlanGenerator:
                 )
         # Role keyword boost already applied in visualizer; keep top N
         steps: List[Dict[str, Any]] = []
-        used_targets = set()
+        used = set()
 
-        # Fill from modules first
-        for mod in ranked:
-            if len(steps) >= self.MAX_STEPS:
-                break
-            path = (mod.get("path") or mod.get("name") or "").strip()
-            if not path or path in used_targets:
-                continue
-            used_targets.add(path)
-
-            related_files = [
-                f for f in key_files
-                if f.get("path")
-                and not any(f["path"].endswith(n) or f["path"].split("/")[-1] in self.NOISE for n in self.NOISE)
-                and (
-                    (f.get("module") or "").startswith(path)
-                    or (f.get("path") or "").startswith(path + "/")
-                )
-            ][:3]
-
-            primary_file = related_files[0]["path"] if related_files else None
-            risk = self._risk_tier(primary_file or path, safe_paths, risk_paths)
-            owners = self._owners_for_target(path, related_files, owner_index)
-            evidence = self._evidence_for(path, related_files)
-
-            layer_hint = ""
-            top = path.split("/")[0].lower()
-            for layer in architecture:
-                name = (layer.get("name") or "").lower()
-                if top and top in name:
-                    layer_hint = layer.get("name") or ""
+        for slot_name, pool, limit in slots:
+            taken = 0
+            for mod in pool:
+                if taken >= limit or len(steps) >= self.MAX_STEPS:
                     break
-
-            why = self._template_why(role, path, mod, risk, owners, layer_hint)
-
-            steps.append(
-                {
-                    "order": len(steps) + 1,
-                    "title": mod.get("name") or path.split("/")[-1],
-                    "target": {
-                        "type": "module",
-                        "path": path,
-                        "files": [f.get("path") for f in related_files if f.get("path")],
-                    },
-                    "why": why,
-                    "risk_tier": risk,
-                    "owners": owners,
-                    "evidence": evidence,
-                }
-            )
+                path = (mod.get("path") or "").strip()
+                if not path or path in used:
+                    continue
+                used.add(path)
+                related = files_for(path)
+                risk = self._risk_tier(path, safe_paths, risk_paths)
+                if slot_name == "safe":
+                    risk = "safe"
+                elif slot_name == "high-risk":
+                    risk = "high-risk"
+                owners = self._owners_for_target(path, related, owner_index)
+                layer_hint = ""
+                top = path.split("/")[0].lower()
+                for layer in architecture:
+                    name = (layer.get("name") or "").lower()
+                    if top and top in name:
+                        layer_hint = layer.get("name") or ""
+                        break
+                title = self._step_title(slot_name, path, mod, role)
+                steps.append(
+                    {
+                        "order": len(steps) + 1,
+                        "title": title,
+                        "target": {
+                            "type": "module",
+                            "path": path,
+                            "files": [f.get("path") for f in related if f.get("path")],
+                        },
+                        "why": self._template_why(role, path, mod, risk, owners, layer_hint),
+                        "risk_tier": risk,
+                        "owners": owners,
+                        "evidence": self._evidence_for(path, related),
+                    }
+                )
+                taken += 1
 
         # If modules thin, fill from key files
         if len(steps) < self.MAX_STEPS:
