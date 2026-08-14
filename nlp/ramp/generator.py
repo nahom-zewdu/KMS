@@ -267,6 +267,15 @@ class RampPlanGenerator:
 
         return steps
 
+
+    def _step_title(self, slot: str, path: str, mod: Dict, role: str) -> str:
+        name = mod.get("name") or path.split("/")[-1]
+        if slot == "safe":
+            return f"Orient in `{name}`"
+        if slot == "high-risk":
+            return f"Read carefully: `{name}`"
+        return f"Learn `{name}` ({role})"
+
     def _risk_tier(self, path: str, safe_paths: set, risk_paths: set) -> str:
         if path in risk_paths:
             return "high-risk"
