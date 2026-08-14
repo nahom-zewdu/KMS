@@ -355,24 +355,23 @@ class RampPlanGenerator:
                 fpath = f.get("path")
                 if not fpath or fpath in used_targets:
                     continue
-                # skip pure noise
-                if fpath.endswith((".gitignore", ".python-version")):
-                    continue
-                used_targets.add(fpath)
-                risk = self._risk_tier(fpath, safe_paths, risk_paths)
-                owners = self._owners_for_target(fpath, [f], owner_index)
-                evidence = self._evidence_for(fpath, [f])
+                used.add(path)
+                related = files_for(path)
+                risk = self._risk_tier(path, safe_paths, risk_paths)
+                owners = self._owners_for_target(path, related, owner_index)
                 steps.append(
                     {
                         "order": len(steps) + 1,
-                        "title": f.get("name") or fpath.split("/")[-1],
-                        "target": {"type": "file", "path": fpath, "files": [fpath]},
-                        "why": self._template_why(
-                            role, fpath, {"description": f.get("language")}, risk, owners, ""
-                        ),
+                        "title": self._step_title("core", path, mod, role),
+                        "target": {
+                            "type": "module",
+                            "path": path,
+                            "files": [f.get("path") for f in related if f.get("path")],
+                        },
+                        "why": self._template_why(role, path, mod, risk, owners, ""),
                         "risk_tier": risk,
                         "owners": owners,
-                        "evidence": evidence,
+                        "evidence": self._evidence_for(path, related),
                     }
                 )
 
