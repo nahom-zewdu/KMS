@@ -123,6 +123,7 @@ class CodebaseBaselineSync:
             logger.info(
                 f"Baseline sync complete: {files_processed} files, "
                 f"{len(module_map)} modules | company={company_id}"
+                f"{len(author_map)} authors | repo={repo_full_name}"
             )
             return True
         except Exception as e:
