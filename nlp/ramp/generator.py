@@ -276,6 +276,26 @@ class RampPlanGenerator:
             return f"Read carefully: `{name}`"
         return f"Learn `{name}` ({role})"
 
+
+    def _template_why(self, role: str, path: str, mod: Dict, risk: str, owners: List[str], layer_hint: str,) -> str:
+        parts = []
+        if risk == "safe":
+            parts.append(f"`{path}` is a lower-risk place to learn how this repo is laid out.")
+        elif risk == "high-risk":
+            parts.append(f"`{path}` has high blast radius for a {role} — read before you change it.")
+        else:
+            parts.append(f"`{path}` is a core surface for a {role} on this codebase.")
+        if layer_hint:
+            parts.append(f"Architecture signal: {layer_hint}.")
+        desc = (mod.get("description") or "").strip()
+        if desc and "Module containing" not in desc:
+            parts.append(desc)
+        if owners:
+            parts.append("Start with: " + ", ".join(owners) + ".")
+        else:
+            parts.append("No commit ownership indexed yet for this path.")
+        return " ".join(parts)
+
     def _risk_tier(self, path: str, safe_paths: set, risk_paths: set) -> str:
         if path in risk_paths:
             return "high-risk"
