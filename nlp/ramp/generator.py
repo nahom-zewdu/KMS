@@ -164,25 +164,145 @@ class RampPlanGenerator:
     # Step assembly
     # -------------------------------------------------------------------------
 
-    def _build_steps(
-        self,
-        role: str,
-        modules: List[Dict],
-        key_files: List[Dict],
-        owner_index: Dict[str, List[str]],
-        safe_paths: set,
-        risk_paths: set,
-        architecture: List[Dict],
-    ) -> List[Dict[str, Any]]:
+    def _load_owner_signals(self, company_id: str) -> Dict[str, List[str]]:
         """
-        Build a list of steps from modules and key files, with risk, owners, and evidence.
+        path/module/file token -> [person, ...]
+        From codebase_files.last_author + OWNS edges.
         """
-        ranked = sorted(
-                    modules,
-                    key=lambda m: float(m.get("importance") or 0) + self._role_boost(role, m.get("path") or ""),
-                    reverse=True,
+        idx: Dict[str, List[str]] = {}
+
+        def add(token: str, person: str):
+            token = (token or "").strip().lower()
+            person = (person or "").strip().lower()
+            if not token or not person:
+                return
+            bucket = idx.setdefault(token, [])
+            if person not in bucket:
+                bucket.append(person)
+
+        try:
+            files = (
+                self.supabase.table("codebase_files")
+                .select("file_path, module_path, last_author")
+                .eq("company_id", company_id)
+                .not_.is_("last_author", "null")
+                .limit(2000)
+                .execute()
+            )
+            for row in files.data or []:
+                author = row.get("last_author")
+                add(row.get("file_path"), author)
+                add(row.get("module_path"), author)
+                if row.get("file_path"):
+                    add(row["file_path"].split("/")[-1], author)
+        except Exception as e:
+            logger.warning("last_author load failed: %s", e)
+
+        try:
+            edges = (
+                self.supabase.table("edges")
+                .select("source_id, target_id, type")
+                .eq("company_id", company_id)
+                .eq("type", "OWNS")
+                .limit(2000)
+                .execute()
+            )
+            if edges.data:
+                ids = set()
+                for e in edges.data:
+                    ids.add(e["source_id"])
+                    ids.add(e["target_id"])
+                ent = (
+                    self.supabase.table("entities")
+                    .select("id, name, type, metadata")
+                    .eq("company_id", company_id)
+                    .in_("id", list(ids))
+                    .execute()
                 )
-        # Role keyword boost already applied in visualizer; keep top N
+                by_id = {r["id"]: r for r in (ent.data or [])}
+                for e in edges.data:
+                    person = by_id.get(e["source_id"])
+                    target = by_id.get(e["target_id"])
+                    if not person or not target:
+                        continue
+                    if (person.get("type") or "").upper() != "PERSON":
+                        continue
+                    pname = person.get("name") or ""
+                    meta = target.get("metadata") or {}
+                    add(meta.get("file_path"), pname)
+                    add(meta.get("module_path"), pname)
+                    add(target.get("name"), pname)
+        except Exception as e:
+            logger.warning("OWNS edge load failed: %s", e)
+
+        return idx
+
+
+    def _build_steps( self, role: str, modules: List[Dict], key_files: List[Dict], owner_index: Dict[str, List[str]], safe_paths: set, risk_paths: set, architecture: List[Dict],) -> List[Dict[str, Any]]:
+        """
+        Path shape:
+        1-2 safe entry
+        3-5 role core
+        6-7 high-risk / high-leverage
+        """
+        # Merge visualizer owners with DB signals (DB wins density)
+        # owner_index already from _index_owners(viz); extend in generate() see note below
+
+        def files_for(path: str) -> List[Dict]:
+            out = []
+            for f in key_files:
+                fp = f.get("path") or ""
+                if not fp or any(fp.endswith(n) or fp.split("/")[-1] == n for n in self.NOISE):
+                    continue
+                mod = f.get("module") or ""
+                if mod == path or mod.startswith(path + "/") or fp.startswith(path + "/") or fp == path:
+                    out.append(f)
+                if len(out) >= 3:
+                    break
+            return out
+
+        def score(mod: Dict) -> float:
+            path = mod.get("path") or ""
+            s = float(mod.get("importance") or 0) + self._role_boost(role, path)
+            owners = self._owners_for_target(path, files_for(path), owner_index)
+            if owners:
+                s += 0.35
+            fc = float((mod.get("file_count") or 0))
+            s += min(0.25, fc / 40.0)
+            return s
+
+        safe_mods, core_mods, risk_mods = [], [], []
+        for mod in modules:
+            path = (mod.get("path") or "").strip()
+            if not path or path in ("", "."):
+                continue
+            if path.lower() in ("doc", "docs") or path.lower().startswith("doc/"):
+                # docs only allowed in safe slot, low priority
+                safe_mods.append(mod)
+                continue
+            risk = self._risk_tier(path, safe_paths, risk_paths)
+            if risk == "safe":
+                safe_mods.append(mod)
+            elif risk == "high-risk":
+                risk_mods.append(mod)
+            else:
+                core_mods.append(mod)
+
+        safe_mods.sort(key=score, reverse=True)
+        core_mods.sort(key=score, reverse=True)
+        risk_mods.sort(key=score, reverse=True)
+
+        # Prefer role-boosted modules into core even if labeled review
+        role_core = [m for m in core_mods if self._role_boost(role, m.get("path") or "") > 0]
+        other_core = [m for m in core_mods if m not in role_core]
+        core_ordered = role_core + other_core
+
+        slots = [
+            ("safe", safe_mods, 2),
+            ("core", core_ordered, 3),
+            ("high-risk", risk_mods, 2),
+        ]
+
         steps: List[Dict[str, Any]] = []
         used = set()
 
