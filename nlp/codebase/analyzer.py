@@ -60,15 +60,22 @@ class CodebaseAnalyzer:
         now = datetime.now(timezone.utc).isoformat()
 
         # Normalize author (payload.sender may be str or dict)
-        sender = payload.get("sender")
-        if isinstance(sender, dict):
-            author = sender.get("login") or sender.get("name")
-        else:
-            author = sender if isinstance(sender, str) else None
-
+        author = None
         head = payload.get("head_commit") or {}
-        if not isinstance(head, dict):
-            head = {}
+        if isinstance(head, dict):
+            ha = head.get("author") or {}
+            if isinstance(ha, dict):
+                author = ha.get("username") or ha.get("name")
+        commits = payload.get("commits") or []
+        if not author and commits and isinstance(commits[-1], dict):
+            ca = commits[-1].get("author") or {}
+            if isinstance(ca, dict):
+                author = ca.get("username") or ca.get("name")
+        sender = payload.get("sender")
+        if not author and isinstance(sender, dict):
+            author = sender.get("login") or sender.get("name")
+        elif not author and isinstance(sender, str):
+            author = sender
 
         # --- REPOSITORY entity ---
         repo_entity_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"repo:{company_id}:{repo_name}"))
