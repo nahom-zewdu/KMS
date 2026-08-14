@@ -159,7 +159,6 @@ class CodebaseBaselineSync:
             logger.warning("Failed building author map: %s", e)
         return author_map
 
-
     def _index_file(
         self,
         gh_file,
@@ -231,7 +230,6 @@ class CodebaseBaselineSync:
 
         if last_author:
             self._upsert_owns(last_author, file_entity_id, company_id, now)
-
 
     def _upsert_owns(
         self,
