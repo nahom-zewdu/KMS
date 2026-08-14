@@ -347,13 +347,14 @@ class RampPlanGenerator:
                 )
                 taken += 1
 
-        # If modules thin, fill from key files
+        # Backfill if thin
         if len(steps) < self.MAX_STEPS:
-            for f in key_files:
+            rest = sorted(modules, key=score, reverse=True)
+            for mod in rest:
                 if len(steps) >= self.MAX_STEPS:
                     break
-                fpath = f.get("path")
-                if not fpath or fpath in used_targets:
+                path = (mod.get("path") or "").strip()
+                if not path or path in used:
                     continue
                 used.add(path)
                 related = files_for(path)
@@ -474,33 +475,6 @@ class RampPlanGenerator:
                     }
                 )
         return evidence
-
-    def _template_why(
-        self,
-        role: str,
-        path: str,
-        mod: Dict,
-        risk: str,
-        owners: List[str],
-        layer_hint: str,
-    ) -> str:
-        desc = (mod.get("description") or "").strip()
-        parts = [
-            f"For a {role}, `{path}` is a high-signal area in this company's codebase."
-        ]
-        if layer_hint:
-            parts.append(f"It sits under {layer_hint}.")
-        if desc:
-            parts.append(desc)
-        if risk == "safe":
-            parts.append("Marked lower risk for early exploration.")
-        elif risk == "high-risk":
-            parts.append("High business impact — read before changing.")
-        if owners:
-            parts.append("Known contacts: " + ", ".join(owners) + ".")
-        else:
-            parts.append("No ownership edge indexed yet — ask the team lead if unclear.")
-        return " ".join(parts)
 
     def _polish_why(
         self, steps: List[Dict], role: str, company_id: str
