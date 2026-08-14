@@ -189,6 +189,52 @@ class CodebaseBaselineSync:
             on_conflict="id",
         ).execute()
 
+        if last_author:
+            self._upsert_owns(last_author, file_entity_id, company_id, now)
+
+
+    def _upsert_owns(
+        self,
+        author: str,
+        file_entity_id: str,
+        company_id: str,
+        now: str,
+    ):
+        """PERSON + OWNS edge (same id scheme as analyzer)."""
+        author_norm = str(author).strip().lower()
+        if not author_norm:
+            return
+        person_entity_id = str(
+            uuid.uuid5(uuid.NAMESPACE_URL, f"person:{company_id}:{author_norm}")
+        )
+        self.supabase.table("entities").upsert(
+            {
+                "id": person_entity_id,
+                "type": "PERSON",
+                "name": author_norm,
+                "company_id": company_id,
+                "metadata": {"source": "github_baseline", "company_id": company_id},
+                "created_at": now,
+            },
+            on_conflict="id",
+        ).execute()
+
+        owns_edge_id = str(
+            uuid.uuid5(uuid.NAMESPACE_URL, f"owns:{person_entity_id}:{file_entity_id}")
+        )
+        self.supabase.table("edges").upsert(
+            {
+                "id": owns_edge_id,
+                "source_id": person_entity_id,
+                "target_id": file_entity_id,
+                "type": "OWNS",
+                "confidence": 0.8,
+                "created_at": now,
+                "company_id": company_id,
+            },
+            on_conflict="id",
+        ).execute()
+
     def _create_module(self, module_path: str, repo_id: str, file_count: int, company_id: str = "default"):
         """Create/update module with computed importance."""
         module_name = module_path.split("/")[-1] if module_path else "root"
