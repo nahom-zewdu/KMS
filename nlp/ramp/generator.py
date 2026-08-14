@@ -92,6 +92,13 @@ class RampPlanGenerator:
             return plan
 
         owner_index = self._index_owners(ownership)
+        db_owners = self._load_owner_signals(company_id)
+        for k, people in db_owners.items():
+            bucket = owner_index.setdefault(k, [])
+            for p in people:
+                if p not in bucket:
+                    bucket.append(p)
+
         safe_paths = {z.get("path") for z in (safe_zones.get("safe_first") or []) if z.get("path")}
         risk_paths = {z.get("path") for z in (safe_zones.get("high_risk") or []) if z.get("path")}
 
@@ -237,7 +244,6 @@ class RampPlanGenerator:
 
         return idx
 
-
     def _build_steps( self, role: str, modules: List[Dict], key_files: List[Dict], owner_index: Dict[str, List[str]], safe_paths: set, risk_paths: set, architecture: List[Dict],) -> List[Dict[str, Any]]:
         """
         Path shape:
@@ -378,7 +384,6 @@ class RampPlanGenerator:
 
         return steps
 
-
     def _step_title(self, slot: str, path: str, mod: Dict, role: str) -> str:
         name = mod.get("name") or path.split("/")[-1]
         if slot == "safe":
@@ -386,7 +391,6 @@ class RampPlanGenerator:
         if slot == "high-risk":
             return f"Read carefully: `{name}`"
         return f"Learn `{name}` ({role})"
-
 
     def _template_why(self, role: str, path: str, mod: Dict, risk: str, owners: List[str], layer_hint: str,) -> str:
         parts = []
