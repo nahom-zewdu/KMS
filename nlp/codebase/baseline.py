@@ -130,8 +130,46 @@ class CodebaseBaselineSync:
             logger.error(f"Baseline sync failed: {e}", exc_info=True)
             return False
     
-    def _index_file(self, gh_file, repo_entity_id: str, physical_repo_id: str, repo_full_name: str, company_id: str = "default",):
-        """Index a single file: create FILE entity, codebase_files entry, and PART_OF edge."""
+    def _build_author_map(self, repo, max_commits: int = 200) -> Dict[str, str]:
+        """
+        Walk recent commits (newest first). First time we see a file path wins = last author.
+        One pass; avoids per-file commit API calls.
+        """
+        author_map: Dict[str, str] = {}
+        try:
+            for i, commit in enumerate(repo.get_commits()):
+                if i >= max_commits:
+                    break
+                try:
+                    author = None
+                    if commit.author and getattr(commit.author, "login", None):
+                        author = commit.author.login
+                    elif commit.commit and commit.commit.author:
+                        author = commit.commit.author.name
+                    if not author:
+                        continue
+                    author = str(author).strip()
+                    for f in commit.files or []:
+                        path = getattr(f, "filename", None)
+                        if path and path not in author_map:
+                            author_map[path] = author
+                except Exception:
+                    continue
+        except Exception as e:
+            logger.warning("Failed building author map: %s", e)
+        return author_map
+
+
+    def _index_file(
+        self,
+        gh_file,
+        repo_entity_id: str,
+        physical_repo_id: str,
+        repo_full_name: str,
+        company_id: str = "default",
+        last_author: str | None = None,
+    ):
+        """FILE entity, codebase_files, PART_OF, and OWNS when last_author is known."""
         file_path = gh_file.path
         file_name = file_path.split("/")[-1]
         module_path = "/".join(file_path.split("/")[:-1]) if "/" in file_path else ""
