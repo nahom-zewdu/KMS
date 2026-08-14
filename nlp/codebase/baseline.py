@@ -159,15 +159,7 @@ class CodebaseBaselineSync:
             logger.warning("Failed building author map: %s", e)
         return author_map
 
-    def _index_file(
-        self,
-        gh_file,
-        repo_entity_id: str,
-        physical_repo_id: str,
-        repo_full_name: str,
-        company_id: str = "default",
-        last_author: str | None = None,
-    ):
+    def _index_file(self, gh_file, repo_entity_id: str, physical_repo_id: str, repo_full_name: str, company_id: str = "default", last_author: str | None = None,):
         """FILE entity, codebase_files, PART_OF, and OWNS when last_author is known."""
         file_path = gh_file.path
         file_name = file_path.split("/")[-1]
