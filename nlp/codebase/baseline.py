@@ -178,6 +178,7 @@ class CodebaseBaselineSync:
         file_entity_id = str(
             uuid.uuid5(uuid.NAMESPACE_URL, f"file:{company_id}:{repo_full_name}:{file_path}")
         )
+
         self.supabase.table("entities").upsert(
             {
                 "id": file_entity_id,
@@ -189,8 +190,8 @@ class CodebaseBaselineSync:
                     "module_path": module_path,
                     "language": self._detect_language(file_path),
                     "company_id": company_id,
+                    "last_author": last_author,
                 },
-                "company_id": company_id,
                 "created_at": now,
             },
             on_conflict="id",
@@ -205,6 +206,7 @@ class CodebaseBaselineSync:
                 "language": self._detect_language(file_path),
                 "last_modified_at": now,
                 "last_commit_sha": gh_file.sha,
+                "last_author": last_author,
                 "metadata": {"company_id": company_id},
                 "company_id": company_id,
             },
