@@ -18,23 +18,18 @@ class NLPProcessor:
 
         logging.info("=== NLPProcessor initialization ===")
 
-        logging.info("Creating Slack handler...")
         slack_handler = IngestionHandler()
         logging.info("Slack handler created.")
 
-        logging.info("Creating GitHub handler...")
         github_handler = IngestionHandler()
         logging.info("GitHub handler created.")
 
-        logging.info("Creating Query handler...")
         query_handler = QueryHandler()
         logging.info("Query handler created.")
 
-        logging.info("Creating Baseline handler...")
         baseline_handler = BaselineHandler()
         logging.info("Baseline handler created.")
 
-        logging.info("Creating Redis consumer...")
         self.consumer = RedisStreamConsumer(
             streams=[
                 "slack_jobs",
