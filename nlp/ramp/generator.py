@@ -91,6 +91,7 @@ class RampPlanGenerator:
             self._save(plan)
             return plan
 
+        # Merge visualizer owners with DB signals (DB wins density)
         owner_index = self._index_owners(ownership)
         db_owners = self._load_owner_signals(company_id)
         for k, people in db_owners.items():
