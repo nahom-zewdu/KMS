@@ -15,26 +15,43 @@ logger = logging.getLogger("processor")
 class NLPProcessor:
     def __init__(self):
         setup_structured_logging()
-        logging.info("Initializing NLP Processor...")
-        
-        # Pre-load sentence transformer model on startup (~15s one-time cost)
-        logging.info("Pre-loading sentence transformer model...")
-        try:
-            model = get_embedder()
-            logging.info(f"✓ Embedder loaded: {model.get_sentence_embedding_dimension()} dimensions")
-        except Exception as e:
-            logging.warning(f"Failed to pre-load embedder: {e}. Will load on first query.")
 
+        logging.info("=== NLPProcessor initialization ===")
+
+        logging.info("Creating Slack handler...")
+        slack_handler = IngestionHandler()
+        logging.info("Slack handler created.")
+
+        logging.info("Creating GitHub handler...")
+        github_handler = IngestionHandler()
+        logging.info("GitHub handler created.")
+
+        logging.info("Creating Query handler...")
+        query_handler = QueryHandler()
+        logging.info("Query handler created.")
+
+        logging.info("Creating Baseline handler...")
+        baseline_handler = BaselineHandler()
+        logging.info("Baseline handler created.")
+
+        logging.info("Creating Redis consumer...")
         self.consumer = RedisStreamConsumer(
-            streams=["slack_jobs", "github_jobs", "query_jobs", "codebase_baseline_jobs"],
+            streams=[
+                "slack_jobs",
+                "github_jobs",
+                "query_jobs",
+                "codebase_baseline_jobs",
+            ],
             group="kms",
             handlers={
-                "slack_jobs": IngestionHandler(),
-                "github_jobs": IngestionHandler(),
-                "query_jobs": QueryHandler(),
-                "codebase_baseline_jobs": BaselineHandler(),
-            }
+                "slack_jobs": slack_handler,
+                "github_jobs": github_handler,
+                "query_jobs": query_handler,
+                "codebase_baseline_jobs": baseline_handler,
+            },
         )
+
+        logging.info("Redis consumer created.")
 
     def run(self):
         logging.info("KMS NLP Processor starting...")
