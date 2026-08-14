@@ -89,7 +89,10 @@ class CodebaseBaselineSync:
                     }
                 ).execute()
 
-            # 3. Tree walk
+            # Author map from recent commits (most recent author wins per file)
+            author_map = self._build_author_map(repo, max_commits=200)
+            logger.info("Author map: %d files with last_author", len(author_map))
+
             contents = repo.get_contents("")
             files_processed = 0
             module_map: Dict[str, int] = {}
@@ -110,6 +113,7 @@ class CodebaseBaselineSync:
                         physical_repo_id,
                         repo_full_name,
                         company_id,
+                        last_author=author_map.get(item.path),
                     )
                     files_processed += 1
 
