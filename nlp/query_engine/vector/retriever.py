@@ -7,7 +7,6 @@ Uses pgvector semantic search on raw_data to answer historical and contextual qu
 
 import re
 from typing import List, Dict, Any
-from sentence_transformers import SentenceTransformer
 from functools import lru_cache
 import logging
 
@@ -16,7 +15,18 @@ logger = logging.getLogger(__name__)
 @lru_cache(maxsize=1)
 def get_embedder():
     """Cached sentence transformer model."""
-    return SentenceTransformer('all-MiniLM-L6-v2')
+    logger.info("Loading sentence transformer model...")
+
+    from sentence_transformers import SentenceTransformer
+
+    model = SentenceTransformer("all-MiniLM-L6-v2")
+
+    logger.info(
+        "Sentence transformer loaded: %d dimensions",
+        model.get_sentence_embedding_dimension(),
+    )
+
+    return model
 
 class VectorRetriever:
     """
