@@ -247,15 +247,26 @@ class RampPlanGenerator:
 
         return idx
 
-    def _build_steps( self, role: str, modules: List[Dict], key_files: List[Dict], owner_index: Dict[str, List[str]], safe_paths: set, risk_paths: set, architecture: List[Dict],) -> List[Dict[str, Any]]:
+    def _build_steps(
+        self,
+        role: str,
+        company_id: str,
+        modules: List[Dict],
+        key_files: List[Dict],
+        owner_index: Dict[str, List[str]],
+        safe_paths: set,
+        risk_paths: set,
+        architecture: List[Dict],
+    ) -> List[Dict[str, Any]]:
         """
+        Build steps for the given role and company.
         Path shape:
         1-2 safe entry
         3-5 role core
         6-7 high-risk / high-leverage
+
+        Each step gets a stable id so the UI can deep-link to a step workspace.
         """
-        # Merge visualizer owners with DB signals (DB wins density)
-        # owner_index already from _index_owners(viz); extend in generate() see note below
 
         def files_for(path: str) -> List[Dict]:
             out = []
@@ -340,7 +351,6 @@ class RampPlanGenerator:
             if not path or path in ("", "."):
                 continue
             if path.lower() in ("doc", "docs") or path.lower().startswith("doc/"):
-                # docs only allowed in safe slot, low priority
                 safe_mods.append(mod)
                 continue
             risk = self._risk_tier(path, safe_paths, risk_paths)
@@ -355,7 +365,6 @@ class RampPlanGenerator:
         core_mods.sort(key=score, reverse=True)
         risk_mods.sort(key=score, reverse=True)
 
-        # Prefer role-boosted modules into core even if labeled review
         role_core = [m for m in core_mods if self._role_boost(role, m.get("path") or "") > 0]
         other_core = [m for m in core_mods if m not in role_core]
         core_ordered = role_core + other_core
@@ -392,25 +401,20 @@ class RampPlanGenerator:
                     if top and top in name:
                         layer_hint = layer.get("name") or ""
                         break
-                title = self._step_title(slot_name, path, mod, role)
                 steps.append(
-                    {
-                        "order": len(steps) + 1,
-                        "title": title,
-                        "target": {
-                            "type": "module",
-                            "path": path,
-                            "files": [f.get("path") for f in related if f.get("path")],
-                        },
-                        "why": self._template_why(role, path, mod, risk, owners, layer_hint),
-                        "risk_tier": risk,
-                        "owners": owners,
-                        "evidence": self._evidence_for(path, related),
-                    }
+                    make_step(
+                        slot_name,
+                        path,
+                        mod,
+                        related,
+                        risk,
+                        owners,
+                        layer_hint,
+                        len(steps) + 1,
+                    )
                 )
                 taken += 1
 
-        # Backfill if thin
         if len(steps) < self.MAX_STEPS:
             rest = sorted(modules, key=score, reverse=True)
             for mod in rest:
@@ -424,19 +428,16 @@ class RampPlanGenerator:
                 risk = self._risk_tier(path, safe_paths, risk_paths)
                 owners = self._owners_for_target(path, related, owner_index)
                 steps.append(
-                    {
-                        "order": len(steps) + 1,
-                        "title": self._step_title("core", path, mod, role),
-                        "target": {
-                            "type": "module",
-                            "path": path,
-                            "files": [f.get("path") for f in related if f.get("path")],
-                        },
-                        "why": self._template_why(role, path, mod, risk, owners, ""),
-                        "risk_tier": risk,
-                        "owners": owners,
-                        "evidence": self._evidence_for(path, related),
-                    }
+                    make_step(
+                        "core",
+                        path,
+                        mod,
+                        related,
+                        risk,
+                        owners,
+                        "",
+                        len(steps) + 1,
+                    )
                 )
 
         return steps
