@@ -280,6 +280,60 @@ class RampPlanGenerator:
             s += min(0.25, fc / 40.0)
             return s
 
+        def make_step(
+            slot_name: str,
+            path: str,
+            mod: Dict,
+            related: List[Dict],
+            risk: str,
+            owners: List[str],
+            layer_hint: str,
+            order: int,
+        ) -> Dict[str, Any]:
+            step_id = str(
+                uuid.uuid5(
+                    uuid.NAMESPACE_URL,
+                    f"ramp-step:{company_id}:{role}:{path}:{order}",
+                )
+            )
+            file_paths = [f.get("path") for f in related if f.get("path")]
+            return {
+                "id": step_id,
+                "order": order,
+                "title": self._step_title(slot_name, path, mod, role),
+                "why": self._template_why(role, path, mod, risk, owners, layer_hint),
+                "risk_tier": risk,
+                "owners": owners,
+                "target": {
+                    "type": "module",
+                    "path": path,
+                    "repo": None,  # filled when single-repo companies are wired
+                    "files": file_paths,
+                },
+                "summary": {"what": None, "how": None, "where": None},
+                "resources": [],
+                "checklist": [
+                    {
+                        "id": "orient",
+                        "label": f"Open and skim `{path}`",
+                        "done": False,
+                    }
+                ],
+                "evidence": self._evidence_for(path, related),
+                "machine": {
+                    "path": path,
+                    "suggested_owners": list(owners),
+                    "suggested_risk": risk,
+                },
+                "overrides": {
+                    "title": False,
+                    "why": False,
+                    "owners": False,
+                    "risk_tier": False,
+                    "order": False,
+                },
+            }
+
         safe_mods, core_mods, risk_mods = [], [], []
         for mod in modules:
             path = (mod.get("path") or "").strip()
