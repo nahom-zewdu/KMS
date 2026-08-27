@@ -106,6 +106,7 @@ class RampPlanGenerator:
 
         steps = self._build_steps(
             role=role_key,
+            company_id=company_id,
             modules=modules,
             key_files=key_files,
             owner_index=owner_index,
