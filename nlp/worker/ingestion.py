@@ -51,7 +51,9 @@ class IngestionHandler:
         event_id = job.get("event_id")
         content = job.get("content", "")
         payload = job.get("payload", {})
-        company_id = job.get("company_id") or "default"
+        company_id = (job.get("company_id") or "").strip()
+        if not company_id:
+            raise ValueError("company_id is required for ingestion")
 
         created_at = job.get("created_at") or datetime.now(timezone.utc).isoformat()
 
