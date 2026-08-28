@@ -100,17 +100,18 @@ def extract_relations(
 
     except Exception as e:
         logger.error("RE LLM failed: %s", e)
-        return []
+        raise RuntimeError("relation extraction failed") from e
 
     try:
-        raw = llm_infer(prompt)
         obj = json.loads(raw)
         raw_relations = obj.get(
             "relations",
             []
         )
-    except Exception:
-        return []
+        if not isinstance(raw_relations, list):
+            raise ValueError("RE response relations must be a list")
+    except Exception as e:
+        raise ValueError("invalid relation extraction response") from e
 
     relations = []
 
@@ -120,6 +121,8 @@ def extract_relations(
     valid_entities = set(entity_map.keys())
 
     for rel in raw_relations:
+        if not isinstance(rel, dict):
+            raise ValueError("RE response contains an invalid relation")
 
         src = (
             rel.get("source", "")
