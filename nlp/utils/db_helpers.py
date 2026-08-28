@@ -59,12 +59,16 @@ def insert_entities(supabase: Client, entities: List[Dict[str, Any]]) -> None:
     except Exception as e:
         # Fallback: try insert ignoring conflicts (safest)
         logger.exception("Upsert entities failed, attempting individual inserts: %s", e)
+        fallback_error = None
         for rec in payload:
             try:
                 supabase.table("entities").insert(rec).execute()
             except Exception as ie:
                 logger.warning("Single entity insert failed (likely duplicate): %s", ie)
-        return
+                fallback_error = ie
+        if fallback_error is not None:
+            raise RuntimeError("entity persistence failed") from fallback_error
+        logger.info("Entity fallback inserts succeeded")
 
 def insert_relations(supabase: Client, relations: List[Dict[str, Any]]) -> None:
     """
@@ -93,7 +97,8 @@ def insert_relations(supabase: Client, relations: List[Dict[str, Any]]) -> None:
             supabase.table("edges").insert(payload).execute()
         except Exception as ie:
             logger.exception("Batch insert relations failed: %s", ie)
-        return
+            raise RuntimeError("relation persistence failed") from ie
+        logger.info("Relation fallback insert succeeded")
 
 def insert_raw_data(supabase: Client, raw_job: Dict[str, Any]) -> None:
     """
@@ -110,8 +115,7 @@ def insert_raw_data(supabase: Client, raw_job: Dict[str, Any]) -> None:
             rec["embedding"] = embed_content(content)
             rec["embedding_model"] = "all-MiniLM-L6-v2"
         except Exception as e:
-            logger.warning(f"Failed to generate embedding: {e}")
-            rec["embedding"] = None
+            raise RuntimeError("embedding generation failed") from e
     else:
         rec["embedding"] = None
 
@@ -141,6 +145,8 @@ def insert_raw_data(supabase: Client, raw_job: Dict[str, Any]) -> None:
             logger.info("raw_data insert fallback succeeded | id=%s", rec["id"])
         except Exception as ie:
             logger.exception("raw_data insert fallback failed: %s", ie)
+            raise RuntimeError("raw_data persistence failed") from ie
+        logger.info("raw_data fallback insert succeeded | id=%s", rec["id"])
 
 def mark_event_processed(supabase: Client, delivery_id: str) -> None:
     if not delivery_id:
@@ -148,5 +154,6 @@ def mark_event_processed(supabase: Client, delivery_id: str) -> None:
     try:
         supabase.table("events").update({"processed": True}).eq("delivery_id", delivery_id).execute()
         logger.info("Marked event processed for delivery_id=%s", delivery_id)
-    except Exception:
+    except Exception as e:
         logger.exception("Failed to mark event processed: %s", delivery_id)
+        raise RuntimeError("event processed marker update failed") from e
