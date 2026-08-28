@@ -117,7 +117,7 @@ class RedisStreamConsumer:
                 "event_type": raw.get("EventType") or raw.get("event_type", ""),
                 "payload": raw.get("Payload") or raw.get("payload", {}),
                 "created_at": raw.get("CreatedAt") or raw.get("created_at", ""),
-                "company_id": raw.get("CompanyID") or raw.get("company_id") or "default",
+                "company_id": raw.get("CompanyID") or raw.get("company_id", ""),
             }
         except Exception:
             return None
