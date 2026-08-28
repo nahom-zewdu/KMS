@@ -107,8 +107,10 @@ func (c *CoreIngest) Ingest(ctx context.Context, req domain.IngestRequest) error
 	}
 
 	companyID := req.CompanyID
-	if companyID == "" {
-		companyID = "default"
+	companyID = strings.TrimSpace(companyID)
+	if companyID == "" || companyID == "default" {
+		log.Printf("RecordID: %s - Missing company ID in %.3fs", req.RecordID, time.Since(start).Seconds())
+		return fmt.Errorf("company_id must resolve to a real company")
 	}
 
 	// Store raw payload in events table
