@@ -15,6 +15,8 @@ import logging
 import os
 import socket
 import uuid
+import asyncio
+import inspect
 from typing import Dict, Callable
 from redis.exceptions import ConnectionError, TimeoutError, ResponseError
 
@@ -146,7 +148,19 @@ class RedisStreamConsumer:
                 self._ack(stream, msg_id)
                 return
 
-            handler.process(job, stream, msg_id, self.redis)
+            # Check if handler.process is async
+            if inspect.iscoroutinefunction(handler.process):
+                # Run async handler in event loop
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    loop.run_until_complete(handler.process(job, stream, msg_id, self.redis))
+                finally:
+                    loop.close()
+            else:
+                # Run sync handler
+                handler.process(job, stream, msg_id, self.redis)
+            
             self._ack(stream, msg_id)
 
         except Exception as e:
