@@ -26,8 +26,10 @@ class CodebaseBaselineSync:
         self.supabase = supabase
         self.gh = Github(os.getenv("GITHUB_API_TOKEN"))
 
-    def sync_repository(self, repo_full_name: str, company_id: str = "default") -> bool:
+    def sync_repository(self, repo_full_name: str, company_id: str) -> bool:
         """Perform a full baseline sync for the given repository."""
+        if not company_id or company_id.strip() == "default":
+            raise ValueError("company_id must resolve to a real company")
         logger.info(f"Starting full baseline sync for {repo_full_name} | company={company_id}")
         try:
             repo = self.gh.get_repo(repo_full_name)
@@ -159,7 +161,7 @@ class CodebaseBaselineSync:
             logger.warning("Failed building author map: %s", e)
         return author_map
 
-    def _index_file(self, gh_file, repo_entity_id: str, physical_repo_id: str, repo_full_name: str, company_id: str = "default", last_author: str | None = None,):
+    def _index_file(self, gh_file, repo_entity_id: str, physical_repo_id: str, repo_full_name: str, company_id: str, last_author: str | None = None,):
         """FILE entity, codebase_files, PART_OF, and OWNS when last_author is known."""
         file_path = gh_file.path
         file_name = file_path.split("/")[-1]
@@ -265,7 +267,7 @@ class CodebaseBaselineSync:
             on_conflict="id",
         ).execute()
 
-    def _create_module(self, module_path: str, repo_id: str, file_count: int, company_id: str = "default"):
+    def _create_module(self, module_path: str, repo_id: str, file_count: int, company_id: str):
         """Create/update module with computed importance."""
         module_name = module_path.split("/")[-1] if module_path else "root"
         importance = min(1.0, (file_count / 20.0) + 0.3)
@@ -281,7 +283,7 @@ class CodebaseBaselineSync:
             "company_id": company_id,
         }, on_conflict="repository_id,module_path").execute()
 
-    def _create_part_of_edge(self, repo_id: str, file_path: str, company_id: str = "default"):
+    def _create_part_of_edge(self, repo_id: str, file_path: str, company_id: str):
         """Create deterministic PART_OF edge using UUID."""
         # Use deterministic UUID based on repo + file_path
         edge_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"partof:{repo_id}:{file_path}"))

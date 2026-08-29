@@ -13,6 +13,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -127,6 +128,18 @@ func (h *SlackHandler) HandleSlackWebhook(c *gin.Context) {
 	}
 
 	innerEvent := eventsAPIEvent.InnerEvent
+	companyID, tenantErr := resolveSlackTenant(c.Request.Context(), h.storage, eventsAPIEvent.TeamID)
+	if tenantErr != nil {
+		if errors.Is(tenantErr, errTenantNotFound) {
+			log.Printf("No company mapped for Slack event")
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "Unable to resolve event tenant"})
+			return
+		}
+		log.Printf("Failed to resolve Slack event tenant: %v", tenantErr)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to resolve event tenant"})
+		return
+	}
+
 	switch ev := innerEvent.Data.(type) {
 	case *slackevents.AppMentionEvent:
 		if strings.TrimSpace(ev.Text) == "" {
@@ -139,16 +152,6 @@ func (h *SlackHandler) HandleSlackWebhook(c *gin.Context) {
 			// Use new context to avoid HTTP request cancellation
 			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 			defer cancel()
-
-			// Resolve company from Slack team_id
-			companyID, err := h.storage.ResolveCompanyByIntegration(ctx, "slack", eventsAPIEvent.TeamID)
-			if err != nil {
-				log.Printf("RecordID: %s - Failed to resolve company: %v", ev.TimeStamp, err)
-			}
-			if companyID == "" {
-				log.Printf("RecordID: %s - No company mapped for team %s, using default", ev.TimeStamp, eventsAPIEvent.TeamID)
-				companyID = "default"
-			}
 
 			// Retry logic for HandleEvent
 			for attempt := 1; attempt <= 3; attempt++ {
@@ -186,15 +189,6 @@ func (h *SlackHandler) HandleSlackWebhook(c *gin.Context) {
 			botID := h.slackBot.GetBotID()
 			if ev.BotID == "" && ev.User != botID && !strings.Contains(ev.Text, "<@") && ev.User != "" {
 				log.Printf("RecordID: %s - Handling message event: %s", ev.TimeStamp, ev.Text)
-				// Resolve company from Slack team_id
-				companyID, err := h.storage.ResolveCompanyByIntegration(ctx, "slack", eventsAPIEvent.TeamID)
-				if err != nil {
-					log.Printf("RecordID: %s - Failed to resolve company: %v", ev.TimeStamp, err)
-				}
-				if companyID == "" {
-					log.Printf("RecordID: %s - No company mapped for team %s, using default", ev.TimeStamp, eventsAPIEvent.TeamID)
-					companyID = "default"
-				}
 				// Create ingest request with event_ts as record_id
 				ingestReq := domain.IngestRequest{
 					Source:    "slack",

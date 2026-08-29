@@ -7,6 +7,7 @@ from .consumer import RedisStreamConsumer
 from .ingestion import IngestionHandler
 from .query import QueryHandler
 from .baseline import BaselineHandler
+from .codebase_analysis import CodebaseAnalysisHandler
 from utils import setup_structured_logging
 from query_engine.vector.retriever import get_embedder
 
@@ -30,12 +31,16 @@ class NLPProcessor:
         baseline_handler = BaselineHandler()
         logging.info("Baseline handler created.")
 
+        codebase_analysis_handler = CodebaseAnalysisHandler()
+        logging.info("Codebase analysis handler created.")
+
         self.consumer = RedisStreamConsumer(
             streams=[
                 "slack_jobs",
                 "github_jobs",
                 "query_jobs",
                 "codebase_baseline_jobs",
+                "codebase_analysis_jobs",
             ],
             group="kms",
             handlers={
@@ -43,6 +48,7 @@ class NLPProcessor:
                 "github_jobs": github_handler,
                 "query_jobs": query_handler,
                 "codebase_baseline_jobs": baseline_handler,
+                "codebase_analysis_jobs": codebase_analysis_handler,
             },
         )
 

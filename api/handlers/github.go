@@ -10,6 +10,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -276,13 +277,6 @@ func (h *GitHubHandler) HandleGitHubWebhook(c *gin.Context) {
 		}
 	}
 
-	var companyID string
-
-	// Prefer installation_id lookup
-	if installationID != "" {
-		companyID, err = h.storage.ResolveCompanyByInstallation(c.Request.Context(), installationID)
-	}
-
 	ownerLogin := getString(payload, "repository", "owner", "login")
 	if ownerLogin == "" {
 		// fallback: first segment of full_name
@@ -292,21 +286,21 @@ func (h *GitHubHandler) HandleGitHubWebhook(c *gin.Context) {
 		}
 	}
 
-	if companyID == "" && ownerLogin != "" {
-		companyID, err = h.storage.ResolveCompanyByIntegration(c.Request.Context(), "github", ownerLogin)
-	}
-	if companyID == "" {
-		companyID = "default"
-	}
-
-	// Retrieve company id using the integration mapping
-	companyID, err = h.storage.ResolveCompanyByIntegration(c.Request.Context(), "github", ownerLogin)
-	if err != nil {
-		log.Printf("RecordID: %s - Failed to resolve company for github:%s: %v", deliveryID, ownerLogin, err)
-	}
-	if companyID == "" {
-		log.Printf("RecordID: %s - No company mapped for github:%s, using default", deliveryID, ownerLogin)
-		companyID = "default"
+	companyID, tenantErr := resolveGitHubTenant(c.Request.Context(), h.storage, installationID, ownerLogin)
+	if tenantErr != nil {
+		if errors.Is(tenantErr, errTenantConflict) {
+			log.Printf("RecordID: %s - Conflicting GitHub tenant mappings", deliveryID)
+			c.JSON(http.StatusConflict, gin.H{"error": "Conflicting event tenant mappings"})
+			return
+		}
+		if errors.Is(tenantErr, errTenantNotFound) {
+			log.Printf("RecordID: %s - No company mapped for GitHub event", deliveryID)
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "Unable to resolve event tenant"})
+			return
+		}
+		log.Printf("RecordID: %s - Failed to resolve GitHub event tenant: %v", deliveryID, tenantErr)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to resolve event tenant"})
+		return
 	}
 
 	minimalPayload["owner"] = ownerLogin

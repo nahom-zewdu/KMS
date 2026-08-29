@@ -20,8 +20,10 @@ class CodebaseAnalyzer:
     def __init__(self, supabase: Client):
         self.supabase = supabase
 
-    async def process_push_event(self, payload: Dict[str, Any], record_id: str, company_id: str = "default") -> bool:
+    async def process_push_event(self, payload: Dict[str, Any], record_id: str, company_id: str) -> bool:
         """Process incremental push event."""
+        if not company_id or company_id.strip() == "default":
+            raise ValueError("company_id must resolve to a real company")
         logger.info(f"Incremental push processing | record={record_id}")
 
         try:
@@ -52,7 +54,7 @@ class CodebaseAnalyzer:
         repo_name: str,
         record_id: str,
         payload: Dict,
-        company_id: str = "default",
+        company_id: str,
     ):
         """Create FILE entity + repositories + codebase_files + PART_OF + OWNS edges."""
         file_name = file_path.split("/")[-1]

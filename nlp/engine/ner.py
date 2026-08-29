@@ -38,14 +38,19 @@ def extract_entities(
         ents = obj.get("entities", [])
     except Exception as e:
         logger.error("NER failed: %s", e)
-        return []
+        raise RuntimeError("NER processing failed") from e
 
     seen = set()
     results = []
 
     lower_text = text.lower()
 
+    if not isinstance(ents, list):
+        raise ValueError("NER response entities must be a list")
+
     for ent in ents:
+        if not isinstance(ent, dict):
+            raise ValueError("NER response contains an invalid entity")
         try:
             entity_text = ent.get("text", "").strip().lower()
             entity_type = ent.get("type", "").strip().upper()
@@ -79,8 +84,8 @@ def extract_entities(
                 )
             )
 
-        except Exception:
-            continue
+        except Exception as e:
+            raise ValueError("NER response contains an invalid entity") from e
 
     logger.info("NER → %d entities", len(results))
     return results
