@@ -1,22 +1,21 @@
 # worker/ingestion.py
 """
 Handles slack_jobs/github_jobs → NER → RE → Supabase + Codebase Analysis.
-- For GitHub push events, it also triggers the CodebaseAnalyzer to extract file-level entities and relationships.
-- Uses a mix of sync and async processing to balance simplicity and performance.
+For GitHub push events, publishes a durable codebase analysis job to Redis stream.
+This ensures codebase analysis failures are observable and retryable (no detached threads).
 """
 
 import time
 import logging
+import json
 from datetime import datetime, timezone
-import asyncio
-import threading
 
 from utils.common import log_error
 from utils.supabase import init_supabase
+from utils import init_redis
 from engine.re import extract_relations
 from engine.ner import extract_entities
 from engine.schema import Entity, deterministic_edge_id
-from codebase.analyzer import CodebaseAnalyzer
 from utils.db_helpers import (
     insert_entities,
     insert_relations,
@@ -26,11 +25,11 @@ from utils.db_helpers import (
 
 logger = logging.getLogger("ingestion")
 supabase = init_supabase()
+redis_client = init_redis()
 
 
 class IngestionHandler:
-    def __init__(self):
-        self.codebase_analyzer = CodebaseAnalyzer(supabase)
+    """Handles event ingestion with NER/RE. Delegates codebase analysis to separate stream."""
 
     def process(self, job: dict, stream: str, msg_id: str, redis_client):
         start = time.time()
@@ -48,7 +47,6 @@ class IngestionHandler:
         record_id = job.get("record_id")
         source = job.get("source", "")
         event_type = job.get("event_type", "")
-        event_id = job.get("event_id")
         content = job.get("content", "")
         payload = job.get("payload", {})
         company_id = (job.get("company_id") or "").strip()
@@ -70,11 +68,15 @@ class IngestionHandler:
                 "record_id": record_id,
                 "source": source,
                 "content": content,
-                "event_id": event_id,
                 "company_id": company_id,
                 "created_at": created_at,
             })
             mark_event_processed(supabase, record_id)
+            
+            # Still trigger codebase analysis for push events (no entities required)
+            if source == "github" and event_type == "push":
+                self._publish_codebase_analysis_job(job)
+            
             return
 
         # 2. Insert NER Entities
@@ -128,31 +130,42 @@ class IngestionHandler:
             "record_id": record_id,
             "source": source,
             "content": content,
-            "event_id": event_id,
             "company_id": company_id,
             "created_at": created_at,
         })
 
         mark_event_processed(supabase, record_id)
 
-        # 5. Codebase Analysis (ONLY FILE SOURCE OF TRUTH)
+        # 5. DURABLE Codebase Analysis (published to Redis stream, not daemon thread)
         if source == "github" and event_type == "push":
-            logging.info("Starting codebase analysis for GitHub push")
+            logging.info("Publishing codebase analysis job for GitHub push")
+            self._publish_codebase_analysis_job(job)
 
-            def run_async():
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    loop.run_until_complete(
-                        self.codebase_analyzer.process_push_event(
-                            payload,
-                            record_id,
-                            company_id=company_id,
-                        )
-                    )
-                except Exception as e:
-                    logger.error(f"Codebase analysis failed: {e}")
-                finally:
-                    loop.close()
+    def _publish_codebase_analysis_job(self, job: dict):
+        """
+        Publish a codebase analysis job to the Redis stream.
+        This replaces the previous detached daemon thread approach.
+        Ensures the job is durable and failures are observable/retryable.
+        """
+        try:
+            # Prepare the job payload for codebase analysis stream
+            analysis_job = {
+                "RecordID": job.get("record_id"),
+                "Source": "github",
+                "EventType": job.get("event_type"),
+                "Payload": job.get("payload", {}),
+                "CompanyID": job.get("company_id"),
+                "CreatedAt": job.get("created_at") or datetime.now(timezone.utc).isoformat(),
+            }
+            
+            # Publish to the durable codebase analysis stream
+            redis_client.xadd(
+                "codebase_analysis_jobs",
+                {"data": json.dumps(analysis_job)},
+            )
+            
+            logging.info(f"Codebase analysis job published | record_id={job.get('record_id')}")
+        except Exception as e:
+            log_error(f"Failed to publish codebase analysis job: {e}")
+            raise
 
-            threading.Thread(target=run_async, daemon=True).start()
