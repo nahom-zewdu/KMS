@@ -117,14 +117,11 @@ class RedisStreamConsumer:
                 continue
 
             try:
-                _, entries = self.redis.xautoclaim(
-                    stream,
-                    self.group,
-                    self.consumer_name,
-                    min_idle_time=self.pending_idle_timeout_ms,
-                    start_id="0-0",
-                    count=10,
-                )
+                _, entries, _ = self.redis.xautoclaim(
+                stream, self.group, self.consumer_name,
+                min_idle_time=self.pending_idle_timeout_ms,
+                start_id="0-0", count=10,
+            )
             except (ConnectionError, TimeoutError, ResponseError) as e:
                 logger.error("Failed to reclaim pending messages from %s: %s", stream, e)
                 raise RuntimeError(f"pending-message recovery failed for {stream}") from e
