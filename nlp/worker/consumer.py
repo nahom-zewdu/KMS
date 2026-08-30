@@ -73,12 +73,31 @@ class RedisStreamConsumer:
                 if not messages:
                     continue
 
-                for stream, entries in messages:
+                for item in messages:
+                    # Handle both list and tuple formats from redis-py
+                    if isinstance(item, (list, tuple)) and len(item) == 2:
+                        stream_bytes, entries = item
+                    else:
+                        logging.warning(f"Unexpected message format: {item}")
+                        continue
+                    
+                    # Convert stream name from bytes to string if needed
+                    stream = stream_bytes.decode() if isinstance(stream_bytes, bytes) else stream_bytes
+                    
                     handler = self.handlers.get(stream)
                     if not handler:
                         continue
 
-                    for msg_id, data in entries:
+                    for entry in entries:
+                        # Handle msg_id and data unpacking
+                        if isinstance(entry, (list, tuple)) and len(entry) == 2:
+                            msg_id_bytes, data = entry
+                        else:
+                            logging.warning(f"Unexpected entry format: {entry}")
+                            continue
+                        
+                        # Convert msg_id from bytes to string if needed
+                        msg_id = msg_id_bytes.decode() if isinstance(msg_id_bytes, bytes) else msg_id_bytes
                         if not self.running:
                             break
 
@@ -133,10 +152,15 @@ class RedisStreamConsumer:
 
 
     def _process_message(self, stream: str, msg_id: str, data: dict, handler):
-        raw = data.get("data")
+        # Handle both bytes and string keys from Redis
+        raw = data.get("data") or data.get(b"data")
         if not raw:
             self._ack(stream, msg_id)
             return
+        
+        # Decode if bytes
+        if isinstance(raw, bytes):
+            raw = raw.decode()
 
         try:
             payload = json.loads(raw)
