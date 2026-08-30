@@ -26,7 +26,7 @@ def llm_infer(
     prompt: str,
     temperature: float = 0.0,
     max_tokens: int = 512,
-    model: str = "llama-3.1-8b-instant"  # Best Groq model as of Nov 2025
+    model: str = "llama-3.1-8b-lexica"  # Best Groq model as of Nov 2025
 ) -> str:
     """
     Always returns valid JSON string when response_format is used.
