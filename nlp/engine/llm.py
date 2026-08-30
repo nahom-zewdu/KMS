@@ -33,7 +33,7 @@ def llm_infer(
     prompt: str,
     temperature: float = 0.0,
     max_tokens: int = 512,
-    model: str = "llama-3.1-8b-instant"
+    model: str = "openai/gpt-oss-20b"  # Best Groq model as of Nov 2025
 ) -> str:
     """Run an LLM request and return its JSON response as a string.
 
