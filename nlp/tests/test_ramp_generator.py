@@ -89,4 +89,24 @@ class TestRampGeneratorQuality:
         assert "ops/unknown" in step["understand"] or "ops/unknown" in step["summary"]["what"]
         assert any(ev.get("kind") == "inference" for ev in step["evidence"])
 
-    
+    def test_human_readable_evidence_mapping(self):
+        steps = self._build_steps(
+            modules=[
+                {
+                    "name": "handlers",
+                    "path": "api/handlers",
+                    "description": "HTTP request handling for the backend API.",
+                    "importance": 0.8,
+                    "file_count": 2,
+                }
+            ],
+            key_files=[{"path": "api/handlers/routes.py", "module": "api/handlers"}],
+            owner_index={"api/handlers": ["alice"]},
+        )
+
+        step = steps[0]
+        evidence = step["evidence"]
+        assert evidence
+        assert all("kind" in ev for ev in evidence)
+        assert any(ev.get("kind") == "observed" for ev in evidence)
+        assert any(ev.get("source") for ev in evidence)
