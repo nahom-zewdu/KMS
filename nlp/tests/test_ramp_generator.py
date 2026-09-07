@@ -67,3 +67,26 @@ class TestRampGeneratorQuality:
         assert "HTTP" in step["understand"] or "request" in step["understand"].lower()
         assert step["summary"]["what"]
         assert step["summary"]["where"]
+
+    def test_weak_evidence_does_not_fabricate_claims(self):
+        steps = self._build_steps(
+            modules=[
+                {
+                    "name": "mystery",
+                    "path": "ops/unknown",
+                    "description": "",
+                    "importance": 0.2,
+                    "file_count": 0,
+                }
+            ],
+            key_files=[],
+            owner_index={},
+        )
+
+        step = steps[0]
+        why = step["why"].lower()
+        assert "uncertain" in why or "limited" in why or "not enough" in why
+        assert "ops/unknown" in step["understand"] or "ops/unknown" in step["summary"]["what"]
+        assert any(ev.get("kind") == "inference" for ev in step["evidence"])
+
+    
