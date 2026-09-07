@@ -310,12 +310,16 @@ class RampPlanGenerator:
             file_paths = [f.get("path") for f in related if f.get("path")]
             summary = self._module_summary(path, mod, related)
             understand = self._understand_text(role, path, mod, related, owners, layer_hint)
+            do_text = self._do_text(role, path, mod, related, owners, risk)
+            done_text = self._done_when_text(role, path, mod, related, owners)
             return {
                 "id": step_id,
                 "order": order,
                 "title": self._step_title(slot_name, path, mod, role),
                 "why": self._template_why(role, path, mod, risk, owners, layer_hint, related),
                 "understand": understand,
+                "do": do_text,
+                "done_when": done_text,
                 "risk_tier": risk,
                 "owners": owners,
                 "target": {
@@ -622,7 +626,7 @@ class RampPlanGenerator:
         if not (desc or related or owners):
             return (
                 "This area is worth checking because KMS has indexed the module path, but the evidence is limited. "
-                "The current signal is a low-confidence starting point rather than a confirmed architectural fact."
+                "The current signal is a low-confidence starting point rather than a strong architectural claim."
             )
         return " ".join(bits)
 
