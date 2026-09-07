@@ -247,6 +247,156 @@ class RampPlanGenerator:
 
         return idx
 
+    def _resolve_target_reference(
+        self,
+        company_id: str,
+        module_path: str,
+        related_files: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Resolve the canonical repository + file references for a module target."""
+        company_id = (company_id or "").strip()
+        module_path = (module_path or "").strip()
+        repo_rows: List[Dict[str, Any]] = []
+        file_rows: List[Dict[str, Any]] = []
+
+        def load_rows(table_name: str, columns: str, limit_count: int) -> List[Dict[str, Any]]:
+            try:
+                query = self.supabase.table(table_name).select(columns)
+                if company_id:
+                    query = query.eq("company_id", company_id)
+                try:
+                    query = query.limit(limit_count)
+                except Exception:
+                    pass
+                response = query.execute()
+                payload = getattr(response, "data", None)
+                return payload if isinstance(payload, list) else []
+            except Exception:
+                return []
+
+        repo_rows = load_rows("repositories", "id, full_name, company_id, default_branch", 50)
+        file_rows = load_rows("codebase_files", "repository_id, file_path, file_name, module_path, company_id", 200)
+
+        def valid_repo_row(row: Dict[str, Any]) -> bool:
+            if not isinstance(row, dict):
+                return False
+            full_name = str(row.get("full_name") or "").strip()
+            if not full_name:
+                return False
+            row_company_id = str(row.get("company_id") or "").strip()
+            if company_id and row_company_id and row_company_id != company_id:
+                return False
+            return True
+
+        def valid_file_row(row: Dict[str, Any]) -> bool:
+            if not isinstance(row, dict):
+                return False
+            fp = row.get("file_path")
+            if not isinstance(fp, str):
+                return False
+            fp = fp.strip()
+            return bool(fp)
+
+        repo_by_id = {str(r.get("id")): r for r in repo_rows if valid_repo_row(r) and str(r.get("id") or "").strip()}
+
+        matched_files: List[Dict[str, Any]] = []
+        for row in file_rows:
+            if not valid_file_row(row):
+                continue
+            if company_id and str(row.get("company_id") or "").strip() and str(row.get("company_id") or "").strip() != company_id:
+                continue
+            fp = str(row.get("file_path") or "").strip()
+            mod = str(row.get("module_path") or "").strip()
+            if module_path:
+                if mod and (mod == module_path or mod.startswith(module_path + "/")):
+                    matched_files.append(row)
+                elif fp == module_path or fp.startswith(module_path + "/"):
+                    matched_files.append(row)
+            elif fp:
+                matched_files.append(row)
+
+        if not matched_files and isinstance(related_files, list):
+            for item in related_files:
+                if not isinstance(item, dict):
+                    continue
+                fp = item.get("path") or item.get("file_path")
+                if not isinstance(fp, str):
+                    continue
+                fp = fp.strip()
+                if not fp:
+                    continue
+                matched_files.append({"file_path": fp, "module_path": module_path})
+
+        repo_ref: Optional[Dict[str, Any]] = None
+        chosen_repo_id: Optional[str] = None
+        if matched_files:
+            for row in matched_files:
+                repo_id = row.get("repository_id")
+                if repo_id:
+                    chosen_repo_id = str(repo_id)
+                    break
+
+        if chosen_repo_id and chosen_repo_id in repo_by_id:
+            repo_ref = repo_by_id[chosen_repo_id]
+        elif repo_rows:
+            for row in repo_rows:
+                if valid_repo_row(row):
+                    repo_ref = row
+                    break
+
+        full_name = str(repo_ref.get("full_name") or "").strip() if isinstance(repo_ref, dict) else ""
+        default_branch = str(repo_ref.get("default_branch") or "main").strip() or "main" if isinstance(repo_ref, dict) else "main"
+        repo_url = f"https://github.com/{full_name}" if full_name else None
+        module_url = None
+        if repo_url:
+            if module_path:
+                module_url = f"{repo_url}/tree/{default_branch}/{module_path.lstrip('/')}"
+            else:
+                module_url = repo_url
+
+        repo_info: Optional[Dict[str, Any]] = None
+        if repo_ref and valid_repo_row(repo_ref) and full_name:
+            repo_info = {
+                "id": repo_ref.get("id"),
+                "full_name": full_name,
+                "company_id": repo_ref.get("company_id") or company_id,
+                "default_branch": default_branch,
+                "github_url": module_url,
+                "repository_url": repo_url,
+            }
+
+        resource_files: List[Dict[str, Any]] = []
+        for row in matched_files[:3]:
+            fp = str(row.get("file_path") or "").strip()
+            if not fp:
+                continue
+            file_name = str(row.get("file_name") or fp.rsplit("/", 1)[-1]).strip()
+            file_url = None
+            if repo_url:
+                file_url = f"{repo_url}/blob/{default_branch}/{fp.lstrip('/')}"
+            resource_files.append({
+                "path": fp,
+                "file_name": file_name,
+                "module_path": str(row.get("module_path") or module_path or "").strip(),
+                "repository_id": row.get("repository_id"),
+                "github_url": file_url,
+            })
+
+        if not resource_files and module_path and repo_info is not None:
+            resource_files.append({
+                "path": module_path,
+                "file_name": module_path.rsplit("/", 1)[-1] or module_path,
+                "module_path": module_path,
+                "repository_id": repo_ref.get("id") if isinstance(repo_ref, dict) else None,
+                "github_url": module_url,
+            })
+
+        return {
+            "repo": repo_info,
+            "files": resource_files,
+            "github_url": module_url,
+        }
+
     def _build_steps(
         self,
         role: str,
