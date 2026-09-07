@@ -528,15 +528,56 @@ class RampPlanGenerator:
             }
         ]
         for f in files[:3]:
-            if f.get("path"):
-                evidence.append(
+            fp = (f.get("path") or "").strip()
+            if fp:
+                observed.append(
                     {
-                        "source": "codebase_file",
-                        "file_path": f["path"],
-                        "record_id": "",
+                        "kind": "observed",
+                        "source": "file",
+                        "label": "Related file",
+                        "detail": f"Repository evidence includes {fp}.",
+                        "file_path": fp,
                     }
                 )
-        return evidence
+        if owners:
+            observed.append(
+                {
+                    "kind": "observed",
+                    "source": "owner",
+                    "label": "Ownership signal",
+                    "detail": f"Current codebase signals mention {', '.join(owners)}.",
+                    "owners": ", ".join(owners),
+                }
+            )
+
+        if path and (layer_hint or risk):
+            explanation = ["The evidence suggests this module is relevant based on the repo structure."]
+            if layer_hint:
+                explanation.append(f"Architecture context places it in the {layer_hint} layer.")
+            if risk == "high-risk":
+                explanation.append("The path is marked higher-risk, which is why it is a useful early read.")
+            elif risk == "safe":
+                explanation.append("The path is lower-risk, which makes it a good learning entry point.")
+            observed.append(
+                {
+                    "kind": "inference",
+                    "source": "generated_explanation",
+                    "label": "Why this step matters",
+                    "detail": " ".join(explanation),
+                    "verified": False,
+                }
+            )
+        elif not observed:
+            observed.append(
+                {
+                    "kind": "inference",
+                    "source": "generated_explanation",
+                    "label": "Limited evidence",
+                    "detail": "KMS has very little evidence for this area; treat the recommendation as a low-confidence starting point.",
+                    "verified": False,
+                }
+            )
+        return observed
 
     def _polish_why(
         self, steps: List[Dict], role: str, company_id: str
