@@ -308,6 +308,13 @@ class RampPlanGenerator:
                 )
             )
             file_paths = [f.get("path") for f in related if f.get("path")]
+            resolved = self._resolve_target_reference(company_id, path, related)
+            if resolved.get("files"):
+                target_files = resolved.get("files")
+            elif resolved.get("repo"):
+                target_files = [{"path": path, "github_url": resolved.get("github_url")}]
+            else:
+                target_files = []
             summary = self._module_summary(path, mod, related)
             understand = self._understand_text(role, path, mod, related, owners, layer_hint)
             do_text = self._do_text(role, path, mod, related, owners, risk)
