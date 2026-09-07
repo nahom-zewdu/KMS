@@ -459,7 +459,14 @@ class RampPlanGenerator:
         else:
             parts.append(f"`{path}` is a core surface for a {role} on this codebase.")
         if layer_hint:
-            parts.append(f"Architecture signal: {layer_hint}.")
+            pieces.append(f"The current architecture signal places it in the {layer_hint} layer.")
+        if owners:
+            pieces.append(f"Current owner signals point to {', '.join(owners)}.")
+        else:
+            pieces.append("There is no strong ownership signal for this path yet, so treat the evidence as a starting point rather than a confirmed ownership map.")
+        return " ".join(pieces)
+
+    def _module_summary(self, path: str, mod: Dict, related: List[Dict]) -> Dict[str, Optional[str]]:
         desc = (mod.get("description") or "").strip()
         if desc and "Module containing" not in desc:
             what = desc
