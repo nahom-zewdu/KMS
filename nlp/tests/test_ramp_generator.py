@@ -183,3 +183,153 @@ class TestRampGeneratorQuality:
         )
         assert steps[0]["id"] == expected_first
         assert [step["order"] for step in steps] == [1, 2]
+
+    def test_valid_repository_file_resolution(self):
+        class Query:
+            def __init__(self, data):
+                self.data = data
+
+            def select(self, *_args, **_kwargs):
+                return self
+
+            def eq(self, *_args, **_kwargs):
+                return self
+
+            def in_(self, *_args, **_kwargs):
+                return self
+
+            def execute(self):
+                return type("Resp", (), {"data": self.data})()
+
+        repo_rows = [{"id": "repo-1", "full_name": "acme/backend", "default_branch": "main"}]
+        file_rows = [{"repository_id": "repo-1", "file_path": "api/handlers/routes.py", "module_path": "api/handlers"}]
+
+        self.generator.supabase = Mock()
+        self.generator.supabase.table.side_effect = lambda name: {
+            "codebase_files": Query(file_rows),
+            "repositories": Query(repo_rows),
+        }[name]
+
+        result = self.generator._resolve_target_reference("company-123", "api/handlers", [{"path": "api/handlers/routes.py"}])
+
+        assert result["repo"]["full_name"] == "acme/backend"
+        assert result["repo"]["github_url"] == "https://github.com/acme/backend/tree/main/api/handlers"
+        assert result["files"][0]["path"] == "api/handlers/routes.py"
+        assert result["files"][0]["github_url"] == "https://github.com/acme/backend/blob/main/api/handlers/routes.py"
+
+    def test_missing_repository_is_handled_gracefully(self):
+        class Query:
+            def __init__(self, data):
+                self.data = data
+
+            def select(self, *_args, **_kwargs):
+                return self
+
+            def eq(self, *_args, **_kwargs):
+                return self
+
+            def in_(self, *_args, **_kwargs):
+                return self
+
+            def execute(self):
+                return type("Resp", (), {"data": self.data})()
+
+        self.generator.supabase = Mock()
+        self.generator.supabase.table.side_effect = lambda name: {
+            "codebase_files": Query([]),
+            "repositories": Query([]),
+        }[name]
+
+        result = self.generator._resolve_target_reference("company-123", "api/handlers", [])
+
+        assert result["repo"] is None
+        assert result["files"] == []
+        assert result["github_url"] is None
+
+    def test_missing_file_and_malformed_resource_data_are_ignored(self):
+        class Query:
+            def __init__(self, data):
+                self.data = data
+
+            def select(self, *_args, **_kwargs):
+                return self
+
+            def eq(self, *_args, **_kwargs):
+                return self
+
+            def in_(self, *_args, **_kwargs):
+                return self
+
+            def execute(self):
+                return type("Resp", (), {"data": self.data})()
+
+        self.generator.supabase = Mock()
+        self.generator.supabase.table.side_effect = lambda name: {
+            "codebase_files": Query([{"repository_id": "repo-1", "file_path": None, "module_path": None}]),
+            "repositories": Query([{"id": "repo-1", "full_name": "acme/backend", "default_branch": "main"}]),
+        }[name]
+
+        result = self.generator._resolve_target_reference("company-123", "", [{"path": 123, "module": 456}])
+        assert result["repo"]["full_name"] == "acme/backend"
+        assert result["files"] == []
+
+    def test_company_scoped_resolution_ignores_other_company_records(self):
+        class Query:
+            def __init__(self, data):
+                self.data = data
+
+            def select(self, *_args, **_kwargs):
+                return self
+
+            def eq(self, *_args, **_kwargs):
+                return self
+
+            def in_(self, *_args, **_kwargs):
+                return self
+
+            def execute(self):
+                return type("Resp", (), {"data": self.data})()
+
+        self.generator.supabase = Mock()
+        self.generator.supabase.table.side_effect = lambda name: {
+            "codebase_files": Query([
+                {"repository_id": "repo-1", "company_id": "company-123", "file_path": "api/handlers/routes.py", "module_path": "api/handlers"},
+                {"repository_id": "repo-2", "company_id": "company-999", "file_path": "api/other.py", "module_path": "api/other"},
+            ]),
+            "repositories": Query([
+                {"id": "repo-1", "company_id": "company-123", "full_name": "acme/backend", "default_branch": "main"},
+                {"id": "repo-2", "company_id": "company-999", "full_name": "other/project", "default_branch": "main"},
+            ]),
+        }[name]
+
+        result = self.generator._resolve_target_reference("company-123", "api/handlers", [{"path": "api/handlers/routes.py"}])
+        assert result["repo"]["full_name"] == "acme/backend"
+        assert result["repo"]["company_id"] == "company-123"
+        assert "other/project" not in result["repo"]["github_url"]
+
+    def test_no_fabricated_links_for_malformed_repo_data(self):
+        class Query:
+            def __init__(self, data):
+                self.data = data
+
+            def select(self, *_args, **_kwargs):
+                return self
+
+            def eq(self, *_args, **_kwargs):
+                return self
+
+            def in_(self, *_args, **_kwargs):
+                return self
+
+            def execute(self):
+                return type("Resp", (), {"data": self.data})()
+
+        self.generator.supabase = Mock()
+        self.generator.supabase.table.side_effect = lambda name: {
+            "codebase_files": Query([{"repository_id": "repo-1", "file_path": "api/handlers/routes.py", "module_path": "api/handlers"}]),
+            "repositories": Query([{"id": "repo-1", "full_name": "", "default_branch": ""}]),
+        }[name]
+
+        result = self.generator._resolve_target_reference("company-123", "api/handlers", [{"path": "api/handlers/routes.py"}])
+        assert result["repo"] is None
+        assert result["files"][0]["github_url"] is None
