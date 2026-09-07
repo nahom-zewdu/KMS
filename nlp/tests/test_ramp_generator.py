@@ -110,3 +110,25 @@ class TestRampGeneratorQuality:
         assert all("kind" in ev for ev in evidence)
         assert any(ev.get("kind") == "observed" for ev in evidence)
         assert any(ev.get("source") for ev in evidence)
+
+    def test_step_ids_remain_stable(self):
+        steps = self._build_steps(
+            modules=[
+                {"name": "handlers", "path": "api/handlers", "description": "HTTP request handling for the backend API.", "importance": 0.9, "file_count": 2},
+                {"name": "repository", "path": "api/repository", "description": "Repo storage wrappers.", "importance": 0.8, "file_count": 2},
+            ],
+            key_files=[
+                {"path": "api/handlers/routes.py", "module": "api/handlers"},
+                {"path": "api/repository/supabase.py", "module": "api/repository"},
+            ],
+            owner_index={"api/handlers": ["alice"], "api/repository": ["bob"]},
+        )
+
+        expected_first = str(
+            uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                "ramp-step:company-123:backend:api/handlers:1",
+            )
+        )
+        assert steps[0]["id"] == expected_first
+        assert [step["order"] for step in steps] == [1, 2]
