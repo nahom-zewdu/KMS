@@ -329,7 +329,10 @@ class RampPlanGenerator:
                     "files": file_paths,
                 },
                 "summary": summary,
-                "resources": [],
+                "resources": [
+                    {"type": "repository", **(resolved.get("repo") or {})},
+                    *target_files,
+                ],
                 "checklist": [
                     {
                         "id": "orient",
