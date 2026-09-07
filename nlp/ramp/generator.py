@@ -482,8 +482,8 @@ class RampPlanGenerator:
                 "target": {
                     "type": "module",
                     "path": path,
-                    "repo": None,  # filled when single-repo companies are wired
-                    "files": file_paths,
+                    "repo": resolved.get("repo"),
+                    "files": target_files,
                 },
                 "summary": summary,
                 "resources": [
