@@ -464,10 +464,26 @@ class RampPlanGenerator:
         if desc and "Module containing" not in desc:
             parts.append(desc)
         if owners:
-            parts.append("Start with: " + ", ".join(owners) + ".")
-        else:
-            parts.append("No commit ownership indexed yet for this path.")
-        return " ".join(parts)
+            bits.append(f"Current ownership signals point to {', '.join(owners)}.")
+        elif path:
+            bits.append("There is not enough ownership evidence for this path to treat a person as confirmed.")
+        if risk == "high-risk":
+            bits.append(f"This is a higher-risk path for a {role}, so it is worth learning before changing anything here.")
+        elif risk == "safe":
+            bits.append(f"This is a lower-risk entry point for understanding the repo structure for a {role}.")
+        elif layer_hint:
+            bits.append(f"The repository currently signals it as part of the {layer_hint} layer.")
+        if not bits:
+            return (
+                "This area is worth starting with because the repo has only sparse evidence for it right now; "
+                "treat this as a low-confidence starting point until nearby files clarify the module."
+            )
+        if not (desc or related or owners):
+            return (
+                "This area is worth checking because KMS has indexed the module path, but the evidence is limited. "
+                "The current signal is a low-confidence starting point rather than a confirmed architectural fact."
+            )
+        return " ".join(bits)
 
     def _risk_tier(self, path: str, safe_paths: set, risk_paths: set) -> str:
         if path in risk_paths:
