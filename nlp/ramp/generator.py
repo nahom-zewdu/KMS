@@ -462,7 +462,41 @@ class RampPlanGenerator:
             parts.append(f"Architecture signal: {layer_hint}.")
         desc = (mod.get("description") or "").strip()
         if desc and "Module containing" not in desc:
-            parts.append(desc)
+            what = desc
+        elif path:
+            what = f"KMS has indexed module {path} in the repo, but the module description is sparse."
+        else:
+            what = None
+        files = [f.get("path") for f in related[:3] if f.get("path")]
+        where = path if path else (", ".join(files) if files else None)
+        if files:
+            how = f"Look at the nearby files {', '.join(files)} to confirm how this module connects to adjacent code."
+        elif path:
+            how = f"Trace the module boundary in {path} and the files that import or call it."
+        else:
+            how = "Inspect the relevant repository area and confirm the neighbor modules before making assumptions."
+        return {"what": what, "how": how, "where": where}
+
+    def _template_why(
+        self,
+        role: str,
+        path: str,
+        mod: Dict,
+        risk: str,
+        owners: List[str],
+        layer_hint: str,
+        related: List[Dict],
+    ) -> str:
+        desc = (mod.get("description") or "").strip()
+        bits = []
+        if path:
+            bits.append(f"KMS currently indexes `{path}` as part of this repo's codebase evidence.")
+        if desc and "Module containing" not in desc:
+            bits.append(f"The indexed module description says: {desc}.")
+        if related:
+            sample = ", ".join(f.get("path") for f in related[:2] if f.get("path"))
+            if sample:
+                bits.append(f"Related files such as {sample} are also present in the current indexing.")
         if owners:
             bits.append(f"Current ownership signals point to {', '.join(owners)}.")
         elif path:
