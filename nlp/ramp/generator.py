@@ -308,11 +308,14 @@ class RampPlanGenerator:
                 )
             )
             file_paths = [f.get("path") for f in related if f.get("path")]
+            summary = self._module_summary(path, mod, related)
+            understand = self._understand_text(role, path, mod, related, owners, layer_hint)
             return {
                 "id": step_id,
                 "order": order,
                 "title": self._step_title(slot_name, path, mod, role),
-                "why": self._template_why(role, path, mod, risk, owners, layer_hint),
+                "why": self._template_why(role, path, mod, risk, owners, layer_hint, related),
+                "understand": understand,
                 "risk_tier": risk,
                 "owners": owners,
                 "target": {
@@ -321,7 +324,7 @@ class RampPlanGenerator:
                     "repo": None,  # filled when single-repo companies are wired
                     "files": file_paths,
                 },
-                "summary": {"what": None, "how": None, "where": None},
+                "summary": summary,
                 "resources": [],
                 "checklist": [
                     {
@@ -330,7 +333,7 @@ class RampPlanGenerator:
                         "done": False,
                     }
                 ],
-                "evidence": self._evidence_for(path, related),
+                "evidence": self._evidence_for(path, mod, related, owners, risk, layer_hint),
                 "machine": {
                     "path": path,
                     "suggested_owners": list(owners),
