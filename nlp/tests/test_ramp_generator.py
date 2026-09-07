@@ -111,6 +111,57 @@ class TestRampGeneratorQuality:
         assert any(ev.get("kind") == "observed" for ev in evidence)
         assert any(ev.get("source") for ev in evidence)
 
+    def test_step_has_concrete_do_and_done_when(self):
+        steps = self._build_steps(
+            modules=[
+                {
+                    "name": "handlers",
+                    "path": "api/handlers",
+                    "description": "HTTP request handling for the backend API.",
+                    "importance": 0.9,
+                    "file_count": 3,
+                }
+            ],
+            key_files=[
+                {"path": "api/handlers/routes.py", "module": "api/handlers"},
+                {"path": "api/handlers/tenant.py", "module": "api/handlers"},
+            ],
+            owner_index={"api/handlers": ["alice"]},
+        )
+
+        step = steps[0]
+        assert "do" in step
+        assert "done_when" in step
+        assert "api/handlers" in step["do"]
+        assert "inspect" in step["do"].lower() or "trace" in step["do"].lower()
+        assert "explain" in step["done_when"].lower() or "identify" in step["done_when"].lower()
+        assert "repository" in step["done_when"].lower() or "code" in step["done_when"].lower()
+
+
+    def test_role_relevance_and_weak_evidence_are_guarded(self):
+        steps = self._build_steps(
+            modules=[
+                {
+                    "name": "components",
+                    "path": "app/components",
+                    "description": "",
+                    "importance": 0.4,
+                    "file_count": 0,
+                }
+            ],
+            key_files=[],
+            owner_index={},
+            architecture=[{"name": "Frontend Layer", "description": "UI components"}],
+        )
+
+        step = steps[0]
+        do_text = step["do"].lower()
+        done_text = step["done_when"].lower()
+        assert "frontend" in do_text or "component" in do_text
+        assert "limited" in step["why"].lower() or "uncertain" in step["why"].lower() or "not enough" in step["why"].lower()
+        assert "confirmed" not in step["why"].lower() or "not enough" in step["why"].lower()
+        assert "can explain" in done_text or "identify" in done_text
+
     def test_step_ids_remain_stable(self):
         steps = self._build_steps(
             modules=[
