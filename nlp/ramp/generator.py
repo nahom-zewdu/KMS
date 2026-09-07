@@ -519,14 +519,37 @@ class RampPlanGenerator:
                             found.append(p)
         return found[:5]
 
-    def _evidence_for(self, path: str, files: List[Dict]) -> List[Dict[str, str]]:
-        evidence = [
-            {
-                "source": "codebase_module",
-                "module_path": path,
-                "record_id": "",
-            }
-        ]
+    def _evidence_for(
+        self,
+        path: str,
+        mod: Dict,
+        files: List[Dict],
+        owners: List[str],
+        risk: str,
+        layer_hint: str,
+    ) -> List[Dict[str, str]]:
+        observed: List[Dict[str, str]] = []
+        if path:
+            observed.append(
+                {
+                    "kind": "observed",
+                    "source": "module",
+                    "label": "Indexed module",
+                    "detail": f"KMS indexed the repository module at {path}.",
+                    "module_path": path,
+                }
+            )
+        desc = (mod.get("description") or "").strip()
+        if desc and "Module containing" not in desc:
+            observed.append(
+                {
+                    "kind": "observed",
+                    "source": "module",
+                    "label": "Module description",
+                    "detail": f"Current module description: {desc}",
+                    "module_path": path,
+                }
+            )
         for f in files[:3]:
             fp = (f.get("path") or "").strip()
             if fp:
