@@ -450,14 +450,25 @@ class RampPlanGenerator:
             return f"Read carefully: `{name}`"
         return f"Learn `{name}` ({role})"
 
-    def _template_why(self, role: str, path: str, mod: Dict, risk: str, owners: List[str], layer_hint: str,) -> str:
-        parts = []
-        if risk == "safe":
-            parts.append(f"`{path}` is a lower-risk place to learn how this repo is laid out.")
-        elif risk == "high-risk":
-            parts.append(f"`{path}` has high blast radius for a {role} — read before you change it.")
-        else:
-            parts.append(f"`{path}` is a core surface for a {role} on this codebase.")
+    def _understand_text(
+        self,
+        role: str,
+        path: str,
+        mod: Dict,
+        related: List[Dict],
+        owners: List[str],
+        layer_hint: str,
+    ) -> str:
+        pieces = [f"Understand how {path} fits into this codebase for a {role} role."]
+        desc = (mod.get("description") or "").strip()
+        if desc and "Module containing" not in desc:
+            pieces.append(f"KMS currently indexes it as: {desc}")
+        elif path:
+            pieces.append("KMS has a module path for this area, but not much descriptive text yet.")
+        if related:
+            files = [f.get("path") for f in related[:3] if f.get("path")]
+            if files:
+                pieces.append(f"Use the nearby files {', '.join(files)} to confirm the module boundary and responsibilities.")
         if layer_hint:
             pieces.append(f"The current architecture signal places it in the {layer_hint} layer.")
         if owners:
