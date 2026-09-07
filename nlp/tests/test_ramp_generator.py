@@ -45,4 +45,25 @@ class TestRampGeneratorQuality:
         assert "owner" in why.lower() or "evidence" in why.lower()
         assert any(ev.get("kind") == "observed" for ev in step["evidence"])
 
-    
+    def test_context_generation_is_specific_and_understandable(self):
+        steps = self._build_steps(
+            modules=[
+                {
+                    "name": "handlers",
+                    "path": "api/handlers",
+                    "description": "HTTP request handling for the backend API.",
+                    "importance": 0.9,
+                    "file_count": 3,
+                }
+            ],
+            key_files=[{"path": "api/handlers/tenant.py", "module": "api/handlers"}],
+            owner_index={"api/handlers": ["alice"]},
+            architecture=[{"name": "API Layer", "description": "API services"}],
+        )
+
+        step = steps[0]
+        assert "understand" in step
+        assert "api/handlers" in step["understand"]
+        assert "HTTP" in step["understand"] or "request" in step["understand"].lower()
+        assert step["summary"]["what"]
+        assert step["summary"]["where"]
