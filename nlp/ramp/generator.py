@@ -498,6 +498,92 @@ class RampPlanGenerator:
             how = "Inspect the relevant repository area and confirm the neighbor modules before making assumptions."
         return {"what": what, "how": how, "where": where}
 
+    def _do_text(
+        self,
+        role: str,
+        path: str,
+        mod: Dict,
+        related: List[Dict],
+        owners: List[str],
+        risk: str,
+    ) -> str:
+        files = [f.get("path") for f in related[:3] if f.get("path")]
+        if path and path.startswith("app/"):
+            if files:
+                return (
+                    f"Inspect {path} together with {', '.join(files)} to identify what this component renders or wires up, "
+                    "then explain how that component connects to the surrounding UI flow."
+                )
+            return (
+                f"Inspect {path} to identify what this component renders or wires up, then note the closest neighboring UI modules "
+                "and the data they pass across."
+            )
+
+        if files:
+            if any(token in (path or "").lower() for token in ("api", "handler", "repository", "service", "worker", "ingest")) or "backend" in role:
+                return (
+                    f"Inspect {path} and the nearby files {', '.join(files)} to identify the module's responsibility, trace the request/data path, "
+                    "and explain how the module relates to its adjacent backend code."
+                )
+            return (
+                f"Inspect {path} and the nearby files {', '.join(files)} to identify the module's responsibility, locate the relevant implementation, "
+                "and explain how it connects to the surrounding repository flow."
+            )
+
+        if owners:
+            return (
+                f"Inspect {path} and verify the current owner signal ({', '.join(owners)}) by locating the implementation and explaining how this "
+                "module connects to the code that uses it."
+            )
+
+        if risk == "high-risk":
+            return (
+                f"Inspect {path} and note the specific behaviors or files that make this a higher-risk area, then explain which neighboring modules "
+                "depend on it before making any assumptions."
+            )
+
+        return (
+            f"Inspect {path} and identify the implementation boundary in the repo, then explain what this module is responsible for and which "
+            "neighboring area most directly depends on it."
+        )
+
+    def _done_when_text(
+        self,
+        role: str,
+        path: str,
+        mod: Dict,
+        related: List[Dict],
+        owners: List[str],
+    ) -> str:
+        files = [f.get("path") for f in related[:2] if f.get("path")]
+        if "backend" in role or any(token in (path or "").lower() for token in ("api", "handler", "repository", "service", "worker", "ingest")):
+            statement = (
+                f"You can explain what {path} is responsible for, identify the request or data flow in the nearby repository code, "
+                "and state which adjacent backend module it calls or depends on."
+            )
+        elif path and path.startswith("app/"):
+            statement = (
+                f"You can explain what {path} is responsible for, identify the relevant UI component path in the repository, "
+                "and state how the component connects to the surrounding interface flow."
+            )
+        else:
+            statement = (
+                f"You can explain what {path} is responsible for, identify the relevant implementation in the repository, "
+                "and state how it relates to the neighboring code."
+            )
+
+        if files:
+            statement = statement + f" You have used {', '.join(files)} as the concrete evidence trail."
+        elif path:
+            statement = statement + f" You have used {path} as the concrete evidence trail."
+
+        if owners:
+            statement = statement + f" Current owner signals for this area are {', '.join(owners)}; if no confirmed owner is available, say so explicitly."
+        else:
+            statement = statement + " If the ownership signal is weak or absent, you say so explicitly instead of inferring a person or team."
+
+        return statement
+
     def _template_why(
         self,
         role: str,
