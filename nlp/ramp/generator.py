@@ -176,6 +176,34 @@ class RampPlanGenerator:
             logger.error("ramp get_active failed: %s", e)
             return None
 
+    def get_plan_by_id(self, plan_id: str, company_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Fetch a plan by id, optionally scoped to company."""
+        try:
+            query = self.supabase.table("ramp_plans").select("*").eq("id", plan_id)
+            if company_id:
+                query = query.eq("company_id", company_id)
+            res = query.limit(1).execute()
+            if not res.data:
+                return None
+            row = res.data[0]
+            if company_id and str(row.get("company_id") or "").strip() and str(row.get("company_id") or "").strip() != str(company_id).strip():
+                return None
+            return {
+                "id": row.get("id"),
+                "company_id": row.get("company_id"),
+                "role": row.get("role"),
+                "employee_name": row.get("employee_name"),
+                "title": row.get("title") or f"First 7 Days — {row.get('role')}",
+                "steps": row.get("steps") or [],
+                "meta": row.get("meta") or {},
+                "is_active": row.get("is_active", True),
+                "created_at": row.get("created_at"),
+                "updated_at": row.get("updated_at"),
+            }
+        except Exception as e:
+            logger.error("ramp get_plan_by_id failed: %s", e)
+            return None
+
     # -------------------------------------------------------------------------
     # Step assembly
     # -------------------------------------------------------------------------
