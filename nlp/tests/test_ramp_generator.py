@@ -448,6 +448,32 @@ class TestRampStepProgress:
         assert second["status"] == "in_progress"
         assert first["id"] == second["id"]
 
+    def test_get_active_hydrates_existing_progress_for_matching_step(self):
+        self.generator.supabase = Mock()
+        self.generator.supabase.table.return_value.select.return_value.eq.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = [{
+            "id": "plan-123",
+            "company_id": "company-123",
+            "role": "backend",
+            "employee_name": "Ada",
+            "title": "First 7 Days — backend",
+            "steps": [{"id": "step-1", "order": 1}, {"id": "step-2", "order": 2}],
+            "meta": {"source": "ramp_v1"},
+            "is_active": True,
+            "created_at": "2024-01-01T00:00:00Z",
+            "updated_at": "2024-01-01T00:00:00Z",
+        }]
+        self.generator.get_progress_for_plan = Mock(return_value={
+            "step-1": {"id": "progress-1", "plan_id": "plan-123", "company_id": "company-123", "step_id": "step-1", "user_id": "user-1", "status": "in_progress"},
+            "step-2": {"id": "progress-2", "plan_id": "plan-123", "company_id": "company-123", "step_id": "step-2", "user_id": "user-1", "status": "completed"},
+        })
+
+        plan = self.generator.get_active(company_id="company-123", role="backend", user_id="user-1")
+
+        assert plan["progress"]["step-1"]["status"] == "in_progress"
+        assert plan["steps"][0]["status"] == "in_progress"
+        assert plan["steps"][0]["progress"]["status"] == "in_progress"
+        assert plan["steps"][1]["status"] == "completed"
+
     def _memory_supabase(self):
         rows = {
             "ramp_plans": [{
