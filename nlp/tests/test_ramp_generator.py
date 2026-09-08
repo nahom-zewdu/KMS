@@ -499,6 +499,29 @@ class TestRampStepProgress:
         assert plan["steps"][2]["status"] == "not_started"
         assert plan["steps"][0]["progress"] is None
 
+    def test_get_active_without_user_id_preserves_existing_behavior(self):
+        self.generator.supabase = Mock()
+        self.generator.supabase.table.return_value.select.return_value.eq.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = [{
+            "id": "plan-123",
+            "company_id": "company-123",
+            "role": "backend",
+            "employee_name": "Ada",
+            "title": "First 7 Days — backend",
+            "steps": [{"id": "step-1", "order": 1}, {"id": "step-2", "order": 2}],
+            "meta": {"source": "ramp_v1"},
+            "is_active": True,
+            "created_at": "2024-01-01T00:00:00Z",
+            "updated_at": "2024-01-01T00:00:00Z",
+        }]
+        self.generator.get_progress_for_plan = Mock()
+
+        plan = self.generator.get_active(company_id="company-123", role="backend", user_id=None)
+
+        assert "progress" not in plan
+        assert "status" not in plan["steps"][0]
+        assert "progress" not in plan["steps"][0]
+        self.generator.get_progress_for_plan.assert_not_called()
+
     def _memory_supabase(self):
         rows = {
             "ramp_plans": [{
