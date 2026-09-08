@@ -474,6 +474,31 @@ class TestRampStepProgress:
         assert plan["steps"][0]["progress"]["status"] == "in_progress"
         assert plan["steps"][1]["status"] == "completed"
 
+    def test_get_active_defaults_missing_step_progress_to_not_started(self):
+        self.generator.supabase = Mock()
+        self.generator.supabase.table.return_value.select.return_value.eq.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = [{
+            "id": "plan-123",
+            "company_id": "company-123",
+            "role": "backend",
+            "employee_name": "Ada",
+            "title": "First 7 Days — backend",
+            "steps": [{"id": "step-1", "order": 1}, {"id": "step-2", "order": 2}, {"id": "step-3", "order": 3}],
+            "meta": {"source": "ramp_v1"},
+            "is_active": True,
+            "created_at": "2024-01-01T00:00:00Z",
+            "updated_at": "2024-01-01T00:00:00Z",
+        }]
+        self.generator.get_progress_for_plan = Mock(return_value={
+            "step-2": {"id": "progress-2", "plan_id": "plan-123", "company_id": "company-123", "step_id": "step-2", "user_id": "user-1", "status": "completed"},
+        })
+
+        plan = self.generator.get_active(company_id="company-123", role="backend", user_id="user-1")
+
+        assert plan["steps"][1]["status"] == "completed"
+        assert plan["steps"][0]["status"] == "not_started"
+        assert plan["steps"][2]["status"] == "not_started"
+        assert plan["steps"][0]["progress"] is None
+
     def _memory_supabase(self):
         rows = {
             "ramp_plans": [{
