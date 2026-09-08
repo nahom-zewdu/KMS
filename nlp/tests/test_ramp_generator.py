@@ -447,3 +447,49 @@ class TestRampStepProgress:
         assert first["status"] == "in_progress"
         assert second["status"] == "in_progress"
         assert first["id"] == second["id"]
+
+    def _memory_supabase(self):
+        rows = {
+            "ramp_plans": [{
+                "id": "plan-123",
+                "company_id": "company-123",
+                "role": "backend",
+                "steps": [
+                    {"id": "step-1", "order": 1},
+                    {"id": "step-2", "order": 2},
+                ],
+                "is_active": True,
+            }],
+            "ramp_step_progress": [],
+        }
+
+        class FakeSupabase:
+            def __init__(self, db):
+                self.db = db
+                self._table = None
+
+            def table(self, name):
+                self._table = name
+                return self
+
+            def select(self, *_args, **_kwargs):
+                return self
+
+            def eq(self, *_args, **_kwargs):
+                return self
+
+            def limit(self, *_args, **_kwargs):
+                return self
+
+            def upsert(self, record, on_conflict=None):
+                self.db["ramp_step_progress"].append(record)
+                return self
+
+            def execute(self):
+                if self._table == "ramp_plans":
+                    return type("Resp", (), {"data": self.db["ramp_plans"]})()
+                if self._table == "ramp_step_progress":
+                    return type("Resp", (), {"data": self.db["ramp_step_progress"]})()
+                return type("Resp", (), {"data": []})()
+
+        return FakeSupabase(rows)
