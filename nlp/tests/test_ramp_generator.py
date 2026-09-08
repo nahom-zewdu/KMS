@@ -333,3 +333,8 @@ class TestRampGeneratorQuality:
         result = self.generator._resolve_target_reference("company-123", "api/handlers", [{"path": "api/handlers/routes.py"}])
         assert result["repo"] is None
         assert result["files"][0]["github_url"] is None
+
+
+class TestRampStepProgress:
+    def setup_method(self):
+        self.generator = RampPlanGenerator(supabase=Mock())
