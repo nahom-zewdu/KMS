@@ -204,6 +204,37 @@ class RampPlanGenerator:
             logger.error("ramp get_plan_by_id failed: %s", e)
             return None
 
+    def get_progress_for_plan(self, plan_id: str, company_id: str, user_id: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
+        """Return per-step progress keyed by step id for a user in a company."""
+        if not plan_id or not company_id:
+            return {}
+        try:
+            query = self.supabase.table("ramp_step_progress").select("*").eq("plan_id", plan_id).eq("company_id", company_id)
+            if user_id:
+                query = query.eq("user_id", user_id)
+            res = query.execute()
+            rows = getattr(res, "data", []) or []
+        except Exception as e:
+            logger.warning("ramp progress fetch failed: %s", e)
+            return {}
+
+        progress = {}
+        for row in rows:
+            step_id = row.get("step_id")
+            if not step_id:
+                continue
+            progress[str(step_id)] = {
+                "id": row.get("id"),
+                "plan_id": row.get("plan_id"),
+                "company_id": row.get("company_id"),
+                "step_id": step_id,
+                "user_id": row.get("user_id"),
+                "status": row.get("status", "not_started"),
+                "created_at": row.get("created_at"),
+                "updated_at": row.get("updated_at"),
+            }
+        return progress
+
     # -------------------------------------------------------------------------
     # Step assembly
     # -------------------------------------------------------------------------
