@@ -427,3 +427,23 @@ class TestRampStepProgress:
             user_id="user-1",
         )
         assert progress["status"] == "completed"
+
+    def test_repeated_update_is_idempotent(self):
+        self.generator.supabase = self._memory_supabase()
+        first = self.generator.update_step_progress(
+            plan_id="plan-123",
+            step_id="step-1",
+            company_id="company-123",
+            user_id="user-1",
+            status="in_progress",
+        )
+        second = self.generator.update_step_progress(
+            plan_id="plan-123",
+            step_id="step-1",
+            company_id="company-123",
+            user_id="user-1",
+            status="in_progress",
+        )
+        assert first["status"] == "in_progress"
+        assert second["status"] == "in_progress"
+        assert first["id"] == second["id"]
