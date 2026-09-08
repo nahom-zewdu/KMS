@@ -382,3 +382,17 @@ class TestRampStepProgress:
             raise AssertionError("Expected ValueError for invalid status")
         except ValueError as exc:
             assert "status" in str(exc).lower()
+
+    def test_nonexistent_step_rejected(self):
+        self.generator.supabase = self._memory_supabase()
+        try:
+            self.generator.update_step_progress(
+                plan_id="plan-123",
+                step_id="step-nope",
+                company_id="company-123",
+                user_id="user-1",
+                status="completed",
+            )
+            raise AssertionError("Expected KeyError for missing step")
+        except KeyError:
+            pass
