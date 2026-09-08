@@ -350,3 +350,21 @@ class TestRampStepProgress:
         )
         assert result["status"] == "in_progress"
         assert result["step_id"] == "step-1"
+
+    def test_valid_transition_to_completed(self):
+        self.generator.supabase = self._memory_supabase()
+        self.generator.update_step_progress(
+            plan_id="plan-123",
+            step_id="step-1",
+            company_id="company-123",
+            user_id="user-1",
+            status="in_progress",
+        )
+        result = self.generator.update_step_progress(
+            plan_id="plan-123",
+            step_id="step-1",
+            company_id="company-123",
+            user_id="user-1",
+            status="completed",
+        )
+        assert result["status"] == "completed"
