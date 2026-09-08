@@ -79,3 +79,20 @@ using (
     where user_id = auth.uid()
   )
 );
+
+-- Ramp step progress policies
+create policy "Members can manage company ramp progress"
+on public.ramp_step_progress
+for all
+using (
+  company_id in (
+    select company_id from public.company_members
+    where user_id = auth.uid()
+  )
+)
+with check (
+  company_id in (
+    select company_id from public.company_members
+    where user_id = auth.uid()
+  )
+);
