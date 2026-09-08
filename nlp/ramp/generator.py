@@ -235,6 +235,45 @@ class RampPlanGenerator:
             }
         return progress
 
+    def get_step_progress(
+        self,
+        plan_id: str,
+        step_id: str,
+        company_id: str,
+        user_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Fetch a single user's step-progress record."""
+        if not plan_id or not step_id or not company_id or not user_id:
+            return None
+        try:
+            res = (
+                self.supabase.table("ramp_step_progress")
+                .select("*")
+                .eq("plan_id", plan_id)
+                .eq("step_id", step_id)
+                .eq("company_id", company_id)
+                .eq("user_id", user_id)
+                .limit(1)
+                .execute()
+            )
+            rows = getattr(res, "data", []) or []
+            if not rows:
+                return None
+            row = rows[0]
+            return {
+                "id": row.get("id"),
+                "plan_id": row.get("plan_id"),
+                "company_id": row.get("company_id"),
+                "step_id": row.get("step_id"),
+                "user_id": row.get("user_id"),
+                "status": row.get("status", "not_started"),
+                "created_at": row.get("created_at"),
+                "updated_at": row.get("updated_at"),
+            }
+        except Exception as e:
+            logger.warning("ramp get_step_progress failed: %s", e)
+            return None
+
     # -------------------------------------------------------------------------
     # Step assembly
     # -------------------------------------------------------------------------
