@@ -70,6 +70,42 @@ async def get_ramp(
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
 
+@app.patch("/ramp-plans/{plan_id}/steps/{step_id}/progress")
+async def update_step_progress(
+    plan_id: str,
+    step_id: str,
+    payload: dict,
+    company_id: str = Header(default="default", alias="X-Company-Id"),
+    user_id: str = Header(..., alias="X-User-Id"),
+):
+    """Update a single user's step progress for a company-scoped plan."""
+    if not user_id:
+        raise HTTPException(status_code=401, detail="X-User-Id header is required")
+
+    status = str((payload or {}).get("status") or "").strip().lower()
+    if not status:
+        raise HTTPException(status_code=400, detail="status is required")
+
+    try:
+        progress = ramp_generator.update_step_progress(
+            plan_id=plan_id,
+            step_id=step_id,
+            company_id=company_id,
+            user_id=user_id,
+            status=status,
+        )
+        return JSONResponse({"success": True, "progress": progress})
+    except ValueError as exc:
+        code = 400 if "status" in str(exc).lower() else 404
+        return JSONResponse({"success": False, "error": str(exc)}, status_code=code)
+    except KeyError as exc:
+        return JSONResponse({"success": False, "error": str(exc)}, status_code=404)
+    except Exception as e:
+        logging.error("Ramp step progress update failed: %s", e)
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+
+
 @app.post("/playbooks/generate")
 async def generate_playbook(payload: dict):
     """Generate a role-specific onboarding playbook."""
