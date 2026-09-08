@@ -274,6 +274,81 @@ class RampPlanGenerator:
             logger.warning("ramp get_step_progress failed: %s", e)
             return None
 
+    def update_step_progress(
+        self,
+        plan_id: str,
+        step_id: str,
+        company_id: str,
+        user_id: str,
+        status: str,
+    ) -> Dict[str, Any]:
+        """Set a step progress state for a user in a company-scoped ramp plan."""
+        normalized = (status or "").strip().lower()
+        if normalized not in STEP_PROGRESS_STATUSES:
+            raise ValueError(f"status must be one of: {', '.join(sorted(STEP_PROGRESS_STATUSES))}")
+
+        company_id = (company_id or "").strip() or "default"
+        user_id = (user_id or "").strip()
+        if not user_id:
+            raise ValueError("user_id is required")
+
+        plan = self.get_plan_by_id(plan_id, company_id=company_id)
+        if not plan:
+            raise ValueError(f"ramp plan not found for company_id={company_id} and plan_id={plan_id}")
+
+        step = next((s for s in (plan.get("steps") or []) if str(s.get("id")) == str(step_id)), None)
+        if step is None:
+            raise KeyError(f"step_id {step_id} not found in plan {plan_id}")
+
+        existing = self.get_step_progress(plan_id, step_id, company_id, user_id)
+        now = datetime.now(timezone.utc).isoformat()
+        record = {
+            "plan_id": plan_id,
+            "company_id": company_id,
+            "step_id": step_id,
+            "user_id": user_id,
+            "status": normalized,
+            "updated_at": now,
+        }
+
+        if existing:
+            record["id"] = existing["id"]
+            record["created_at"] = existing.get("created_at") or now
+            if existing.get("status") == normalized:
+                return {
+                    "id": existing["id"],
+                    "plan_id": plan_id,
+                    "company_id": company_id,
+                    "step_id": step_id,
+                    "user_id": user_id,
+                    "status": normalized,
+                    "created_at": existing.get("created_at") or now,
+                    "updated_at": existing.get("updated_at") or now,
+                }
+        else:
+            record["id"] = str(uuid.uuid4())
+            record["created_at"] = now
+
+        try:
+            self.supabase.table("ramp_step_progress").upsert(
+                record,
+                on_conflict="plan_id,step_id,user_id",
+            ).execute()
+        except Exception as e:
+            logger.error("ramp step progress update failed: %s", e)
+            raise
+
+        return {
+            "id": record["id"],
+            "plan_id": plan_id,
+            "company_id": company_id,
+            "step_id": step_id,
+            "user_id": user_id,
+            "status": normalized,
+            "created_at": record.get("created_at"),
+            "updated_at": record.get("updated_at"),
+        }
+
     # -------------------------------------------------------------------------
     # Step assembly
     # -------------------------------------------------------------------------
