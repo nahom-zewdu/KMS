@@ -2,7 +2,7 @@
 """
 KMS Onboard API HTTP endpoints for playbook generation.
 """
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -104,6 +104,19 @@ async def update_step_progress(
         logging.error("Ramp step progress update failed: %s", e)
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
+
+@app.get("/ramp-plans/{plan_id}/steps/{step_id}/progress")
+async def get_step_progress(
+    plan_id: str,
+    step_id: str,
+    company_id: str = Header(default="default", alias="X-Company-Id"),
+    user_id: str = Header(..., alias="X-User-Id"),
+):
+    """Read a single user's step progress for a plan."""
+    progress = ramp_generator.get_step_progress(plan_id, step_id, company_id, user_id)
+    if not progress:
+        return JSONResponse({"success": False, "error": "Step progress not found", "progress": None}, status_code=404)
+    return JSONResponse({"success": True, "progress": progress})
 
 
 @app.post("/playbooks/generate")
