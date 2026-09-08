@@ -410,3 +410,20 @@ class TestRampStepProgress:
             raise AssertionError("Expected ValueError for wrong company")
         except ValueError:
             pass
+
+    def test_persisted_state_can_be_read_back(self):
+        self.generator.supabase = self._memory_supabase()
+        self.generator.update_step_progress(
+            plan_id="plan-123",
+            step_id="step-1",
+            company_id="company-123",
+            user_id="user-1",
+            status="completed",
+        )
+        progress = self.generator.get_step_progress(
+            plan_id="plan-123",
+            step_id="step-1",
+            company_id="company-123",
+            user_id="user-1",
+        )
+        assert progress["status"] == "completed"
