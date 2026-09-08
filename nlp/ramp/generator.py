@@ -171,6 +171,15 @@ class RampPlanGenerator:
             if user_id:
                 progress = self.get_progress_for_plan(plan_id=plan["id"], company_id=company_id, user_id=user_id)
                 plan["progress"] = progress
+                for step in plan["steps"]:
+                    step_id = str(step.get("id") or "")
+                    record = progress.get(step_id)
+                    if record:
+                        step["progress"] = record
+                        step["status"] = record.get("status", "not_started")
+                    else:
+                        step["progress"] = None
+                        step["status"] = "not_started"
             return plan
         except Exception as e:
             logger.error("ramp get_active failed: %s", e)
