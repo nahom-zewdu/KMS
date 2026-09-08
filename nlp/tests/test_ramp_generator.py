@@ -368,3 +368,17 @@ class TestRampStepProgress:
             status="completed",
         )
         assert result["status"] == "completed"
+
+    def test_invalid_status_rejected(self):
+        self.generator.supabase = self._memory_supabase()
+        try:
+            self.generator.update_step_progress(
+                plan_id="plan-123",
+                step_id="step-1",
+                company_id="company-123",
+                user_id="user-1",
+                status="blocked",
+            )
+            raise AssertionError("Expected ValueError for invalid status")
+        except ValueError as exc:
+            assert "status" in str(exc).lower()
