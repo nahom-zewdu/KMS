@@ -25,6 +25,8 @@ from visualizer.service import VisualizerService
 
 logger = logging.getLogger(__name__)
 
+STEP_PROGRESS_STATUSES = {"not_started", "in_progress", "completed"}
+
 # Optional LLM fail open to template why
 try:
     from engine.llm import llm_infer
@@ -137,7 +139,7 @@ class RampPlanGenerator:
         self._save(plan)
         return plan
 
-    def get_active(self, company_id: str, role: str) -> Optional[Dict[str, Any]]:
+    def get_active(self, company_id: str, role: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Fetch latest active plan for company + role."""
         company_id = (company_id or "default").strip() or "default"
         role_key = role.strip().lower().replace(" ", "-")
@@ -154,7 +156,7 @@ class RampPlanGenerator:
             if not res.data:
                 return None
             row = res.data[0]
-            return {
+            plan = {
                 "id": row.get("id"),
                 "company_id": row.get("company_id"),
                 "role": row.get("role"),
@@ -166,6 +168,10 @@ class RampPlanGenerator:
                 "created_at": row.get("created_at"),
                 "updated_at": row.get("updated_at"),
             }
+            if user_id:
+                progress = self.get_progress_for_plan(plan_id=plan["id"], company_id=company_id, user_id=user_id)
+                plan["progress"] = progress
+            return plan
         except Exception as e:
             logger.error("ramp get_active failed: %s", e)
             return None
