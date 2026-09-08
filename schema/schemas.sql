@@ -352,3 +352,22 @@ CREATE TABLE IF NOT EXISTS public.ramp_plans (
 CREATE INDEX IF NOT EXISTS idx_ramp_plans_company_role
   ON public.ramp_plans (company_id, role)
   WHERE is_active = true;
+
+-- Individual step progress for the customer-facing Ramp MVP.
+CREATE TABLE IF NOT EXISTS public.ramp_step_progress (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  plan_id UUID NOT NULL REFERENCES public.ramp_plans(id) ON DELETE CASCADE,
+  company_id TEXT NOT NULL,
+  step_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('not_started', 'in_progress', 'completed')),
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE (plan_id, step_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ramp_step_progress_plan_step
+  ON public.ramp_step_progress (plan_id, step_id, user_id);
+
+CREATE INDEX IF NOT EXISTS idx_ramp_step_progress_company_user
+  ON public.ramp_step_progress (company_id, user_id, status);
