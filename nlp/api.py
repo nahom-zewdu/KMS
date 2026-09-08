@@ -49,10 +49,16 @@ async def generate_ramp(payload: dict):
 
 
 @app.get("/ramp-plans")
-async def get_ramp(company_id: str = "default", role: str = "software-engineer"):
-    """Fetch active ramp plan."""
+async def get_ramp(
+    company_id: str = "default",
+    role: str = "software-engineer",
+    user_id: str | None = Header(default=None, alias="X-User-Id"),
+    company_header: str | None = Header(default=None, alias="X-Company-Id"),
+):
+    """Fetch active ramp plan and hydrate progress for the caller if available."""
+    effective_company_id = company_header or company_id or "default"
     try:
-        plan = ramp_generator.get_active(company_id=company_id, role=role)
+        plan = ramp_generator.get_active(company_id=effective_company_id, role=role, user_id=user_id)
         if not plan:
             return JSONResponse(
                 {"success": False, "error": "No active ramp plan", "plan": None},
