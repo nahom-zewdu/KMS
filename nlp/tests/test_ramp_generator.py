@@ -396,3 +396,17 @@ class TestRampStepProgress:
             raise AssertionError("Expected KeyError for missing step")
         except KeyError:
             pass
+
+    def test_wrong_company_rejected(self):
+        self.generator.supabase = self._memory_supabase()
+        try:
+            self.generator.update_step_progress(
+                plan_id="plan-123",
+                step_id="step-1",
+                company_id="company-999",
+                user_id="user-1",
+                status="completed",
+            )
+            raise AssertionError("Expected ValueError for wrong company")
+        except ValueError:
+            pass
