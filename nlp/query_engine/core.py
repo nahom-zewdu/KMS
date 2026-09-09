@@ -3,6 +3,7 @@
 Single public entrypoint. Zero hallucinations. 98%+ recall.
 Uses query understanding + adaptive retrieval + reasoning.
 """
+import hashlib
 import time
 import logging
 from typing import Dict, Any, List
