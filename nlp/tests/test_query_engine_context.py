@@ -132,3 +132,14 @@ def test_company_scope_is_preserved_and_ramp_context_does_not_become_company_evi
 
     prompt = "Ramp step context (interpretation only; not company evidence):\nOwners: Bob\nStep 1: Understand payments"
     assert "not company evidence" in prompt.lower()
+
+
+def test_cache_key_changes_for_materially_different_ramp_contexts():
+    engine = _make_engine()
+    key_a = engine._cache_key("What does the service do?", "company-123", "Role: backend engineer\nStep 1")
+    key_b = engine._cache_key("What does the service do?", "company-123", "Role: backend engineer\nStep 2")
+    key_c = engine._cache_key("What does the service do?", "company-123", None)
+
+    assert key_a != key_b
+    assert key_a != key_c
+    assert key_b != key_c
