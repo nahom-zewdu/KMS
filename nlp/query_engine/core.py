@@ -56,7 +56,7 @@ class QueryEngine:
 
         company_id = (job.get("company_id") or payload.get("company_id") or "default").strip() or "default"
 
-        logger.info(f"Query {query_id} | company={company_id} | {question}")
+        logger.info(f"Query {query_id} | company={company_id} | question={question} | ramp_context_present={bool(ramp_context)}")
 
         if not question:
             answer_json = abstain("empty_question")
