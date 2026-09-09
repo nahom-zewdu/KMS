@@ -32,6 +32,15 @@ def reasoning_synthesize(
         else "Do not invent person names. If no owner in context, owners must be []. "
     )
 
+    ramp_block = ""
+    if ramp_context:
+        ramp_block = f"""
+        Ramp step context (interpretation only; not company evidence):
+        {ramp_context}
+
+        The Ramp context is only for understanding the user's current step/task. It must not be treated as authoritative company evidence, and it cannot prove ownership, file facts, or system behavior. If a fact is not supported by the retrieved company evidence, do not claim it.
+        """.strip()
+
     prompt = f"""
         You are KMS, the engineering memory system for one company.
 
