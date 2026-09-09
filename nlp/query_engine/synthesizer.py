@@ -11,7 +11,9 @@ from engine.llm import llm_infer
 def reasoning_synthesize(
     question: str,
     chunks: List[Dict],
-    allowed_owners: Optional[List[str]] = None,) -> str:
+    allowed_owners: Optional[List[str]] = None,
+    ramp_context: Optional[str] = None,
+) -> str:
     """
     Synthesize a reasoning answer from relevant chunks.
     Returns a JSON string matching the answer contract.
