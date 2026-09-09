@@ -44,13 +44,15 @@ def reasoning_synthesize(
     prompt = f"""
         You are KMS, the engineering memory system for one company.
 
-        Answer using ONLY the context below. Never invent people, ownership, or systems.
+        Answer using ONLY the retrieved company evidence below. Never invent people, ownership, or systems.
 
         {owners_rule}
         If context is insufficient, set confidence to "low" and abstain_reason to "no_relevant_evidence".
 
-        Context:
+        Company evidence:
         {context}
+
+        {ramp_block}
 
         Question: {question}
 
