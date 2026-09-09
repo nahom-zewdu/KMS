@@ -94,3 +94,41 @@ def test_query_with_ramp_context_uses_question_for_retrieval_but_passes_context_
     finally:
         core_module.reasoning_synthesize = original
 
+
+def test_company_scope_is_preserved_and_ramp_context_does_not_become_company_evidence():
+    engine = _make_engine()
+    original = core_module.reasoning_synthesize
+    captured = {}
+
+    def fake_synth(question, chunks, allowed_owners=None, ramp_context=None):
+        captured["question"] = question
+        captured["ramp_context"] = ramp_context
+        captured["allowed_owners"] = allowed_owners
+        return {
+            "answer": "The evidence says billing is handled by the service.",
+            "confidence": "high",
+            "sources": [{"source": "raw", "record_id": "r1"}],
+            "owners": ["Alice"],
+            "abstain_reason": None,
+        }
+
+    core_module.reasoning_synthesize = Mock(side_effect=fake_synth)
+    try:
+        engine.handle_query({
+            "record_id": "q-3",
+            "company_id": "company-456",
+            "content": "What does the service do?",
+            "payload": {
+                "question": "What does the service do?",
+                "context": "Owners: Bob\nStep 1: Understand payments",
+            },
+        })
+        engine.retriever.retrieve.assert_called_once_with("What does the service do?", company_id="company-456")
+        assert captured["question"] == "What does the service do?"
+        assert captured["ramp_context"] == "Owners: Bob\nStep 1: Understand payments"
+        assert captured["allowed_owners"] == ["Alice"]
+    finally:
+        core_module.reasoning_synthesize = original
+
+    prompt = "Ramp step context (interpretation only; not company evidence):\nOwners: Bob\nStep 1: Understand payments"
+    assert "not company evidence" in prompt.lower()
