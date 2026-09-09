@@ -52,11 +52,7 @@ func (h *QueryHandler) HandleQuery(c *gin.Context) {
 		companyID = "default"
 	}
 
-	// Optional ramp/playbook grounding prepended for the NLP worker (not user-visible).
 	content := question
-	if ctx := strings.TrimSpace(req.Context); ctx != "" {
-		content = ctx + "\n\nQuestion: " + question
-	}
 
 	queryID := uuid.New().String()
 	log.Printf("QueryID: %s - frontend query company=%s q=%q", queryID, companyID, question)
