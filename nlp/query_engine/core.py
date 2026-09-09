@@ -64,7 +64,7 @@ class QueryEngine:
             self.redis.publish(f"query_results:{query_id}", final_answer)
             return final_answer
 
-        cache_key = f"{company_id}:{question}"
+        cache_key = self._cache_key(question, company_id, ramp_context)
         if cached := self.cache.get(cache_key):
             logger.info(f"Cache hit for query {query_id}")
             self.redis.publish(f"query_results:{query_id}", cached)
