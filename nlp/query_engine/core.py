@@ -29,6 +29,17 @@ class QueryEngine:
         self.cache = QueryCache(redis)
         self.retriever = AdaptiveRetriever(supabase)
 
+    def _cache_key(self, question: str, company_id: str, ramp_context: str | None = None) -> str:
+        normalized_question = (question or "").strip()
+        base = f"{company_id}:{normalized_question}"
+        if ramp_context is None:
+            return base
+        normalized_context = (ramp_context or "").strip()
+        if not normalized_context:
+            return base
+        digest = hashlib.sha256(normalized_context.encode("utf-8")).hexdigest()[:16]
+        return f"{base}:{digest}"
+
     def handle_query(self, job: Dict[str, Any]) -> str:
         start_time = time.time()
         query_id = job["record_id"]
