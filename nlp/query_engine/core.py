@@ -88,6 +88,7 @@ class QueryEngine:
                     question,
                     relevant_chunks,
                     allowed_owners=grounded_owners,
+                    ramp_context=ramp_context,
                 )
                 answer_json = normalize_answer(raw)
             except Exception as e:
