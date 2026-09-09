@@ -43,8 +43,18 @@ class QueryEngine:
     def handle_query(self, job: Dict[str, Any]) -> str:
         start_time = time.time()
         query_id = job["record_id"]
-        question = (job.get("content") or "").strip()
-        company_id = (job.get("company_id") or "default").strip() or "default"
+        payload = job.get("payload") or {}
+        if not isinstance(payload, dict):
+            payload = {}
+
+        question = str(payload.get("question") or "").strip()
+        if not question:
+            question = (job.get("content") or "").strip()
+        ramp_context = payload.get("context")
+        if ramp_context is not None:
+            ramp_context = str(ramp_context).strip() or None
+
+        company_id = (job.get("company_id") or payload.get("company_id") or "default").strip() or "default"
 
         logger.info(f"Query {query_id} | company={company_id} | {question}")
 
