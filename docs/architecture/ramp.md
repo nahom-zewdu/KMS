@@ -1,26 +1,105 @@
 # Ramp Architecture
 
+**Status:** Redesign in progress
+**Branch:** `feat/ramp`
+**Last updated:** 2026-09-12
+
 ## Purpose
 
-Ramp is the current customer-facing wedge for KMS. It uses company-specific codebase and knowledge signals to construct a role-specific First 7 Days onboarding path.
+Ramp is the current customer-facing wedge for KMS. Its purpose is to move a new engineer from unfamiliarity with a customer's engineering system toward safe, meaningful contribution.
 
-## Current generation model
+The First 7 Days framing is a time horizon, not a requirement to generate seven arbitrary steps.
 
-`RampPlanGenerator` builds a deterministic plan from VisualizerService output plus ownership signals from `codebase_files.last_author` and `OWNS` graph edges. It can use an LLM to polish the explanatory `why` text, while the structural facts are intended to remain grounded.
+## Current implementation baseline
 
-Plans are company- and role-scoped and persisted in `ramp_plans`.
+`RampPlanGenerator` currently builds a deterministic plan from company-scoped Visualizer/codebase signals and ownership signals. The existing implementation can resolve repository/file evidence, stable step identity, role-aware prioritization, risk signals, progress, and contextual Ask.
+
+The current generator is nevertheless **module-first**: it primarily ranks modules/directories and turns those selections into onboarding prose. This is now treated as a prototype/foundation rather than the target intelligence model.
+
+## Target generation architecture
+
+```text
+Company knowledge
+      ↓
+Structural extraction
+      ↓
+Implementation relationships
+      ↓
+Feature / workflow inference
+      ↓
+Role relevance
+      ↓
+Learning + contribution candidates
+      ↓
+Sequence / prerequisite reasoning
+      ↓
+Evidence gate
+      ↓
+Ramp steps
+      ↓
+LLM explanation / presentation
+```
+
+### Knowledge layers
+
+1. **Structure** — repositories, modules, files, languages, entry points.
+2. **Implementation** — routes, handlers, functions/classes, imports/calls, interfaces, database operations, queues/events, tests.
+3. **Behavior** — workflows and data flows across implementation boundaries.
+4. **Capabilities** — features/domains linked to the implementation that provides them.
+5. **Human context** — owners, contributors, history, PRs, documentation, decisions, incidents, and other connected engineering knowledge.
+6. **Contribution signals** — bounded change opportunities with evidence and verification paths.
 
 ## Step model
 
-The generator produces up to seven steps containing structured fields such as ordering, title, rationale, risk tier, owners, target, summary, resources, checklist, evidence, machine-readable data, and overrides. Step identity is designed to be stable for deep-linking/workspace use.
+A step is a **bounded learning/work outcome**, not a repository location.
 
-## Product constraint
+A step may reference a feature, workflow, service, module, file, document, historical change, or contribution candidate. Those are evidence/entities; the onboarding unit is the capability the engineer gains.
 
-Ramp should not become a generic onboarding checklist generator. Its differentiator must come from evidence specific to the customer's codebase, ownership, architecture, and accumulated engineering context.
+Every meaningful step should expose:
 
-## Open validation questions
+- objective;
+- why now;
+- relevant system/workflow context;
+- supporting evidence;
+- concrete action;
+- verification / done-when;
+- credible help/ownership where available;
+- transition to the next capability.
 
-- Do engineers trust the generated path enough to follow it?
-- Does it reduce time-to-context versus existing onboarding?
-- Which evidence types produce the most useful recommendations?
-- Who experiences the pain strongly enough to buy it?
+## Onboarding progression
+
+The default conceptual progression is:
+
+```text
+Orient → Build mental model → Understand role surface
+      → Trace real workflow → Learn how changes happen
+      → Make safe contribution → Become independently useful
+```
+
+The generator may combine or omit stages when evidence shows that doing so reduces unnecessary cognitive load.
+
+## Determinism and LLM responsibilities
+
+Deterministic logic owns company facts, evidence selection, relationship extraction where mechanically derivable, stable identity, risk/verification signals, and traceability.
+
+LLM reasoning may synthesize explanations, compare evidence-backed candidates, express tradeoffs, and formulate readable objectives. It must not invent people, files, ownership, system behavior, or contribution tasks unsupported by company evidence.
+
+Determinism is a trust mechanism, not the product outcome.
+
+## First-contribution rule
+
+A first contribution is a target outcome, not a mandatory generated coding task. KMS may recommend a contribution only when the relevant surface, concrete change target, implementation evidence, verification path, risk, and reasonable ownership/help signals are sufficient.
+
+If evidence is insufficient, Ramp should stop at investigation/readiness rather than fabricate a coding task.
+
+## Migration strategy
+
+Do not keep decorating the module-first generator with additional prose fields. Preserve useful existing contracts where possible, but introduce a richer internal candidate/evidence model and replace directory-first selection incrementally.
+
+Existing stable IDs, company scoping, evidence grounding, progress, and contextual Ask should be retained unless the redesigned product model requires a deliberate contract change.
+
+## Current next phase
+
+**Ramp Intelligence Discovery (RID)** is the active phase. No further generator implementation should begin until the target evidence model, current evidence inventory, real KMS example, candidate scoring rules, and before/after evaluation fixture are documented.
+
+See `docs/product/ramp-redesign.md` for the detailed design and execution plan.
