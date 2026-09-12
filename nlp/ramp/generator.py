@@ -411,6 +411,14 @@ class RampPlanGenerator:
         candidate.score = round(sum(candidate.score_breakdown.values()), 2)
         return candidate
 
+    def _evidence_strength_for_level(self, level: str, corroboration: int = 0) -> float:
+        """Compute a bounded evidence score from evidence level and independent corroboration."""
+        base = EVIDENCE_LEVEL_WEIGHTS.get((level or "").lower(), EVIDENCE_LEVEL_WEIGHTS["missing"])
+        corroboration = max(0, int(corroboration or 0))
+        bonus = min(0.20, max(0.0, (max(0, corroboration - 1)) * 0.05))
+        return round(min(1.00, base + bonus), 4)
+
+  
     # -------------------------------------------------------------------------
     # Step assembly
     # -------------------------------------------------------------------------
