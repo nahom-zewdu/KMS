@@ -422,6 +422,21 @@ class RampPlanGenerator:
         """Convert a 0-1 value into a weighted score with the RID-04 weights."""
         return round(value * weight, 2)
 
+    def score_candidate(self, candidate: LearningCandidate) -> Dict[str, float]:
+        """Return a deterministic, explainable score breakdown for the candidate."""
+        breakdown = {
+            "role_relevance": self._score_dimension(candidate.role_relevance, 25.0),
+            "prerequisite_value": self._score_dimension(candidate.prerequisite_value, 20.0),
+            "evidence_strength": self._score_dimension(candidate.evidence_strength, 20.0),
+            "workflow_value": self._score_dimension(candidate.workflow_value, 15.0),
+            "actionability": self._score_dimension(candidate.actionability, 10.0),
+            "verification_strength": self._score_dimension(candidate.verification_strength, 5.0),
+            "help_available": self._score_dimension(candidate.help_available, 5.0),
+        }
+        candidate.score_breakdown = breakdown
+        candidate.score = round(sum(breakdown.values()), 2)
+        return breakdown
+
     # -------------------------------------------------------------------------
     # Step assembly
     # -------------------------------------------------------------------------
