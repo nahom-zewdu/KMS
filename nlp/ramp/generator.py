@@ -555,7 +555,38 @@ class RampPlanGenerator:
             "raw_data persistence",
             "Redis github_jobs publication",
         ]
-        evidence_strength = self._evidence_strength_for_level("direct", len(implementation_refs))
+        direct_count = sum(1 for item in evidence if item.level == "direct")
+        evidence_strength = self._evidence_strength_for_level("direct", direct_count)
+
+        return {
+            "evidence_refs": [item.path for item in evidence],
+            "implementation_refs": implementation_refs,
+            "workflow_refs": workflow_refs,
+            "evidence_strength": evidence_strength,
+            "evidence": [
+                {
+                    "path": item.path,
+                    "kind": item.level,
+                    "source": item.source,
+                    "corroboration": item.corroboration,
+                    "detail": item.detail,
+                }
+                for item in evidence
+            ],
+            "selection_reason": (
+                "Direct backend evidence in the repo proves the GitHub ingestion path and the queue publication boundary."
+                if direct_count >= 3
+                else "The GitHub ingestion workflow is derived from the available repo evidence and should be treated as a repository-backed workflow candidate."
+            ),
+        }
+
+    def build_github_ingestion_workflow_candidate(self, company_id: str, role: str) -> LearningCandidate:
+        """Create the one verifiable GitHub ingestion workflow candidate from deterministic repository evidence."""
+        evidence = self._extract_github_ingestion_evidence(company_id, role)
+        evidence_refs = evidence["evidence_refs"]
+        implementation_refs = evidence["implementation_refs"]
+        workflow_refs = evidence["workflow_refs"]
+        evidence_strength = evidence["evidence_strength"]
         candidate = self._build_learning_candidate(
             candidate_id=f"github-ingestion-workflow:{company_id}:{role}",
             candidate_type="workflow-learning",
