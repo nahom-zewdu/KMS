@@ -69,6 +69,27 @@ class RampPlanGenerator:
 
         viz = self.visualizer.build_for_role(role, company_id=company_id)
         if viz.get("error"):
+            workflow_candidate = self.select_learning_candidate(role_key, company_id, prerequisites_met=True)
+            if workflow_candidate is not None:
+                plan = {
+                    "company_id": company_id,
+                    "role": role_key,
+                    "employee_name": employee_name,
+                    "title": f"First 7 Days — {role_key}",
+                    "steps": [self._serialize_candidate_step(workflow_candidate, role_key, company_id)],
+                    "meta": {
+                        "source": "ramp_v1",
+                        "module_count": 0,
+                        "file_count": 0,
+                        "owner_coverage": 0.0,
+                        "architecture_layers": [],
+                        "generated_at": datetime.now(timezone.utc).isoformat(),
+                        "workflow_candidate": workflow_candidate.candidate_id,
+                    },
+                    "is_active": True,
+                }
+                self._save(plan)
+                return plan
             plan = self._empty_plan(
                 role_key,
                 company_id,
