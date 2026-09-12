@@ -26,6 +26,12 @@ from visualizer.service import VisualizerService
 logger = logging.getLogger(__name__)
 
 STEP_PROGRESS_STATUSES = {"not_started", "in_progress", "completed"}
+EVIDENCE_LEVEL_WEIGHTS = {
+    "direct": 1.00,
+    "derived": 0.80,
+    "inferred": 0.40,
+    "missing": 0.00,
+}
 
 # Optional LLM fail open to template why
 try:
