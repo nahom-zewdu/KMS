@@ -453,6 +453,64 @@ class RampPlanGenerator:
             return False
         return True
 
+    def build_github_ingestion_workflow_candidate(self, company_id: str, role: str) -> LearningCandidate:
+        """Create the one verifiable GitHub ingestion workflow candidate from repository evidence."""
+        evidence_refs = [
+            "api/handlers/github.go",
+            "api/services/github.go",
+            "api/services/core.go",
+            "api/repository/redis_stream.go",
+        ]
+        implementation_refs = [
+            "api/handlers/github.go",
+            "api/services/github.go",
+            "api/services/core.go",
+        ]
+        workflow_refs = [
+            "GitHub webhook",
+            "request/signature validation",
+            "GitHub event validation",
+            "core ingestion",
+            "idempotency check",
+            "events persistence",
+            "raw_data persistence",
+            "Redis github_jobs publication",
+        ]
+        evidence_strength = self._evidence_strength_for_level("direct", len(implementation_refs))
+        candidate = self._build_learning_candidate(
+            candidate_id=f"github-ingestion-workflow:{company_id}:{role}",
+            candidate_type="workflow-learning",
+            stage="learning",
+            objective="Trace one GitHub webhook event from webhook entry through validation, persistence, and queue publication, and explain where failures or duplicate deliveries are stopped.",
+            evidence_refs=evidence_refs,
+            implementation_refs=implementation_refs,
+            workflow_refs=workflow_refs,
+            role_relevance=1.0 if role.lower().startswith("backend") else 0.75,
+            evidence_strength=evidence_strength,
+            prerequisite_value=0.8,
+            workflow_value=0.9,
+            actionability=0.9,
+            verification_strength=0.8,
+            help_available=0.7,
+            prerequisites=["understand ingestion boundary", "trace GitHub event workflow"],
+            selection_reason="Direct backend evidence in the repo proves the GitHub ingestion path and the queue publication boundary.",
+            company_scoped=True,
+            concrete_action="Inspect the GitHub webhook handler, validate the request signature and event type, then follow the ingest call into CoreIngest and confirm the duplicate-check and Redis publication path.",
+            verification_method="Verify the HMAC SHA-256 check, the supported event-type validation, the delivery_id duplicate guard, and the github_jobs Redis stream publication in code.",
+        )
+        candidate.selection_metadata = {
+            "company_id": company_id,
+            "role": role,
+            "eligible": True,
+            "contribution_candidate": False,
+            "selection_mode": "github_ingestion_workflow",
+            "prerequisites": candidate.prerequisites,
+        }
+        candidate.eligibility_status = "eligible" if self.is_learning_eligible(candidate) else "ineligible"
+        candidate.score_breakdown = self.score_candidate(candidate)
+        candidate.score = round(sum(candidate.score_breakdown.values()), 2)
+        return candidate
+
     # -------------------------------------------------------------------------
     # Step assembly
     # -------------------------------------------------------------------------
