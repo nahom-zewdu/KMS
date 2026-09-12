@@ -1,105 +1,107 @@
 # Ramp Architecture
 
-**Status:** Redesign in progress
+**Status:** Clean intelligence rewrite in progress
 **Branch:** `feat/ramp`
 **Last updated:** 2026-09-12
 
-## Purpose
+## 1. Boundary
 
-Ramp is the current customer-facing wedge for KMS. Its purpose is to move a new engineer from unfamiliarity with a customer's engineering system toward safe, meaningful contribution.
+Ramp has two separate concerns:
 
-The First 7 Days framing is a time horizon, not a requirement to generate seven arbitrary steps.
+1. **Intelligence** — determine what a new engineer should understand/do next from company evidence.
+2. **Persistence/API** — save plans, hydrate progress, and expose the existing frontend contract.
 
-## Current implementation baseline
+The old module-first generator is not part of the intelligence architecture.
 
-`RampPlanGenerator` currently builds a deterministic plan from company-scoped Visualizer/codebase signals and ownership signals. The existing implementation can resolve repository/file evidence, stable step identity, role-aware prioritization, risk signals, progress, and contextual Ask.
-
-The current generator is nevertheless **module-first**: it primarily ranks modules/directories and turns those selections into onboarding prose. This is now treated as a prototype/foundation rather than the target intelligence model.
-
-## Target generation architecture
+## 2. Target architecture
 
 ```text
-Company knowledge
-      ↓
-Structural extraction
-      ↓
-Implementation relationships
-      ↓
-Feature / workflow inference
-      ↓
-Role relevance
-      ↓
-Learning + contribution candidates
-      ↓
-Sequence / prerequisite reasoning
-      ↓
-Evidence gate
-      ↓
-Ramp steps
-      ↓
-LLM explanation / presentation
+                    KMS KNOWLEDGE
+                         │
+          ┌──────────────┴──────────────┐
+          │                             │
+   codebase/files/modules        graph/history/docs
+          │                             │
+          └──────────────┬──────────────┘
+                         ▼
+                RampEvidenceStore
+                         │
+                         ▼
+              normalized evidence
+                         │
+              ┌──────────┴──────────┐
+              ▼                     ▼
+      WorkflowDiscoverer       role reasoning
+              │                     │
+              └──────────┬──────────┘
+                         ▼
+                  RampCandidate
+                         │
+                         ▼
+               RampCandidateEngine
+                 gates → score
+                 prerequisites
+                 sequencing
+                         │
+                         ▼
+                    RampPlanner
+                         │
+                         ▼
+                    RampStore
+                         │
+                         ▼
+                  existing API/UI
 ```
 
-### Knowledge layers
+## 3. Design rules
 
-1. **Structure** — repositories, modules, files, languages, entry points.
-2. **Implementation** — routes, handlers, functions/classes, imports/calls, interfaces, database operations, queues/events, tests.
-3. **Behavior** — workflows and data flows across implementation boundaries.
-4. **Capabilities** — features/domains linked to the implementation that provides them.
-5. **Human context** — owners, contributors, history, PRs, documentation, decisions, incidents, and other connected engineering knowledge.
-6. **Contribution signals** — bounded change opportunities with evidence and verification paths.
+### Evidence owns facts
 
-## Step model
+`RampEvidenceStore` reads company-scoped KMS records. It does not invent relationships or convert path names into confirmed architecture.
 
-A step is a **bounded learning/work outcome**, not a repository location.
+### Candidates own reasoning
 
-A step may reference a feature, workflow, service, module, file, document, historical change, or contribution candidate. Those are evidence/entities; the onboarding unit is the capability the engineer gains.
+Candidates represent bounded outcomes. A candidate may reference files/modules/workflows, but those entities are not themselves onboarding steps.
 
-Every meaningful step should expose:
+### Deterministic selection owns trust
 
-- objective;
-- why now;
-- relevant system/workflow context;
-- supporting evidence;
-- concrete action;
-- verification / done-when;
-- credible help/ownership where available;
-- transition to the next capability.
+Eligibility, risk, evidence strength, score, prerequisites, ordering, and contribution readiness are deterministic. LLM output cannot override them.
 
-## Onboarding progression
+### Persistence is an adapter
 
-The default conceptual progression is:
+`RampStore` knows how to persist plans and progress. It does not know why a candidate was selected.
 
-```text
-Orient → Build mental model → Understand role surface
-      → Trace real workflow → Learn how changes happen
-      → Make safe contribution → Become independently useful
-```
+## 4. Current implementation
 
-The generator may combine or omit stages when evidence shows that doing so reduces unnecessary cognitive load.
+`nlp/ramp/` contains:
 
-## Determinism and LLM responsibilities
+- `models.py` — normalized reasoning objects;
+- `evidence.py` — company-scoped evidence extraction;
+- `workflows.py` — workflow candidate discovery;
+- `candidates.py` — candidate gates/scoring/sequence;
+- `store.py` — persistence/progress;
+- `generator_v2.py` — `RampPlanner` orchestration.
 
-Deterministic logic owns company facts, evidence selection, relationship extraction where mechanically derivable, stable identity, risk/verification signals, and traceability.
+`nlp/api.py` uses `RampPlanner` directly.
 
-LLM reasoning may synthesize explanations, compare evidence-backed candidates, express tradeoffs, and formulate readable objectives. It must not invent people, files, ownership, system behavior, or contribution tasks unsupported by company evidence.
+`nlp/ramp/generator.py` contains no legacy intelligence; it is only a compatibility import surface. The historical `evidence_generator.py` has been removed.
 
-Determinism is a trust mechanism, not the product outcome.
+## 5. Current evidence boundary
 
-## First-contribution rule
+The first workflow implementation uses indexed structural evidence. For example, multiple GitHub/webhook/ingestion/Redis implementation surfaces can form a **workflow candidate**. The workflow relationship is still an inferred signal until source-level implementation relationship extraction exists.
 
-A first contribution is a target outcome, not a mandatory generated coding task. KMS may recommend a contribution only when the relevant surface, concrete change target, implementation evidence, verification path, risk, and reasonable ownership/help signals are sufficient.
+The user-facing action therefore asks the engineer to verify the actual control/data flow in source and explicitly mark unsupported links as unknown.
 
-If evidence is insufficient, Ramp should stop at investigation/readiness rather than fabricate a coding task.
+This is intentional epistemic behavior, not a hidden fallback.
 
-## Migration strategy
+## 6. Contribution boundary
 
-Do not keep decorating the module-first generator with additional prose fields. Preserve useful existing contracts where possible, but introduce a richer internal candidate/evidence model and replace directory-first selection incrementally.
+Ramp must not generate a first coding task merely because a file looks relevant. Contribution candidates require bounded change evidence, verification, controlled risk, credible help, and sufficient history/change precedent.
 
-Existing stable IDs, company scoping, evidence grounding, progress, and contextual Ask should be retained unless the redesigned product model requires a deliberate contract change.
+Until those signals exist, Ramp should stop at investigation/readiness.
 
-## Current next phase
+## 7. Migration rule
 
-**Ramp Intelligence Discovery (RID)** is the active phase. No further generator implementation should begin until the target evidence model, current evidence inventory, real KMS example, candidate scoring rules, and before/after evaluation fixture are documented.
+Do not add new features to the former module-first generator. If a useful behavior is discovered there, reimplement the behavior against the new evidence/candidate model or deliberately discard it.
 
-See `docs/product/ramp-redesign.md` for the detailed design and execution plan.
+Working infrastructure—Supabase, ingestion, progress persistence, API routes, and the existing frontend workspace—is preserved because it is infrastructure, not the old Ramp reasoning model.
