@@ -359,6 +359,59 @@ class RampPlanGenerator:
         }
 
     # -------------------------------------------------------------------------
+    # Workflow candidate generation
+    # -------------------------------------------------------------------------
+
+    def _build_learning_candidate(
+        self,
+        candidate_id: str,
+        candidate_type: str,
+        stage: str,
+        objective: str,
+        evidence_refs: List[str],
+        implementation_refs: List[str],
+        workflow_refs: List[str],
+        role_relevance: float,
+        evidence_strength: float,
+        prerequisite_value: float,
+        workflow_value: float,
+        actionability: float,
+        verification_strength: float,
+        help_available: float,
+        prerequisites: List[str],
+        selection_reason: str,
+        company_scoped: bool = True,
+        concrete_action: str = "",
+        verification_method: str = "",
+    ) -> LearningCandidate:
+        """Create an internal learning candidate with deterministic defaults and no persistence."""
+        candidate = LearningCandidate(
+            candidate_id=candidate_id,
+            candidate_type=candidate_type,
+            stage=stage,
+            objective=objective,
+            evidence_refs=list(evidence_refs or []),
+            implementation_refs=list(implementation_refs or []),
+            workflow_refs=list(workflow_refs or []),
+            role_relevance=float(role_relevance or 0.0),
+            evidence_strength=float(evidence_strength or 0.0),
+            prerequisite_value=float(prerequisite_value or 0.0),
+            workflow_value=float(workflow_value or 0.0),
+            actionability=float(actionability or 0.0),
+            verification_strength=float(verification_strength or 0.0),
+            help_available=float(help_available or 0.0),
+            prerequisites=list(prerequisites or []),
+            selection_reason=selection_reason,
+            company_scoped=bool(company_scoped),
+            concrete_action=concrete_action,
+            verification_method=verification_method,
+            contribution_candidate=False,
+        )
+        candidate.score_breakdown = self.score_candidate(candidate)
+        candidate.score = round(sum(candidate.score_breakdown.values()), 2)
+        return candidate
+
+    # -------------------------------------------------------------------------
     # Step assembly
     # -------------------------------------------------------------------------
 
