@@ -446,6 +446,13 @@ class TestWorkflowCandidates:
         assert self.generator.select_learning_candidate("backend", "company-123", prerequisites_met=False) is None
         assert self.generator.select_learning_candidate("backend", "company-123", prerequisites_met=True).candidate_id == candidate.candidate_id
 
+    def test_github_ingestion_workflow_is_selected_and_not_contribution(self):
+        selected = self.generator.select_learning_candidate("backend", "company-123", prerequisites_met=True)
+        assert selected is not None
+        assert selected.candidate_type == "workflow-learning"
+        assert selected.contribution_candidate is False
+        assert "GitHub webhook" in selected.objective
+
 
 class TestRampStepProgress:
     def setup_method(self):
