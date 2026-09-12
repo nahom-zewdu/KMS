@@ -431,6 +431,15 @@ class TestWorkflowCandidates:
         assert direct == 1.0
         assert self.generator._evidence_strength_for_level("direct", 6) <= 1.0
 
+    def test_deterministic_scoring_is_stable(self):
+        candidate = self.generator.build_github_ingestion_workflow_candidate(company_id="company-123", role="backend")
+        first = self.generator.score_candidate(candidate)
+        second = self.generator.score_candidate(candidate)
+
+        assert first == second
+        assert candidate.score_breakdown == first
+        assert candidate.score == round(sum(first.values()), 2)
+
 
 class TestRampStepProgress:
     def setup_method(self):
