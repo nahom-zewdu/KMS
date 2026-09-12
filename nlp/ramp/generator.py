@@ -437,6 +437,22 @@ class RampPlanGenerator:
         candidate.score = round(sum(breakdown.values()), 2)
         return breakdown
 
+    def is_learning_eligible(self, candidate: LearningCandidate) -> bool:
+        """Gate the candidate before it is allowed to participate in Ramp selection."""
+        if not candidate or not getattr(candidate, "company_scoped", False):
+            return False
+        if not candidate.evidence_refs and not candidate.implementation_refs and not candidate.workflow_refs:
+            return False
+        if not candidate.implementation_refs and not candidate.workflow_refs:
+            return False
+        if not candidate.concrete_action:
+            return False
+        if not candidate.verification_method:
+            return False
+        if candidate.evidence_strength <= 0 and not candidate.implementation_refs:
+            return False
+        return True
+
     # -------------------------------------------------------------------------
     # Step assembly
     # -------------------------------------------------------------------------
