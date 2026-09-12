@@ -1,6 +1,5 @@
-# nlp/ramp/__init__.py
-"""First 7 Days ramp plan generation (company-scoped)."""
+"""Evidence-first Ramp plan generation."""
 
-from .generator import RampPlanGenerator
+from .generator_v2 import RampPlanner
 
-__all__ = ["RampPlanGenerator"]
+__all__ = ["RampPlanner"]
