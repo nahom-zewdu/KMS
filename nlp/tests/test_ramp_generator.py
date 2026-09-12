@@ -335,6 +335,11 @@ class TestRampGeneratorQuality:
         assert result["files"][0]["github_url"] is None
 
 
+class TestWorkflowCandidates:
+    def setup_method(self):
+        self.generator = RampPlanGenerator(supabase=Mock())
+
+
 class TestRampStepProgress:
     def setup_method(self):
         self.generator = RampPlanGenerator(supabase=Mock())
