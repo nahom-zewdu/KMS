@@ -532,6 +532,80 @@ class RampPlanGenerator:
         candidate.contribution_candidate = False
         return candidate
 
+    def _serialize_candidate_step(self, candidate: LearningCandidate, role: str, company_id: str) -> Dict[str, Any]:
+        """Serialize the selected workflow candidate into the existing Ramp step contract."""
+        step_id = str(
+            uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                f"ramp-step:{company_id}:{role}:github-ingestion-workflow:1",
+            )
+        )
+        evidence_items = []
+        for ref in candidate.evidence_refs:
+            evidence_items.append({
+                "kind": "observed",
+                "source": "repo",
+                "label": ref,
+                "detail": f"Repository evidence at {ref} supports the GitHub ingestion workflow.",
+                "path": ref,
+            })
+        resource_files = [{"path": ref, "type": "file"} for ref in candidate.implementation_refs]
+        return {
+            "id": step_id,
+            "order": 1,
+            "title": "Trace the GitHub ingestion workflow",
+            "why": (
+                "This step is built from the repo's actual GitHub webhook and ingestion flow: the webhook is validated, the event is checked, the payload is persisted, and the event is published to the github_jobs stream. "
+                "The evidence is the implementation itself rather than a generic GitHub checklist."
+            ),
+            "understand": (
+                f"Understand how one GitHub event moves from webhook entry to validation and persistence in the repo. Start with {candidate.implementation_refs[0]} and follow the call path into {candidate.implementation_refs[1]} and {candidate.implementation_refs[2]} before explaining the queue publication step."
+            ),
+            "do": candidate.concrete_action,
+            "done_when": (
+                "You can trace the request signature check, the event validation, the duplicate-delivery guard, the raw_data/event persistence, and the Redis stream publication in the actual code path, and you clearly state what each step blocks or allows."
+            ),
+            "risk_tier": "review",
+            "owners": [],
+            "target": {
+                "type": "workflow",
+                "path": "github-ingestion",
+                "repo": None,
+                "files": resource_files,
+            },
+            "summary": {
+                "what": candidate.objective,
+                "how": "Follow the actual control/data flow from the GitHub webhook through validation and persistence into the Redis publication stream.",
+                "where": "api/handlers/github.go → api/services/github.go → api/services/core.go → api/repository/redis_stream.go",
+            },
+            "resources": [
+                {"type": "file", "path": ref} for ref in candidate.evidence_refs
+            ],
+            "checklist": [
+                {"id": "signature", "label": "Confirm the GitHub HMAC signature validation", "done": False},
+                {"id": "event", "label": "Confirm supported event validation and payload extraction", "done": False},
+                {"id": "ingest", "label": "Trace the ingest call and duplicate-delivery guard", "done": False},
+                {"id": "publish", "label": "Confirm raw_data persistence and github_jobs publication", "done": False},
+            ],
+            "evidence": evidence_items,
+            "machine": {
+                "candidate_id": candidate.candidate_id,
+                "path": "github-ingestion",
+                "suggested_owners": [],
+                "suggested_risk": "review",
+                "selection_reason": candidate.selection_reason,
+                "eligible": True,
+                "contribution_candidate": False,
+            },
+            "overrides": {
+                "title": False,
+                "why": False,
+                "owners": False,
+                "risk_tier": False,
+                "order": False,
+            },
+        }
+
     # -------------------------------------------------------------------------
     # Step assembly
     # -------------------------------------------------------------------------
