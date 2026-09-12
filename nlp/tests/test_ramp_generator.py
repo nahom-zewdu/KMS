@@ -421,6 +421,16 @@ class TestWorkflowCandidates:
         )
         assert self.generator.is_learning_eligible(eligible) is True
 
+    def test_evidence_strength_rankings_and_no_unbounded_growth(self):
+        direct = self.generator._evidence_strength_for_level("direct", 2)
+        derived = self.generator._evidence_strength_for_level("derived", 2)
+        inferred = self.generator._evidence_strength_for_level("inferred", 2)
+        missing = self.generator._evidence_strength_for_level("missing", 2)
+
+        assert direct > derived > inferred > missing
+        assert direct == 1.0
+        assert self.generator._evidence_strength_for_level("direct", 6) <= 1.0
+
 
 class TestRampStepProgress:
     def setup_method(self):
