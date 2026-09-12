@@ -440,6 +440,12 @@ class TestWorkflowCandidates:
         assert candidate.score_breakdown == first
         assert candidate.score == round(sum(first.values()), 2)
 
+    def test_prerequisite_ordering_blocks_unsatisfied_selection(self):
+        candidate = self.generator.build_github_ingestion_workflow_candidate(company_id="company-123", role="backend")
+        candidate.prerequisites = ["understand ingestion boundary"]
+        assert self.generator.select_learning_candidate("backend", "company-123", prerequisites_met=False) is None
+        assert self.generator.select_learning_candidate("backend", "company-123", prerequisites_met=True).candidate_id == candidate.candidate_id
+
 
 class TestRampStepProgress:
     def setup_method(self):
