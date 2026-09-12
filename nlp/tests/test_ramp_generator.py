@@ -453,6 +453,16 @@ class TestWorkflowCandidates:
         assert selected.contribution_candidate is False
         assert "GitHub webhook" in selected.objective
 
+    def test_generate_preserves_step_contract_and_adds_workflow_candidate(self):
+        self.generator.visualizer = Mock()
+        self.generator.visualizer.build_for_role.return_value = {"error": "no baseline"}
+
+        plan = self.generator.generate(role="backend", company_id="company-123")
+        assert plan["steps"]
+        assert plan["steps"][0]["title"]
+        assert "GitHub" in plan["steps"][0]["title"] or "workflow" in plan["steps"][0]["title"].lower()
+        assert plan["steps"][0]["target"]["type"] in {"workflow", "module"}
+
 
 class TestRampStepProgress:
     def setup_method(self):
