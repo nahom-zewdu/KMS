@@ -511,6 +511,27 @@ class RampPlanGenerator:
         candidate.score = round(sum(candidate.score_breakdown.values()), 2)
         return candidate
 
+    def select_learning_candidate(
+        self,
+        role: str,
+        company_id: str,
+        prerequisites_met: bool = True,
+    ) -> Optional[LearningCandidate]:
+        """Return the single deterministic GitHub ingestion learning candidate when it is eligible."""
+        candidate = self.build_github_ingestion_workflow_candidate(company_id, role)
+        if not prerequisites_met:
+            candidate.selection_metadata["prerequisites_satisfied"] = False
+            candidate.eligibility_status = "blocked-prerequisites"
+            return None
+        if not self.is_learning_eligible(candidate):
+            candidate.selection_metadata["prerequisites_satisfied"] = True
+            candidate.eligibility_status = "ineligible"
+            return None
+        candidate.selection_metadata["prerequisites_satisfied"] = True
+        candidate.eligibility_status = "selected"
+        candidate.contribution_candidate = False
+        return candidate
+
     # -------------------------------------------------------------------------
     # Step assembly
     # -------------------------------------------------------------------------
