@@ -418,7 +418,10 @@ class RampPlanGenerator:
         bonus = min(0.20, max(0.0, (max(0, corroboration - 1)) * 0.05))
         return round(min(1.00, base + bonus), 4)
 
-  
+    def _score_dimension(self, value: float, weight: float) -> float:
+        """Convert a 0-1 value into a weighted score with the RID-04 weights."""
+        return round(value * weight, 2)
+
     # -------------------------------------------------------------------------
     # Step assembly
     # -------------------------------------------------------------------------
