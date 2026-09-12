@@ -351,6 +351,76 @@ class TestWorkflowCandidates:
         assert candidate.verification_method
         assert candidate.evidence_refs
 
+    def test_learning_eligibility_rejects_missing_company_scope_or_evidence(self):
+        ineligible = self.generator._build_learning_candidate(
+            candidate_id="candidate-missing-company",
+            candidate_type="workflow-learning",
+            stage="learning",
+            objective="Trace an event through the system.",
+            evidence_refs=["api/handlers/github.go"],
+            implementation_refs=["api/handlers/github.go"],
+            workflow_refs=["webhook→handler"],
+            role_relevance=0.5,
+            evidence_strength=0.8,
+            prerequisite_value=0.5,
+            workflow_value=0.6,
+            actionability=0.7,
+            verification_strength=0.8,
+            help_available=0.5,
+            prerequisites=[],
+            selection_reason="Missing company scope.",
+            company_scoped=False,
+            concrete_action="Inspect the GitHub webhook flow.",
+            verification_method="Read the handler and confirm the call path.",
+        )
+        assert self.generator.is_learning_eligible(ineligible) is False
+
+        missing_impl = self.generator._build_learning_candidate(
+            candidate_id="candidate-missing-impl",
+            candidate_type="workflow-learning",
+            stage="learning",
+            objective="Trace an event through the system.",
+            evidence_refs=["api/handlers/github.go"],
+            implementation_refs=[],
+            workflow_refs=[],
+            role_relevance=0.5,
+            evidence_strength=0.8,
+            prerequisite_value=0.5,
+            workflow_value=0.6,
+            actionability=0.7,
+            verification_strength=0.8,
+            help_available=0.5,
+            prerequisites=[],
+            selection_reason="Missing implementation evidence.",
+            company_scoped=True,
+            concrete_action="Inspect the GitHub webhook flow.",
+            verification_method="Read the handler and confirm the call path.",
+        )
+        assert self.generator.is_learning_eligible(missing_impl) is False
+
+        eligible = self.generator._build_learning_candidate(
+            candidate_id="candidate-eligible",
+            candidate_type="workflow-learning",
+            stage="learning",
+            objective="Trace one GitHub event from webhook entry through validation, persistence, and queue publication.",
+            evidence_refs=["api/handlers/github.go", "api/services/github.go", "api/services/core.go"],
+            implementation_refs=["api/handlers/github.go", "api/services/github.go", "api/services/core.go"],
+            workflow_refs=["GitHub webhook", "validation", "ingestion", "events persistence", "raw_data persistence", "github_jobs"],
+            role_relevance=1.0,
+            evidence_strength=1.0,
+            prerequisite_value=0.8,
+            workflow_value=0.9,
+            actionability=0.9,
+            verification_strength=0.8,
+            help_available=0.7,
+            prerequisites=["understand ingestion boundary"],
+            selection_reason="Direct backend evidence proves the workflow.",
+            company_scoped=True,
+            concrete_action="Trace the handler->service->core flow and explain where the event is validated and queued.",
+            verification_method="Verify the actual request signature, event type checks, and Redis publication path in code.",
+        )
+        assert self.generator.is_learning_eligible(eligible) is True
+
 
 class TestRampStepProgress:
     def setup_method(self):
