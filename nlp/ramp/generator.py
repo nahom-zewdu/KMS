@@ -34,6 +34,36 @@ except Exception:  # pragma: no cover
     llm_infer = None  # type: ignore
 
 
+@dataclass
+class LearningCandidate:
+    """Internal learning candidate built from company-scoped evidence and workflow analysis."""
+
+    candidate_id: str
+    candidate_type: str
+    stage: str
+    objective: str
+    evidence_refs: List[str] = field(default_factory=list)
+    implementation_refs: List[str] = field(default_factory=list)
+    workflow_refs: List[str] = field(default_factory=list)
+    role_relevance: float = 0.0
+    evidence_strength: float = 0.0
+    prerequisite_value: float = 0.0
+    workflow_value: float = 0.0
+    actionability: float = 0.0
+    verification_strength: float = 0.0
+    help_available: float = 0.0
+    prerequisites: List[str] = field(default_factory=list)
+    selection_reason: str = ""
+    score: float = 0.0
+    score_breakdown: Dict[str, float] = field(default_factory=dict)
+    eligibility_status: str = "unknown"
+    company_scoped: bool = True
+    concrete_action: str = ""
+    verification_method: str = ""
+    contribution_candidate: bool = False
+    selection_metadata: Dict[str, Any] = field(default_factory=dict)
+
+
 class RampPlanGenerator:
     """Deterministic First 7 Days plan builder + persistence."""
 
