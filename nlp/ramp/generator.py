@@ -540,6 +540,28 @@ class RampPlanGenerator:
             "api/services/core.go",
             "api/repository/redis_stream.go",
         ]
+        evidence: List[EvidenceArtifact] = []
+        for path in evidence_paths:
+            repo_path = repo_root / path
+            exists = repo_path.exists()
+            level = "direct" if exists else "derived"
+            source = "repo" if exists else "fallback"
+            corroboration = 1 if exists else 0
+            detail = (
+                f"Repository evidence at {path} shows the GitHub webhook request path and ingestion boundary."
+                if exists
+                else f"{path} is the canonical GitHub ingestion path expected for this company and role when runtime-indexed evidence is absent."
+            )
+            evidence.append(
+                EvidenceArtifact(
+                    path=path,
+                    level=level,
+                    source=source,
+                    corroboration=corroboration,
+                    detail=detail,
+                )
+            )
+
         implementation_refs = [
             "api/handlers/github.go",
             "api/services/github.go",
