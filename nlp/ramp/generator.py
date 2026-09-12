@@ -18,6 +18,7 @@ import uuid
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from supabase import Client
@@ -543,9 +544,10 @@ class RampPlanGenerator:
             return False
         return True
 
-    def build_github_ingestion_workflow_candidate(self, company_id: str, role: str) -> LearningCandidate:
-        """Create the one verifiable GitHub ingestion workflow candidate from repository evidence."""
-        evidence_refs = [
+    def _extract_github_ingestion_evidence(self, company_id: str, role: str) -> Dict[str, Any]:
+        """Return the explicit deterministic evidence representation used to build the GitHub workflow candidate."""
+        repo_root = Path(__file__).resolve().parents[2]
+        evidence_paths = [
             "api/handlers/github.go",
             "api/services/github.go",
             "api/services/core.go",
@@ -636,7 +638,7 @@ class RampPlanGenerator:
             verification_strength=0.8,
             help_available=0.7,
             prerequisites=["understand ingestion boundary", "trace GitHub event workflow"],
-            selection_reason="Direct backend evidence in the repo proves the GitHub ingestion path and the queue publication boundary.",
+            selection_reason=evidence["selection_reason"],
             company_scoped=True,
             concrete_action="Inspect the GitHub webhook handler, validate the request signature and event type, then follow the ingest call into CoreIngest and confirm the duplicate-check and Redis publication path.",
             verification_method="Verify the HMAC SHA-256 check, the supported event-type validation, the delivery_id duplicate guard, and the github_jobs Redis stream publication in code.",
@@ -648,6 +650,7 @@ class RampPlanGenerator:
             "contribution_candidate": False,
             "selection_mode": "github_ingestion_workflow",
             "prerequisites": candidate.prerequisites,
+            "evidence": evidence["evidence"],
         }
         candidate.eligibility_status = "eligible" if self.is_learning_eligible(candidate) else "ineligible"
         candidate.score_breakdown = self.score_candidate(candidate)
