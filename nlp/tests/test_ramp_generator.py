@@ -350,6 +350,8 @@ class TestWorkflowCandidates:
         assert candidate.concrete_action
         assert candidate.verification_method
         assert candidate.evidence_refs
+        assert candidate.selection_metadata["evidence"]
+        assert all(item["path"] in candidate.evidence_refs for item in candidate.selection_metadata["evidence"])
 
     def test_learning_eligibility_rejects_missing_company_scope_or_evidence(self):
         ineligible = self.generator._build_learning_candidate(
