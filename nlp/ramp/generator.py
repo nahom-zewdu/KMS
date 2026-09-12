@@ -41,6 +41,17 @@ except Exception:  # pragma: no cover
     llm_infer = None  # type: ignore
 
 
+@dataclass(frozen=True)
+class EvidenceArtifact:
+    """Explicit deterministic evidence item used to build a learning candidate."""
+
+    path: str
+    level: str
+    source: str
+    corroboration: int = 1
+    detail: str = ""
+
+
 @dataclass
 class LearningCandidate:
     """Internal learning candidate built from company-scoped evidence and workflow analysis."""
