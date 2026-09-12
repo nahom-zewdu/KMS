@@ -59,7 +59,7 @@ The intelligence model and redesign plan are in `docs/product/ramp-redesign.md` 
 | RID-02 current evidence inventory | ACCEPTED | Existing KMS evidence mapped with strength and limitations. |
 | RID-03 real KMS proof | ACCEPTED | GitHub ingestion workflow proves the intended feature → workflow → implementation → role → learning chain; contribution gate remains unqualified. |
 | **RID-04 candidate scoring + sequencing** | **ACCEPTED** | Deterministic eligibility, scoring, prerequisite ordering, redundancy, and contribution gates defined. |
-| **RID-05 narrow implementation slice** | **NEXT** | Implement the smallest evidence/candidate path proving one workflow-oriented Ramp step. |
+| **RID-05 narrow implementation slice** | **IMPLEMENTED / VERIFYING** | Added an evidence-first generator that derives a workflow candidate from company-scoped indexed files/modules/history; API now uses it. Runtime test execution is still required before acceptance. |
 | RID-06 before/after evaluation fixture | PLANNED | Must demonstrate actual quality improvement. |
 | Customer validation | NOT STARTED | Begins as soon as a credible redesigned Ramp slice exists. |
 | Live DB/schema reconciliation | PLANNED | Live Supabase schema is ahead of repository SQL. Not a blocker unless current work requires it. |
@@ -172,27 +172,33 @@ Key decisions:
 
 Exact weights and thresholds are calibration parameters, not permanent product truths.
 
-## RID-05 — Narrow implementation slice — NEXT
+## RID-05 — Narrow implementation slice — IMPLEMENTED / VERIFYING
 
-Implement only enough backend reasoning to prove the following path:
+Implemented the smallest current evidence-first path for one workflow-oriented learning candidate:
 
 ```text
-existing KMS evidence
-      ↓
-small internal candidate objects
-      ↓
-eligibility gates
-      ↓
-score + prerequisite ordering
-      ↓
-GitHub ingestion workflow candidate
-      ↓
-existing Ramp step serializer
+company-scoped codebase_files
+          + codebase_modules
+          + GitHub raw_data history
+                    ↓
+          deterministic evidence adapter
+                    ↓
+          workflow signals + implementation refs
+                    ↓
+          learning eligibility gate
+                    ↓
+          deterministic score + metadata
+                    ↓
+          existing Ramp step contract
 ```
 
-Do **not** rewrite the whole generator, add a new database schema, build universal AST analysis, add semantic embeddings for candidate selection, or add contribution generation in this slice.
+The implementation lives in `nlp/ramp/evidence_generator.py` and is exposed through the existing `/ramp-plans/generate` endpoint. It deliberately does **not** add a database schema, universal AST analysis, semantic candidate embeddings, or contribution generation.
 
-**Acceptance:** For a backend role on the KMS repository, the redesigned path can construct and serialize at least one workflow-oriented learning candidate whose evidence points to the actual GitHub ingestion chain, while preserving existing company scoping and stable step identity. The candidate must carry deterministic selection metadata. No unsupported contribution task may be emitted.
+Important boundary: workflow labels such as webhook/handler/service/ingest/redis are derived from indexed codebase vocabulary and are marked as inferred workflow signals. The generator does not claim relationships that are absent from the indexed evidence. If the index cannot provide enough implementation/workflow evidence, it returns an explicit empty plan instead of falling back to hardcoded customer facts.
+
+A focused test file, `nlp/tests/test_ramp_evidence.py`, covers indexed-path derivation, evidence metadata, insufficient-evidence refusal, and company scoping.
+
+**Verification still required:** run the focused RID-05 tests plus the existing Ramp generator suite in the backend environment. Do not mark RID-05 `ACCEPTED` until those tests pass and a real company-scoped generation smoke test confirms the selected step's evidence comes from Supabase-indexed records.
 
 ## RID-06 — Before/after evaluation fixture — PLANNED
 
@@ -248,118 +254,35 @@ A contribution is **not mandatory**. If KMS lacks sufficient evidence for a safe
 ```text
 Company knowledge
       ↓
-Structural extraction
+structural extraction
       ↓
-Implementation relationships
+implementation relationships
       ↓
-Feature / workflow inference
+feature / workflow inference
       ↓
-Role relevance
+role relevance
       ↓
-Learning + contribution candidates
+learning / contribution candidates
       ↓
-Sequence / prerequisite reasoning
+sequence + dependency reasoning
       ↓
-Evidence gate
+evidence check
       ↓
 Ramp steps
       ↓
-LLM explanation / presentation
+LLM presentation / explanation
 ```
 
-Deterministic logic owns facts, evidence, mechanically derivable relationships, stable identity, risk/verification signals, candidate traceability, and company scoping.
-
-LLM reasoning may synthesize evidence-backed explanations, compare candidates, express tradeoffs, and formulate readable objectives. It must not invent company facts, ownership, workflows, files, or contribution tasks.
+Deterministic logic owns factual evidence, candidate identity, scoring, eligibility, risk, verification signals, company scoping, and traceability. LLM output may explain or compare already-supported candidates but cannot manufacture company facts.
 
 ---
 
-# 9. Superseded / deferred Ramp work
+# 9. Deferred work / guardrails
 
-The following earlier roadmap items are not deleted; their purpose has changed under the redesign.
+Do not expand into autonomous code changes, universal language AST support, a giant agent loop, semantic candidate selection, or schema redesign merely to make Ramp appear smarter.
 
-| Former task | Status | Reason |
-|---|---|---|
-| RAMP-A-01 through RAMP-A-07 | SUPERSEDED | They improved step presentation without fixing module-first candidate selection. |
-| RAMP-A-08 frontend StepWorkspace polish | DEFERRED | UI should follow the new step model. |
-| RAMP-A-09 batch verification | SUPERSEDED | Replaced by the before/after intelligence evaluation. |
-| RAMP-B progress persistence | ACCEPTED | Already implemented and manually verified. |
-| RAMP-C feedback/manager visibility | DEFERRED | Product feedback is valuable, but generator quality must first be credible. |
-| RAMP-D polish | DEFERRED | Must be driven by actual customer usage. |
+Do not treat directory/module enumeration as feature/workflow understanding.
 
-Existing progress and Ask capabilities should be retained where compatible with the redesigned model.
+Do not emit a first coding task unless the contribution hard gates in `docs/product/ramp-candidate-scoring.md` are satisfied.
 
----
-
-# 10. Customer validation
-
-Validation begins as soon as the redesigned Ramp is credible enough to put in front of a real engineer.
-
-Primary question:
-
-> Does Ramp help a real engineer understand an unfamiliar codebase and begin meaningful work faster than the team's normal onboarding process?
-
-Hypotheses:
-
-1. Evidence-backed guidance reduces time-to-context.
-2. Role-specific paths are more useful than generic onboarding.
-3. Evidence transparency increases trust.
-4. Action-oriented steps outperform passive recommendations.
-5. Managers value reduced senior-engineer onboarding effort and credible progress visibility.
-
-Do not treat internal demos or generated-plan quality as proof of product-market fit.
-
----
-
-# 11. Deferred technical debt
-
-| ID | Item | Priority | Status |
-|---|---|---:|---|
-| TECH-001 | Deleted-file lifecycle in codebase knowledge graph | P1 | DEFERRED |
-| TECH-002 | Large GitHub push batching/orchestration | P1 | DEFERRED |
-| TECH-003 | Repository uniqueness migration | P1 | DEFERRED |
-| TECH-004 | Live Supabase schema vs repository SQL reconciliation | P0 | PLANNED |
-| TECH-005 | RLS/security policy reconciliation | P0 | PLANNED |
-| TECH-006 | Canonical Supabase migration workflow | P0 | PLANNED |
-| TECH-007 | Further Redis reliability optimization | P2 | DEFERRED |
-
-Do not reopen these unless a concrete customer-facing blocker appears or the planned reconciliation milestone is reached.
-
----
-
-# 12. Documentation map
-
-| Document | Purpose |
-|---|---|
-| `docs/product/ramp-prd.md` | Customer problem, product contract, MVP scope, success criteria. |
-| `docs/product/ramp-redesign.md` | Target Ramp intelligence model and active redesign execution plan. |
-| `docs/product/ramp-intelligence-model.md` | RID-01/02/03 evidence model, current evidence inventory, and real KMS proof. |
-| `docs/product/ramp-candidate-scoring.md` | RID-04 deterministic candidate eligibility, scoring, sequencing, and contribution gate. |
-| `docs/architecture/ramp.md` | Technical architecture and migration strategy. |
-| `docs/decisions/ADR-003-deterministic-ramp.md` | Decision and clarified scope for deterministic/evidence-first generation. |
-| `docs/development/roadmap.md` | Canonical execution ledger and current task state. |
-
----
-
-# 13. Change log
-
-| Date | Agent/person | Change | Verification |
-|---|---|---|---|
-| 2026-08-31 | ChatGPT/Copilot | Established Ramp product/implementation roadmap and reliability foundation tracking. | Recorded in prior roadmap. |
-| 2026-09-12 | ChatGPT | Reviewed current Ramp architecture and identified module-first generation as the primary product defect. | Repository implementation reviewed against PRD and architecture docs. |
-| 2026-09-12 | ChatGPT | Added `docs/product/ramp-redesign.md`. | Committed to `feat/ramp`. |
-| 2026-09-12 | ChatGPT | Reworked Ramp architecture and deterministic-generation decision around outcome-first reasoning. | Committed to `feat/ramp`. |
-| 2026-09-12 | ChatGPT | Added `docs/product/ramp-intelligence-model.md` with RID-01/02/03 baseline and KMS GitHub-ingestion proof. | Repository source reviewed; contribution candidate intentionally left unqualified. |
-| 2026-09-12 | ChatGPT | Added `docs/product/ramp-candidate-scoring.md` and accepted RID-04. | Deterministic gates/scoring/sequence rules reviewed against the KMS proof. |
-| 2026-09-12 | ChatGPT | Advanced RID-05 as the next implementation task. | Recorded in this roadmap. |
-
----
-
-# 14. Immediate next action
-
-**RID-05 — Narrow implementation slice.**
-
-Do not implement the whole redesign.
-
-The next engineering task is to create the smallest internal candidate/evidence path capable of producing one real workflow-oriented learning step for the KMS GitHub ingestion chain, while preserving the existing Ramp API/persistence contracts.
-
-Only after RID-05 is verified should we run RID-06 before/after evaluation and decide whether broader workflow extraction is justified.
+Do not accept implementation based solely on agent reports; verify tests and real evidence paths.
