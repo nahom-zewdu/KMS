@@ -32,7 +32,7 @@ class RampStore:
         self.supabase.table("ramp_plans").upsert(record, on_conflict="company_id,role").execute()
 
     def get_active(self, company_id: str, role: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """Return the active plan and optionally hydrate user progress."""
+        """Return the active plan in the shape expected by the Ramp API."""
         response = (
             self.supabase.table("ramp_plans")
             .select("*")
@@ -46,11 +46,22 @@ class RampStore:
         if not rows:
             return None
         row = rows[0]
-        plan = dict(row)
+        plan = {
+            "id": row.get("id"),
+            "company_id": row.get("company_id"),
+            "role": row.get("role"),
+            "employee_name": row.get("employee_name"),
+            "title": row.get("title") or f"Ramp — {row.get('role')}",
+            "steps": row.get("steps") or [],
+            "meta": row.get("meta") or {},
+            "is_active": row.get("is_active", True),
+            "created_at": row.get("created_at"),
+            "updated_at": row.get("updated_at"),
+        }
         if user_id:
             progress = self.progress_for_plan(str(row["id"]), company_id, user_id)
             plan["progress"] = progress
-            for step in plan.get("steps") or []:
+            for step in plan["steps"]:
                 item = progress.get(str(step.get("id")))
                 step["progress"] = item
                 step["status"] = item.get("status", "not_started") if item else "not_started"
