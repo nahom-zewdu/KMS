@@ -339,6 +339,18 @@ class TestWorkflowCandidates:
     def setup_method(self):
         self.generator = RampPlanGenerator(supabase=Mock())
 
+    def test_workflow_candidate_construction_uses_real_github_integration_evidence(self):
+        candidate = self.generator.build_github_ingestion_workflow_candidate(company_id="company-123", role="backend")
+
+        assert candidate.candidate_type == "workflow-learning"
+        assert "GitHub webhook" in candidate.objective
+        assert "api/handlers/github.go" in candidate.implementation_refs
+        assert "api/services/github.go" in candidate.implementation_refs
+        assert "api/services/core.go" in candidate.implementation_refs
+        assert candidate.concrete_action
+        assert candidate.verification_method
+        assert candidate.evidence_refs
+
 
 class TestRampStepProgress:
     def setup_method(self):
