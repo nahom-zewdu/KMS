@@ -1,370 +1,175 @@
-# Ramp Intelligence Model — Evidence, Candidates, and First Proof
+# Ramp Intelligence Model — Evidence to Engineering Outcomes
 
-**Status:** Discovery baseline accepted / implementation not started
+**Status:** Active implementation baseline
 **Branch:** `feat/ramp`
 **Last updated:** 2026-09-12
-**Scope:** RID-01, RID-02, RID-03
+**Scope:** RID-01 through RID-05
 
-## 1. Purpose
+## 1. Product question
 
-This document turns the Ramp redesign into an implementable reasoning model and proves the model against the KMS repository itself.
+> Given everything KMS knows about a company and a new engineer's role, what is the smallest sequence of understanding and real work that gets that engineer to their first safe, meaningful contribution?
 
-The objective is not to make the current generator's prose smarter. The objective is to establish the minimum evidence chain required for Ramp to recommend a meaningful learning or contribution outcome.
+A Ramp step is a bounded learning/work outcome. It is not a module, directory, feature, technology, or file.
 
-The core chain is:
+---
 
-```text
-company evidence
-  → capability / feature
-  → workflow / behavior
-  → implementation surface
-  → role relevance
-  → learning outcome
-  → contribution candidate (only when evidence permits)
-```
-
-A broken link must be visible. The generator must not silently invent the missing link.
-
-## 2. RID-01 — Target evidence model
-
-The internal model should remain small and composable. These are reasoning objects, not necessarily new database tables.
-
-### 2.1 Company context
+## 2. Knowledge model
 
 ```text
-CompanyContext
-- company_id
-- repositories
-- available_people
-- available_documents
-- available_history
+COMPANY
+├── repositories / modules / files
+├── implementation relationships
+├── capabilities / workflows
+├── people / ownership
+├── Git history / PRs / changes
+├── documentation / decisions / incidents
+└── tests / verification signals
 ```
 
-All downstream evidence must remain company-scoped.
+These are evidence entities. Ramp reasons over them; it does not turn each entity into a step.
 
-### 2.2 Implementation surface
-
-```text
-ImplementationSurface
-- id / stable reference
-- repository_id
-- path
-- module_path
-- symbol (optional)
-- kind: repository | module | file | symbol | route | handler | service | component | test
-- language (optional)
-- description (optional)
-- importance (optional)
-```
-
-Files and modules are evidence-bearing implementation entities. They are not automatically Ramp steps.
-
-### 2.3 Relationship evidence
-
-```text
-ImplementationRelation
-- source
-- target
-- relation: calls | imports | handles | publishes | consumes | persists | tests | part_of | depends_on
-- evidence_reference
-- confidence
-```
-
-Only mechanically derivable or explicitly stored relationships should be treated as factual relationships.
-
-### 2.4 Capability / feature
-
-```text
-CapabilityCandidate
-- id
-- name
-- description
-- implementation_refs[]
-- evidence_refs[]
-- confidence
-```
-
-A capability describes what the system provides or accomplishes. It must be supported by implementation, documentation, history, or other company evidence.
-
-### 2.5 Workflow
-
-```text
-WorkflowCandidate
-- id
-- name
-- trigger
-- stages[]
-- implementation_refs[]
-- data/event_refs[]
-- evidence_refs[]
-- confidence
-```
-
-A workflow describes behavior across boundaries. It is stronger than a list of neighboring directories.
-
-### 2.6 Human/change context
-
-```text
-OwnershipSignal
-- subject_ref
-- person_ref
-- source
-- confidence
-
-HistorySignal
-- subject_ref
-- commit/pr/issue reference
-- author
-- changed_surface[]
-- recency
-```
-
-Ownership and history are supporting signals for role relevance, help, risk, and change patterns. They must not be fabricated when unavailable.
-
-### 2.7 Risk and verification
-
-```text
-RiskSignal
-- subject_ref
-- level: low | medium | high | unknown
-- reason
-- evidence_refs[]
-
-VerificationSignal
-- subject_ref
-- method: test | endpoint | command | observable_behavior | review | unknown
-- evidence_refs[]
-```
-
-Path names such as `core`, `auth`, or `payment` are not sufficient evidence for business risk. They may be weak hints until stronger evidence exists.
-
-### 2.8 Role relevance
-
-```text
-RoleRelevance
-- role
-- subject_ref
-- score
-- signals[]
-- evidence_refs[]
-```
-
-Signals can include ownership, historical changes, implementation position in relevant workflows, explicit role metadata, and only secondarily path/technology hints.
-
-### 2.9 Learning outcome candidate
-
-```text
-LearningCandidate
-- id
-- objective
-- why_now
-- capability_refs[]
-- workflow_refs[]
-- implementation_refs[]
-- action
-- verification
-- help_refs[]
-- prerequisite_refs[]
-- evidence_refs[]
-- confidence
-```
-
-The candidate is the unit Ramp sequences. It is not a module.
-
-### 2.10 Contribution candidate
-
-```text
-ContributionCandidate
-- id
-- problem_or_improvement
-- implementation_refs[]
-- expected_change
-- verification
-- risk
-- ownership_refs[]
-- history_refs[]
-- evidence_refs[]
-- confidence
-```
-
-A contribution candidate is valid only when its implementation surface, change target, verification path, risk, and reasonable help signal are sufficiently supported.
+---
 
 ## 3. Evidence strength
 
-Use a simple explicit evidence classification during the first implementation:
+Every signal is classified as:
 
-| Level | Meaning | Allowed use |
-|---|---|---|
-| `direct` | Explicitly present in code/data/document/history | State as fact |
-| `derived` | Mechanically derived from direct evidence | State with traceability |
-| `inferred` | Plausible interpretation requiring judgment | Explain as inference; do not present as fact |
-| `missing` | KMS cannot establish it | Qualify or abstain |
+- `direct` — explicitly represented by a KMS record or directly observed source fact;
+- `derived` — mechanically derived from direct records;
+- `inferred` — a plausible interpretation that still requires verification;
+- `missing` — KMS does not currently support the claim.
 
-The first generator implementation should prefer `direct` and `derived` evidence. `inferred` evidence can help ranking/explanation but cannot unlock a contribution candidate by itself.
+An inferred workflow shape may create a learning candidate, but it must be presented as a hypothesis to verify. Inferred evidence never qualifies an autonomous first-contribution candidate.
 
-## 4. RID-02 — Current KMS evidence inventory
+---
 
-The current repository already provides useful evidence, but the coverage is uneven.
+## 4. Internal reasoning objects
 
-| Target signal | Current KMS evidence | Strength | Current limitation |
-|---|---|---|---|
-| Company scope | `company_id` on ingestion/storage and Ramp queries | Direct | Some legacy/default paths remain |
-| Repository | `repositories` and repository-scoped codebase files | Direct | Depends on baseline/index state |
-| Module | `codebase_modules.module_path`, importance, metadata | Direct | Module semantics are not behavior |
-| File | `codebase_files.file_path`, module, language, author, repository | Direct | Key-file selection is currently shallow |
-| Ownership | `edges` with `type=OWNS`, entity lookup; `last_author` | Direct | Coverage depends on indexed KG/history |
-| Importance | `codebase_modules.importance_score` | Direct | Importance is not role relevance |
-| Architecture | file path grouping in Visualizer | Derived | Mostly directory topology |
-| Role relevance | role/path keyword boost plus module importance | Derived/weak | Not yet responsibility/workflow based |
-| Risk | Visualizer path keyword heuristics | Inferred/weak | Not reliable business-risk evidence |
-| Implementation relationships | Code contains actual call/storage/publish chains | Direct in source; not yet normalized for Ramp | No dedicated Ramp relationship extraction layer |
-| Workflow | Can be reconstructed from source code | Derived by human review | Not yet represented as a first-class candidate |
-| Git history | GitHub repository history exists externally | Direct when retrieved | Not currently consumed by Ramp generator |
-| PR/change pattern | GitHub PR/commit data can provide it | Direct when retrieved | Not currently consumed by Ramp generator |
-| Tests/verification | Test files exist in repository where present | Direct when indexed/retrieved | Not yet connected to Ramp candidates |
-| Contribution opportunity | No reliable first-class candidate model yet | Missing | Must not be fabricated |
+The implementation uses four core layers:
 
-### Important conclusion
+### Evidence
 
-KMS already contains enough raw material to prove the **workflow and implementation** part of the model manually. It does not yet contain enough normalized evidence to automatically produce high-confidence contribution candidates.
+`Evidence` identifies the source, strength, detail, repository, module, and metadata for a company fact.
 
-That is a useful boundary, not a failure.
+### ImplementationSurface
 
-## 5. RID-03 — Real KMS proof
+`ImplementationSurface` represents an indexed file with repository/module/language/importance/history metadata.
 
-The first proof uses a backend engineer role and the GitHub ingestion path because the current repository contains a concrete implementation chain.
+### WorkflowCandidate
 
-### 5.1 Capability
+A behavioral candidate derived from multiple implementation surfaces. It contains evidence refs, signals, confidence, role relevance, action, verification, risk, and prerequisites.
 
-**Capability candidate:** ingest GitHub engineering events into KMS for downstream knowledge processing.
+### RampCandidate
 
-Evidence:
+The common candidate representation used by deterministic gates, scoring, and sequencing.
 
-- `api/handlers/github.go` receives GitHub webhook requests, validates the request, extracts event information, and delegates ingestion. cite-internal:github-handler
-- `api/services/github.go` validates the GitHub ingest request and delegates to the shared core ingestion service. cite-internal:github-service
-- `api/services/core.go` stores the event and summarized content and publishes a job to Redis for Python processing. cite-internal:core-ingest
+The public Ramp step is produced only after candidate selection.
 
-### 5.2 Workflow
+---
 
-**Workflow candidate:**
+## 5. Deterministic pipeline
+
+```text
+KMS indexed knowledge
+        ↓
+RampEvidenceStore
+        ↓
+normalized Evidence + ImplementationSurface
+        ↓
+WorkflowDiscoverer / role relevance
+        ↓
+WorkflowCandidate
+        ↓
+RampCandidateEngine
+        ↓
+hard gates → weighted score → prerequisites → sequence
+        ↓
+RampPlanner
+        ↓
+RampStore
+        ↓
+existing API / frontend contract
+```
+
+The planner has no inheritance relationship with the former module-first generator.
+
+---
+
+## 6. Current implementation
+
+The new implementation lives under `nlp/ramp/`:
+
+- `models.py` — normalized reasoning objects;
+- `evidence.py` — company-scoped evidence access;
+- `workflows.py` — behavioral workflow candidate discovery;
+- `candidates.py` — deterministic eligibility, scoring, and sequencing;
+- `store.py` — persistence/progress boundary;
+- `generator_v2.py` — `RampPlanner`, the production intelligence entrypoint.
+
+`nlp/api.py` instantiates `RampPlanner` directly.
+
+The historical module-first intelligence implementation has been removed. The `generator.py` module is now only a compatibility import surface and contains no legacy intelligence.
+
+---
+
+## 7. First workflow proof
+
+KMS has a concrete GitHub ingestion behavior that can support a backend learning outcome:
 
 ```text
 GitHub webhook
-  → signature / request validation
-  → GitHub event normalization
-  → Core ingestion validation
-  → idempotency check
-  → events persistence
-  → raw_data persistence
-  → Redis job publication
-  → downstream Python processing
+ → request/signature validation
+ → event validation
+ → core ingestion
+ → idempotency check
+ → events persistence
+ → raw_data persistence
+ → Redis github_jobs publication
 ```
 
-This is a real behavior chain, not a directory-name inference.
+The current normalized workflow discovery may identify this as a GitHub-ingestion candidate from indexed implementation structure. The workflow relationship itself remains an inferred signal until source-level relationship extraction is available.
 
-Evidence:
+Therefore the generated learning action explicitly requires source verification and records unsupported links as unknown.
 
-1. `GitHubHandler.HandleGitHubWebhook` checks the HTTP method, reads the body, verifies `X-Hub-Signature-256`, requires a delivery ID, and proceeds to event handling. cite-internal:github-handler
-2. `GitHubIngest.IngestGitHubEvent` requires source `github`, non-empty content, a delivery ID, and one of `push`, `pull_request`, or `issues`, then delegates to `CoreIngest.Ingest`. cite-internal:github-service
-3. `CoreIngest.Ingest` checks duplicate delivery IDs, requires a real company ID, stores the raw event in `events`, stores summarized content in `raw_data`, and publishes a `github_jobs` Redis message containing the company ID and payload. cite-internal:core-ingest
+---
 
-### 5.3 Implementation surface
+## 8. Candidate rules
 
-The relevant implementation surface for a backend engineer is not simply `api/handlers` or `api/services`.
+Learning candidates require company-scoped evidence, implementation surfaces, a concrete action, and an observable verification method. Risk and evidence strength are represented separately from relevance.
 
-It is the bounded chain:
+Contribution candidates require substantially stronger evidence: bounded change surface, verification path, controlled risk, credible help, and sufficient history/change precedent. The current planner intentionally emits no contribution candidate when those signals are missing.
+
+The score weights and thresholds are calibration parameters defined in `docs/product/ramp-candidate-scoring.md`.
+
+---
+
+## 9. LLM boundary
+
+LLM use is optional presentation support only. It may explain or compare already evidence-backed candidates.
+
+It may not:
+
+- invent company facts;
+- invent files, owners, workflows, or architecture;
+- upgrade inferred evidence to direct evidence;
+- qualify a contribution that deterministic gates reject.
+
+---
+
+## 10. Next implementation frontier
+
+The next quality increase is **relationship evidence**, not more onboarding prose:
 
 ```text
-api/handlers/github.go
-        ↓
-api/services/github.go
-        ↓
-api/services/core.go
-        ↓
-Supabase: events + raw_data
-        ↓
-Redis: github_jobs
+indexed files/modules
+       ↓
+implementation relationships
+       ↓
+verified workflow structure
+       ↓
+change/history/verification evidence
+       ↓
+credible contribution candidates
 ```
 
-The key learning value is the behavior across these boundaries.
-
-### 5.4 Role relevance
-
-For a backend engineer, this surface is materially relevant because it contains HTTP handling, validation, persistence, and asynchronous job publication.
-
-Current evidence for this role is partly direct from implementation responsibility and partly derived from the role-to-surface relationship. The current production generator cannot establish this reasoning reliably because it primarily uses path/module ranking and role keywords.
-
-Therefore this proof establishes the desired reasoning shape, but not yet an automated role-relevance implementation.
-
-### 5.5 Learning outcome
-
-A strong Ramp candidate for this evidence would be:
-
-> **Trace one GitHub event from webhook entry through validation, persistence, and queue publication, and explain where failures or duplicate deliveries are stopped.**
-
-Why this is a better onboarding unit than `Learn api/handlers`:
-
-- it teaches a real system behavior;
-- it crosses implementation boundaries;
-- it has a bounded evidence set;
-- it exposes important backend responsibilities;
-- it gives the engineer a mental model they can reuse when debugging or changing ingestion.
-
-### 5.6 Contribution candidate
-
-**Current automated status: NOT QUALIFIED.**
-
-The repository source establishes the implementation and behavior, but the current Ramp evidence model does not yet have enough integrated history/change-pattern and verification signals to safely recommend a specific first coding change.
-
-We therefore must **not** turn this proof into an invented task such as "add better GitHub validation" or "improve ingestion".
-
-A future contribution candidate could become eligible if KMS can establish:
-
-```text
-concrete bounded problem
-+ exact implementation surface
-+ existing change/history precedent
-+ reliable test/verification path
-+ low/known risk
-+ credible owner/help
-```
-
-Until then, the correct Ramp outcome is readiness through workflow understanding.
-
-## 6. What this proves
-
-The redesign has a viable intelligence shape:
-
-```text
-Implementation evidence
-        ↓
-real workflow
-        ↓
-role-relevant surface
-        ↓
-bounded learning outcome
-        ↓
-contribution gate
-```
-
-It also exposes the first implementation gap precisely:
-
-> **KMS needs a lightweight evidence/relationship layer that can turn existing indexed codebase facts into workflow and candidate objects without requiring a universal code-understanding system.**
-
-## 7. Immediate implementation consequence
-
-Do not rewrite `RampPlanGenerator` yet.
-
-The first code slice should build the smallest internal representation needed to express the proof above, using existing KMS data and deterministic extraction. It should be possible to produce a candidate whose evidence points to the real GitHub ingestion chain before adding broader feature inference.
-
-The next design task is RID-04: define the deterministic candidate scoring and sequencing rules over these objects.
-
-## 8. Source files reviewed for this proof
-
-- `nlp/ramp/generator.py` — current module-first generator.
-- `nlp/visualizer/service.py` — current structure/module/ownership/risk signals.
-- `api/handlers/github.go` — GitHub webhook boundary and validation.
-- `api/services/github.go` — GitHub-specific ingestion validation/delegation.
-- `api/services/core.go` — persistence, idempotency, and Redis publication.
-
-The current generator and Visualizer confirm that Ramp currently ranks modules and files and adds prose around them rather than constructing workflow outcomes. The ingestion files provide the first concrete cross-boundary behavior suitable for a redesigned Ramp candidate.
+Do not return to the old module-first generator or add compatibility adapters that recreate its behavior.
