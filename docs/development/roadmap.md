@@ -1,17 +1,15 @@
 # KMS Development Roadmap
 
-> **Canonical execution ledger for KMS product development.** The repository is the durable source of truth for work performed by ChatGPT, Copilot, Cursor, Claude, and humans.
+> Canonical execution ledger for KMS product development.
 
-**Last updated:** 2026-09-12  
-**Current branch:** `feat/ramp`  
-**Current milestone:** MVP-1 — New Engineer Ramp  
+**Last updated:** 2026-09-12
+**Current branch:** `feat/ramp`
+**Current milestone:** MVP-1 — New Engineer Ramp
 **Current objective:** Prove that Ramp can move a new engineer from unfamiliarity to useful, safe contribution faster than normal onboarding.
 
 ---
 
-## 1. Execution rules
-
-Task lifecycle:
+## Execution rules
 
 ```text
 PLANNED → SPECIFIED → IN_PROGRESS → IMPLEMENTED → VERIFIED → ACCEPTED
@@ -20,82 +18,61 @@ PLANNED → SPECIFIED → IN_PROGRESS → IMPLEMENTED → VERIFIED → ACCEPTED
                               └→ REJECTED
 ```
 
-An agent reporting success is not verification. `ACCEPTED` requires review against acceptance criteria plus appropriate tests/build/manual verification.
-
-Every implementation task must record task ID, status, owner/agent, repository/branch, acceptance criteria, verification, changes, and material decisions.
-
-Agents must receive only the scope needed for the current task. Newly discovered work is recorded separately rather than silently added to the active task.
+Implementation is not verification. Acceptance requires appropriate tests, runtime/manual verification, and review against the task's acceptance criteria.
 
 ---
 
-# 2. Current product direction
+## Product direction
 
-Ramp is the first customer-facing KMS workflow. Its job is not to generate an attractive checklist. Its job is to reduce the time and senior-engineer effort required for a new engineer to understand an unfamiliar engineering system and begin meaningful work.
+Ramp is not an attractive checklist. It is an evidence-backed progression of bounded engineering outcomes that moves a new engineer from:
+
+```text
+ORIENT → BUILD MENTAL MODEL → UNDERSTAND ROLE SURFACE
+      → TRACE A REAL WORKFLOW → LEARN HOW CHANGES HAPPEN
+      → MAKE A SAFE CONTRIBUTION → BECOME INDEPENDENTLY USEFUL
+```
+
+The First 7 Days framing is a time horizon, not a requirement to produce seven filler steps.
 
 The central product question is:
 
-> **Given everything KMS knows about a company and a new engineer's role, what is the smallest sequence of understanding and real work that gets that engineer to their first safe, meaningful contribution?**
+> Given everything KMS knows about a company and a new engineer's role, what is the smallest sequence of understanding and real work that gets that engineer to their first safe, meaningful contribution?
 
-The First 7 Days framing is a time horizon, not a requirement to generate seven arbitrary steps.
-
-The canonical product contract remains in `docs/product/ramp-prd.md`.
-
-The intelligence model and redesign plan are in `docs/product/ramp-redesign.md` and `docs/product/ramp-intelligence-model.md`.
+A Ramp step is a learning/work outcome, not a module, directory, feature, technology, or file. Those are evidence and implementation entities that a step may reference.
 
 ---
 
-# 3. Current status
+## Current status
 
 | Area | Status | Notes |
 |---|---|---|
 | Reliability Batch 1 | ACCEPTED | Tenant/failure semantics hardened. |
 | Reliability Batch 2 | ACCEPTED | Redis pending-message recovery/ACK semantics hardened. |
-| Reliability Batch 3 | ACCEPTED | Durable codebase-analysis job lifecycle and failure propagation. |
-| Ramp generation foundation | ACCEPTED | Company/role scope, stable IDs, evidence/resource resolution, ownership signals. |
-| Ramp progress | ACCEPTED | User-specific step progress persists and hydrates. |
-| Ramp contextual Ask | IMPLEMENTED / VERIFYING | Structured question/context path exists; live end-to-end verification remains required before acceptance. |
-| Ramp frontend rendering compatibility | IN_PROGRESS | Current generated target files use richer objects while older plans may contain strings; normalize at the UI boundary. |
-| RID-01 target evidence model | ACCEPTED | Minimum reasoning objects/signals defined. |
-| RID-02 current evidence inventory | ACCEPTED | Existing KMS evidence mapped with strength and limitations. |
-| RID-03 real KMS proof | ACCEPTED | GitHub ingestion workflow proves the intended feature → workflow → implementation → role → learning chain; contribution gate remains unqualified. |
-| **RID-04 candidate scoring + sequencing** | **ACCEPTED** | Deterministic eligibility, scoring, prerequisite ordering, redundancy, and contribution gates defined. |
-| **RID-05 narrow implementation slice** | **IMPLEMENTED / VERIFYING** | Added an evidence-first generator that derives a workflow candidate from company-scoped indexed files/modules/history; API now uses it. Runtime test execution is still required before acceptance. |
-| RID-06 before/after evaluation fixture | PLANNED | Must demonstrate actual quality improvement. |
-| Customer validation | NOT STARTED | Begins as soon as a credible redesigned Ramp slice exists. |
-| Live DB/schema reconciliation | PLANNED | Live Supabase schema is ahead of repository SQL. Not a blocker unless current work requires it. |
+| Reliability Batch 3 | ACCEPTED | Durable codebase-analysis lifecycle and failure propagation. |
+| Ramp progress | ACCEPTED | User-specific progress persists and hydrates. |
+| Ramp contextual Ask | IMPLEMENTED / VERIFYING | Structured question/context path exists; live worker verification remains required. |
+| Ramp frontend rendering compatibility | IN PROGRESS | Normalize historical/current target-file shapes at the UI boundary. |
+| RID-01 evidence model | ACCEPTED | Target reasoning objects and evidence strength defined. |
+| RID-02 evidence inventory | ACCEPTED | Existing KMS evidence and limitations mapped. |
+| RID-03 real KMS proof | ACCEPTED | GitHub ingestion demonstrates a real workflow proof; contribution remains unqualified. |
+| RID-04 candidate scoring + sequencing | ACCEPTED | Gates, scoring, prerequisites, risk, explainability defined. |
+| RID-05 clean Ramp intelligence rewrite | IN_PROGRESS | Legacy module-first intelligence is being replaced, not incrementally decorated. |
+| RID-06 evaluation fixture | PLANNED | Before/after quality measurement after the new planner is coherent. |
+| Customer validation | NOT STARTED | Begins once the new planner produces credible company-specific outcomes. |
+| Live DB/schema reconciliation | PLANNED | Live Supabase schema is ahead of repo SQL; not a current Ramp blocker. |
 | RLS/security reconciliation | PLANNED | Required before broad customer exposure. |
-| Canonical migration workflow | PLANNED | Required before schema changes accumulate. |
+| Canonical migration workflow | PLANNED | Required before future schema changes accumulate. |
 
 ---
 
-# 4. Completed Ramp foundation
+## Ramp rewrite decision
 
-## Ramp generation foundation
+The previous implementation strategy was incremental extension of `RampPlanGenerator`. That strategy is now rejected.
 
-The existing generator provides company/role-scoped plans, stable deterministic step identity, repository/file evidence resolution, ownership signals, risk tiers, structured step fields, and role-aware prioritization.
-
-## Ramp progress
-
-Implemented backend persistence and frontend workspace behavior for user-specific `not_started`, `in_progress`, and `completed` step state, including API proxying and optimistic UI behavior. Manual persistence was confirmed.
-
-## Ramp contextual Ask
-
-The frontend sends a user question plus current-step context. The backend/query engine is designed to retrieve using the actual question while treating Ramp context as interpretation-only context, not evidence. The remaining acceptance requirement is live verification that the worker receives the fields separately and retrieval is performed only against the actual question.
-
-## Known frontend compatibility issue
-
-Historical Ramp plans may represent `target.files` as strings while current plans may represent files as objects containing path/repository/module/GitHub metadata. The frontend must normalize this boundary rather than rendering objects directly.
-
----
-
-# 5. Critical redesign decision
-
-The previous plan treated **Batch A — Make the Step Useful** as the next implementation batch. That is now superseded.
-
-The current generator is primarily a **module/directory selection algorithm dressed as onboarding**:
+The old generator was fundamentally module/directory-first:
 
 ```text
-modules + files + ownership + importance + path heuristics + role keywords
+modules + files + ownership + importance + path heuristics
                     ↓
              rank modules
                     ↓
@@ -104,45 +81,38 @@ modules + files + ownership + importance + path heuristics + role keywords
              generate prose
 ```
 
-This is not sufficient for the product outcome. Adding more `why`, `do`, `done_when`, or resource fields to the same selection algorithm would improve presentation while preserving the underlying conceptual failure.
+Adding more fields or adapters around that architecture would preserve the wrong abstraction and increase legacy coupling.
 
-Therefore:
+**Decision:** rewrite the Ramp intelligence layer around normalized evidence, behavioral workflow candidates, deterministic gates/scoring/sequencing, and a thin persistence/API boundary. Preserve working infrastructure and external data/API contracts only where they are actually useful.
 
-> **Do not continue implementing generator features until the Ramp intelligence model has been specified and evaluated against a real repository.**
-
-See `docs/product/ramp-redesign.md`, `docs/product/ramp-intelligence-model.md`, and `docs/architecture/ramp.md`.
+The old intelligence implementation has been removed from the production path. `RampPlanner` is the new intelligence entrypoint.
 
 ---
 
-# 6. Active phase — Ramp Intelligence Discovery
+## RID-01 — Target evidence model — ACCEPTED
 
-RID-01 through RID-04 are now complete as a discovery/design baseline. Their durable outputs are:
-
-- `docs/product/ramp-intelligence-model.md`
-- `docs/product/ramp-candidate-scoring.md`
-
-## RID-01 — Define target evidence model — ACCEPTED
-
-Defined minimum internal reasoning objects for company context, implementation surfaces, relationships, capabilities, workflows, ownership/history, risk/verification, role relevance, learning candidates, and contribution candidates.
-
-Key decision: entities such as modules/files/features are evidence objects; the Ramp step is a bounded learning/work outcome.
+Defined internal reasoning objects for company context, implementation surfaces, implementation relationships, capabilities, workflows, ownership/history, risk/verification, role relevance, learning candidates, and contribution candidates.
 
 Evidence strength is explicitly classified as `direct`, `derived`, `inferred`, or `missing`.
 
-## RID-02 — Inventory current KMS evidence — ACCEPTED
+---
 
-Mapped current evidence sources and limitations. KMS already has company/repository/file/module/ownership signals and actual source-code behavior that can support a workflow proof. It does not yet expose a normalized Ramp relationship/candidate layer, and Ramp does not currently consume Git history/PR patterns/tests as integrated contribution evidence.
+## RID-02 — Current evidence inventory — ACCEPTED
 
-Key conclusion: do not invent missing intelligence. Build the smallest evidence layer that closes the highest-value gap.
+KMS already provides company-scoped repositories/files/modules, ownership signals, GitHub-derived history, and source-code-backed ingestion behavior. It does not yet provide a normalized Ramp intelligence graph containing reliable workflow relationships, change precedent, and verification evidence.
 
-## RID-03 — Real KMS end-to-end example — ACCEPTED
+Do not invent missing intelligence. Extract what KMS actually knows and represent uncertainty explicitly.
 
-The KMS GitHub ingestion path provides the first concrete proof:
+---
+
+## RID-03 — Real KMS workflow proof — ACCEPTED
+
+The GitHub ingestion path provides the first concrete behavioral proof:
 
 ```text
 GitHub webhook
   → request/signature validation
-  → GitHub event validation
+  → event validation
   → core ingestion
   → idempotency check
   → events persistence
@@ -150,139 +120,99 @@ GitHub webhook
   → Redis github_jobs publication
 ```
 
-This supports a backend onboarding outcome such as:
+This supports a backend learning outcome such as tracing one GitHub event through those boundaries and explaining where invalid or duplicate deliveries are stopped.
 
-> Trace one GitHub event from webhook entry through validation, persistence, and queue publication, and explain where failures or duplicate deliveries are stopped.
+It does **not** yet justify an autonomous first coding task because bounded-change, history, ownership, and verification evidence are not sufficiently integrated.
 
-The contribution candidate is deliberately **not qualified** yet. The source proves implementation behavior, but the integrated history + verification + bounded-change evidence needed for a safe first coding task is not currently part of the Ramp candidate model.
+---
 
-## RID-04 — Candidate scoring and sequence rules — ACCEPTED
+## RID-04 — Candidate scoring + sequencing — ACCEPTED
 
-Defined deterministic hard gates, learning relevance scoring, contribution readiness scoring, prerequisite-aware sequence construction, redundancy penalties, stage ordering, explainability metadata, and conservative contribution eligibility.
+Defined deterministic learning gates, weighted scoring, contribution readiness gates, prerequisite ordering, stage progression, redundancy handling, risk blocking, and explainability metadata.
 
-Key decisions:
+Important decisions:
 
-- hard gates precede scoring;
+- gates precede scores;
 - contribution readiness is separate from learning relevance;
-- risk can block first contribution regardless of relevance;
+- inferred evidence may support learning but never qualifies an unsupported contribution;
 - prerequisite-aware selection replaces global top-N module ranking;
 - shorter meaningful Ramps beat seven-step filler;
-- deterministic selection metadata must survive into the generated plan;
-- the LLM may explain evidence-backed candidates but cannot override factual eligibility or invent company knowledge.
-
-Exact weights and thresholds are calibration parameters, not permanent product truths.
-
-## RID-05 — Narrow implementation slice — IMPLEMENTED / VERIFYING
-
-Implemented the smallest current evidence-first path for one workflow-oriented learning candidate:
-
-```text
-company-scoped codebase_files
-          + codebase_modules
-          + GitHub raw_data history
-                    ↓
-          deterministic evidence adapter
-                    ↓
-          workflow signals + implementation refs
-                    ↓
-          learning eligibility gate
-                    ↓
-          deterministic score + metadata
-                    ↓
-          existing Ramp step contract
-```
-
-The implementation lives in `nlp/ramp/evidence_generator.py` and is exposed through the existing `/ramp-plans/generate` endpoint. It deliberately does **not** add a database schema, universal AST analysis, semantic candidate embeddings, or contribution generation.
-
-Important boundary: workflow labels such as webhook/handler/service/ingest/redis are derived from indexed codebase vocabulary and are marked as inferred workflow signals. The generator does not claim relationships that are absent from the indexed evidence. If the index cannot provide enough implementation/workflow evidence, it returns an explicit empty plan instead of falling back to hardcoded customer facts.
-
-A focused test file, `nlp/tests/test_ramp_evidence.py`, covers indexed-path derivation, evidence metadata, insufficient-evidence refusal, and company scoping.
-
-**Verification still required:** run the focused RID-05 tests plus the existing Ramp generator suite in the backend environment. Do not mark RID-05 `ACCEPTED` until those tests pass and a real company-scoped generation smoke test confirms the selected step's evidence comes from Supabase-indexed records.
-
-## RID-06 — Before/after evaluation fixture — PLANNED
-
-After RID-05, compare old and redesigned output on meaningfulness, role relevance, workflow coherence, evidence strength, actionability, contribution readiness, unsupported claims, and cognitive load.
-
-**Acceptance:** The fixture can expose whether the redesign is genuinely better, not merely more verbose.
+- deterministic metadata survives into the generated plan;
+- LLM output may explain evidence but cannot invent or override company facts.
 
 ---
 
-# 7. Target Ramp model
+# RID-05 — Clean Ramp intelligence rewrite — IN PROGRESS
 
-A Ramp is an **evidence-backed progression of engineering outcomes**.
-
-A step is a **bounded learning/work outcome**. It is not a module, directory, feature, technology, or file.
-
-A step may reference those entities as evidence.
-
-Default progression:
+### Architecture
 
 ```text
-Orient
-  ↓
-Build mental model
-  ↓
-Understand role surface
-  ↓
-Trace a real workflow
-  ↓
-Learn how changes happen
-  ↓
-Make a safe contribution
-  ↓
-Become independently useful
+KMS indexed knowledge
+        ↓
+  RampEvidenceStore
+        ↓
+ normalized evidence
+        ↓
+ WorkflowDiscoverer + role reasoning
+        ↓
+  RampCandidateEngine
+        ↓
+ gates → score → prerequisites → sequence
+        ↓
+     RampPlanner
+        ↓
+   RampStore / API contract
 ```
 
-A generated step should provide, as applicable:
+### Implemented slices
 
-- objective;
-- why now;
-- system/workflow context;
-- supporting evidence;
-- concrete action;
-- verification/done-when;
-- credible help/ownership;
-- next capability unlocked.
+- `nlp/ramp/models.py` — typed evidence, implementation, workflow, and candidate models.
+- `nlp/ramp/evidence.py` — company-scoped extraction from `codebase_files`, `codebase_modules`, `edges`, and GitHub `raw_data`.
+- `nlp/ramp/workflows.py` — workflow candidate discovery over normalized implementation evidence; inferred relationships remain explicitly inferred.
+- `nlp/ramp/candidates.py` — deterministic gates, scoring, contribution gate, prerequisite-aware selection.
+- `nlp/ramp/store.py` — isolated plan/progress persistence boundary.
+- `nlp/ramp/generator_v2.py` — new Ramp planner; no inheritance from the legacy generator.
+- `nlp/api.py` — production Ramp endpoints now instantiate `RampPlanner`.
+- Legacy `evidence_generator.py` and legacy generator implementation have been removed from the production design.
 
-A contribution is **not mandatory**. If KMS lacks sufficient evidence for a safe, bounded change and verification path, it should stop at readiness rather than invent a task.
+### Current limitation
+
+The first rewrite slice still discovers workflows from indexed structural vocabulary. That is a deliberate uncertainty boundary, not a claim of full call-graph understanding. A workflow candidate must direct the engineer to verify relationships in source. The next implementation work is to increase the quality of normalized implementation relationships and workflow evidence rather than adding presentation prose.
+
+### Acceptance criteria
+
+RID-05 is accepted only when:
+
+1. the production API uses the new planner;
+2. no production Ramp intelligence inherits from the deleted module-first generator;
+3. company scoping is enforced at evidence extraction and persistence boundaries;
+4. selected steps are outcomes, not directory tours;
+5. evidence strength is truthful and uncertainty is explicit;
+6. prerequisite ordering is deterministic;
+7. unsupported contribution candidates are not emitted;
+8. stable step IDs and existing progress behavior continue to work;
+9. focused and relevant backend tests pass locally;
+10. a real populated company smoke test produces a coherent Ramp with customer-indexed evidence.
 
 ---
 
-# 8. Target intelligence architecture
+# RID-06 — Before/after evaluation fixture — PLANNED
 
-```text
-Company knowledge
-      ↓
-structural extraction
-      ↓
-implementation relationships
-      ↓
-feature / workflow inference
-      ↓
-role relevance
-      ↓
-learning / contribution candidates
-      ↓
-sequence + dependency reasoning
-      ↓
-evidence check
-      ↓
-Ramp steps
-      ↓
-LLM presentation / explanation
-```
+Compare the legacy output captured before the rewrite against the new planner using:
 
-Deterministic logic owns factual evidence, candidate identity, scoring, eligibility, risk, verification signals, company scoping, and traceability. LLM output may explain or compare already-supported candidates but cannot manufacture company facts.
+- meaningfulness;
+- role relevance;
+- workflow coherence;
+- evidence strength;
+- actionability;
+- unsupported claims;
+- cognitive load;
+- contribution readiness.
+
+The fixture should expose whether the redesign is genuinely better rather than merely longer or more structured.
 
 ---
 
-# 9. Deferred work / guardrails
+## Deferred infrastructure
 
-Do not expand into autonomous code changes, universal language AST support, a giant agent loop, semantic candidate selection, or schema redesign merely to make Ramp appear smarter.
-
-Do not treat directory/module enumeration as feature/workflow understanding.
-
-Do not emit a first coding task unless the contribution hard gates in `docs/product/ramp-candidate-scoring.md` are satisfied.
-
-Do not accept implementation based solely on agent reports; verify tests and real evidence paths.
+Live Supabase schema reconciliation, RLS/security hardening, and canonical migration workflow remain separate workstreams. Do not use them as reasons to preserve incorrect Ramp abstractions, and do not pull them into the Ramp rewrite unless the current implementation actually requires them.
