@@ -1,4 +1,3 @@
-# nlp/api.py
 """
 KMS Onboard API HTTP endpoints for playbook generation.
 """
@@ -9,14 +8,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from codebase.baseline import CodebaseBaselineSync
 from playbooks.generator import PlaybookGenerator
 from visualizer.service import VisualizerService
-from ramp.generator import RampPlanGenerator
+from ramp.evidence_generator import EvidenceRampPlanGenerator
 from utils.supabase import init_supabase
 import logging
 import uvicorn
 
 app = FastAPI(title="KMS Onboard API")
 supabase = init_supabase()
-ramp_generator = RampPlanGenerator(supabase)
+ramp_generator = EvidenceRampPlanGenerator(supabase)
 generator = PlaybookGenerator(supabase)
 
 # Add CORS middleware
