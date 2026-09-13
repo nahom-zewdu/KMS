@@ -6,7 +6,7 @@ Ramp candidates consume the normalized evidence produced here.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from supabase import Client
 
@@ -92,6 +92,73 @@ class RampEvidenceStore:
             return [row for row in (getattr(response, "data", []) or []) if isinstance(row, dict)]
         except Exception:
             return []
+
+    def implementation_relationships(self, company_id: str) -> List[Evidence]:
+        """Return graph relationships whose endpoints resolve to FILE entities.
+
+        PART_OF and OWNS are intentionally excluded: they establish containment
+        or ownership, not behavioral control/data flow between implementation surfaces.
+        """
+        if not company_id:
+            return []
+        try:
+            entities = (
+                self.supabase.table("entities")
+                .select("id, metadata")
+                .eq("company_id", company_id)
+                .eq("type", "FILE")
+                .limit(10000)
+                .execute()
+            )
+            edges = (
+                self.supabase.table("edges")
+                .select("id, source_id, target_id, type, confidence")
+                .eq("company_id", company_id)
+                .limit(20000)
+                .execute()
+            )
+        except Exception:
+            return []
+
+        file_paths: Dict[str, str] = {}
+        for row in getattr(entities, "data", []) or []:
+            if not isinstance(row, dict):
+                continue
+            metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+            path = str(metadata.get("file_path") or "").strip()
+            if path and row.get("id"):
+                file_paths[str(row["id"])] = path
+
+        result: List[Evidence] = []
+        for edge in getattr(edges, "data", []) or []:
+            if not isinstance(edge, dict):
+                continue
+            relation_type = str(edge.get("type") or "").upper()
+            source_path = file_paths.get(str(edge.get("source_id") or ""))
+            target_path = file_paths.get(str(edge.get("target_id") or ""))
+            if relation_type in {"PART_OF", "OWNS"} or not source_path or not target_path:
+                continue
+            try:
+                confidence = float(edge.get("confidence") or 0.0)
+            except (TypeError, ValueError):
+                confidence = 0.0
+            strength = "direct" if confidence >= 0.8 else "derived" if confidence >= 0.6 else "inferred"
+            result.append(
+                Evidence(
+                    ref=f"edge:{edge.get('id')}",
+                    source="edges",
+                    kind="implementation_relation",
+                    strength=strength,
+                    detail=f"{source_path} --{relation_type}--> {target_path}",
+                    metadata={
+                        "source_ref": source_path,
+                        "target_ref": target_path,
+                        "relation_type": relation_type,
+                        "confidence": confidence,
+                    },
+                )
+            )
+        return result
 
     def github_history(self, company_id: str) -> List[Dict[str, Any]]:
         """Return recent GitHub-derived raw knowledge for corroboration."""
