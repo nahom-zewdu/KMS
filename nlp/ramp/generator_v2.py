@@ -44,12 +44,16 @@ class RampPlanner:
         ownership = self.evidence.ownership(company_id)
         history = self.evidence.github_history(company_id)
         evidence = [self.evidence.evidence_for_surface(surface) for surface in surfaces]
+        evidence.extend(self.evidence.implementation_relationships(company_id))
 
         candidates = self._build_candidates(
             role_key, company_id, surfaces, modules, evidence, ownership, history
         )
         selected = self.engine.select(candidates)
-        steps = [self._serialize(candidate, role_key, company_id, index + 1) for index, candidate in enumerate(selected)]
+        steps = [
+            self._serialize(candidate, role_key, company_id, index + 1)
+            for index, candidate in enumerate(selected)
+        ]
 
         plan = {
             "company_id": company_id,
@@ -66,6 +70,9 @@ class RampPlanner:
                     "modules": len(modules),
                     "ownership_signals": len(ownership),
                     "github_history_records": len(history),
+                    "implementation_relationships": sum(
+                        1 for item in evidence if item.kind == "implementation_relation"
+                    ),
                 },
                 "candidate_count": len(candidates),
                 "selected_count": len(selected),
@@ -257,7 +264,7 @@ class RampPlanner:
         return {
             "orientation": "Map the engineering system",
             "role-surface": "Find your role's implementation surface",
-            "workflow-learning": f"Trace the {candidate.candidate_id.split(':')[1].replace('_', ' ')} workflow",
+            "workflow-learning": "Trace a connected implementation flow",
         }.get(candidate.candidate_type, "Understand a key engineering outcome")
 
     @staticmethod
