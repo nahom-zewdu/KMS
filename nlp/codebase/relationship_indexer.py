@@ -32,10 +32,11 @@ class ImplementationRelationshipIndexer:
         file_entity_ids = {
             path: self._file_entity_id(repo_full_name, company_id, path)
             for path in inventory
+            if path != "go.mod"
         }
         self._remove_existing_edges(list(file_entity_ids.values()), company_id)
 
-        now_edges = []
+        rows = []
         for relation in relations:
             source_id = file_entity_ids.get(relation.source_path)
             target_id = file_entity_ids.get(relation.target_path)
@@ -47,7 +48,7 @@ class ImplementationRelationshipIndexer:
                     f"implementation:{relation.relation_type}:{source_id}:{target_id}",
                 )
             )
-            now_edges.append(
+            rows.append(
                 {
                     "id": edge_id,
                     "source_id": source_id,
@@ -56,23 +57,19 @@ class ImplementationRelationshipIndexer:
                     "confidence": relation.confidence,
                     "created_at": self._now(),
                     "company_id": company_id,
-                    "metadata": {"source": "codebase_relationship_indexer"},
                 }
             )
 
-        if now_edges:
-            self.supabase.table("edges").upsert(
-                now_edges,
-                on_conflict="id",
-            ).execute()
+        if rows:
+            self.supabase.table("edges").upsert(rows, on_conflict="id").execute()
 
         logger.info(
             "Indexed %d implementation relationships for %s | company=%s",
-            len(now_edges),
+            len(rows),
             repo_full_name,
             company_id,
         )
-        return len(now_edges)
+        return len(rows)
 
     def _load_source_inventory(self, repo, company_id: str) -> list[dict[str, Any]]:
         """Load indexed source content and retain only repository-owned files."""
@@ -109,15 +106,8 @@ class ImplementationRelationshipIndexer:
             except (GithubException, UnicodeDecodeError, AttributeError) as exc:
                 logger.debug("Skipping unreadable source %s: %s", path, exc)
                 continue
-            inventory.append(
-                {
-                    "path": path,
-                    "language": row.get("language"),
-                    "content": text,
-                }
-            )
+            inventory.append({"path": path, "language": row.get("language"), "content": text})
 
-        # go.mod is required to resolve Go imports even though it is not a Go file.
         if any(item["language"] == "Go" for item in inventory):
             try:
                 go_mod = repo.get_contents("go.mod")
