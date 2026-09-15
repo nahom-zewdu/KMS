@@ -6,7 +6,7 @@ It creates REPOSITORY entities, FILE entities, and PART_OF relationships in the 
 and populates the codebase_files and codebase_modules tables in Supabase.
 The sync is designed to be idempotent and can be re-run safely.
 The main entry point is the `sync_repository` method, which takes a repository full name
-Creates REPOSITORY entity + codebase_files + PART_OF edges safely.  
+Creates REPOSITORY entity + codebase_files + PART_OF edges safely.
 """
 
 import logging
@@ -18,6 +18,8 @@ from typing import Dict
 from github import Github, GithubException
 from supabase import Client
 
+from codebase.relationship_indexer import ImplementationRelationshipIndexer
+
 logger = logging.getLogger(__name__)
 
 
@@ -25,6 +27,7 @@ class CodebaseBaselineSync:
     def __init__(self, supabase: Client):
         self.supabase = supabase
         self.gh = Github(os.getenv("GITHUB_API_TOKEN"))
+        self.relationship_indexer = ImplementationRelationshipIndexer(self.supabase, self.gh)
 
     def sync_repository(self, repo_full_name: str, company_id: str) -> bool:
         """Perform a full baseline sync for the given repository."""
@@ -122,6 +125,14 @@ class CodebaseBaselineSync:
             for mod_path, file_count in module_map.items():
                 self._create_module(mod_path, physical_repo_id, file_count, company_id)
 
+            relationship_count = self.relationship_indexer.index_repository(
+                repo_full_name, company_id
+            )
+            logger.info(
+                "Implementation relationship indexing complete: %d relationships",
+                relationship_count,
+            )
+
             logger.info(
                 f"Baseline sync complete: {files_processed} files, "
                 f"{len(module_map)} modules | company={company_id}"
@@ -131,7 +142,7 @@ class CodebaseBaselineSync:
         except Exception as e:
             logger.error(f"Baseline sync failed: {e}", exc_info=True)
             return False
-    
+
     def _build_author_map(self, repo, max_commits: int = 200) -> Dict[str, str]:
         """
         Walk recent commits (newest first). First time we see a file path wins = last author.
@@ -225,13 +236,7 @@ class CodebaseBaselineSync:
         if last_author:
             self._upsert_owns(last_author, file_entity_id, company_id, now)
 
-    def _upsert_owns(
-        self,
-        author: str,
-        file_entity_id: str,
-        company_id: str,
-        now: str,
-    ):
+    def _upsert_owns(self, author: str, file_entity_id: str, company_id: str, now: str):
         """PERSON + OWNS edge (same id scheme as analyzer)."""
         author_norm = str(author).strip().lower()
         if not author_norm:
@@ -285,7 +290,6 @@ class CodebaseBaselineSync:
 
     def _create_part_of_edge(self, repo_id: str, file_path: str, company_id: str):
         """Create deterministic PART_OF edge using UUID."""
-        # Use deterministic UUID based on repo + file_path
         edge_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"partof:{repo_id}:{file_path}"))
         file_entity_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"file:{repo_id}:{file_path}"))
 
@@ -316,7 +320,7 @@ class CodebaseBaselineSync:
                    "r": "R", "dart": "Dart", "erl": "Erlang", "ex": "Elixir", "exs": "Elixir",
                    "clj": "Clojure", "groovy": "Groovy",
                    "sql": "SQL", "tsv": "TSV", "csv": "CSV", "ini": "INI", "toml": "TOML",
-                   "bat": "Batch", "ps1": "PowerShell", "vbs": "VBScript", "f": "Fortran", "f90": "Fortran", 
+                   "bat": "Batch", "ps1": "PowerShell", "vbs": "VBScript", "f": "Fortran", "f90": "Fortran",
                    "f95": "Fortran", "f03": "Fortran", "f08": "Fortran", "f77": "Fortran", "f2k": "Fortran",
                    "ada": "Ada", "vhdl": "VHDL", "verilog": "Verilog", "asm": "Assembly", "s": "Assembly",
                    "ml": "OCaml", "mli": "OCaml", "nim": "Nim", "d": "D", "zig": "Zig", "rkt": "Racket", "lisp": "Lisp", "scm": "Scheme",
