@@ -79,13 +79,13 @@ def test_workflow_is_derived_from_connected_implementation_evidence():
     workflow = workflows[0]
     assert workflow.confidence == "derived"
     assert all(signal["kind"] == "derived" for signal in workflow.signals)
-    assert set(workflow.implementation_refs) == {
-        "api/github/webhook.go",
-        "api/github/service.go",
-        "repository/redis_stream.go",
-    }
+    assert "api/github/webhook.go" in workflow.implementation_refs
     assert workflow.name.endswith("implementation flow")
-
+    assert workflow.implementation_refs == [
+            "api/github/webhook.go",
+            "api/github/service.go",
+            "repository/redis_stream.go",
+        ]
 
 def test_weak_relationships_do_not_create_workflow_candidates():
     discoverer = WorkflowDiscoverer()
