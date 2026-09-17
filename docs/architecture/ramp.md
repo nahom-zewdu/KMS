@@ -82,6 +82,13 @@ Eligibility, risk, evidence strength, score, prerequisites, ordering, and contri
 - `store.py` — persistence/progress;
 - `generator_v2.py` — `RampPlanner` orchestration.
 
+`WorkflowDiscoverer` decomposes implementation evidence into deterministic directed
+paths rather than treating each weakly connected component as one workflow. Paths
+are limited to eight files and eight candidates per component; each candidate keeps
+only the relationship evidence on its path. Cycles use deterministic fallback
+starts, isolated surfaces are ignored, and weak-only relationships do not produce
+workflow candidates.
+
 `nlp/api.py` uses `RampPlanner` directly.
 
 `nlp/ramp/generator.py` contains no legacy intelligence; it is only a compatibility import surface. The historical `evidence_generator.py` has been removed.
