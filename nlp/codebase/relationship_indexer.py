@@ -26,13 +26,13 @@ class ImplementationRelationshipIndexer:
     def index_repository(self, repo_full_name: str, company_id: str) -> int:
         """Rebuild resolvable implementation relationships for one repository."""
         repo = self.github.get_repo(repo_full_name)
-        inventory = self._load_source_inventory(repo, company_id)
+        repository_rows = self._load_repository_rows(repo, company_id)
+        inventory = self._load_source_inventory(repo, repository_rows)
         relations = self.extractor.extract(inventory)
 
         file_entity_ids = {
-            path: self._file_entity_id(repo_full_name, company_id, path)
-            for path in inventory
-            if path != "go.mod"
+            row["file_path"]: self._file_entity_id(repo_full_name, company_id, row["file_path"])
+            for row in repository_rows
         }
         self._remove_existing_edges(list(file_entity_ids.values()), company_id)
 
@@ -71,8 +71,8 @@ class ImplementationRelationshipIndexer:
         )
         return len(rows)
 
-    def _load_source_inventory(self, repo, company_id: str) -> list[dict[str, Any]]:
-        """Load indexed source content and retain only repository-owned files."""
+    def _load_repository_rows(self, repo, company_id: str) -> list[dict[str, Any]]:
+        """Load all file records belonging to this tenant's physical repository."""
         rows = (
             self.supabase.table("codebase_files")
             .select("file_path,language,repository_id")
@@ -90,11 +90,18 @@ class ImplementationRelationshipIndexer:
         if not repo_row.data:
             return []
         repository_id = repo_row.data[0]["id"]
+        return [
+            row for row in (rows.data or [])
+            if row.get("repository_id") == repository_id and row.get("file_path")
+        ]
+
+    def _load_source_inventory(
+        self, repo, repository_rows: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Load readable Python/Go source content from repository file records."""
 
         inventory: list[dict[str, Any]] = []
-        for row in rows.data or []:
-            if row.get("repository_id") != repository_id:
-                continue
+        for row in repository_rows:
             path = row.get("file_path")
             if not path or row.get("language") not in {"Python", "Go"}:
                 continue
@@ -109,18 +116,22 @@ class ImplementationRelationshipIndexer:
             inventory.append({"path": path, "language": row.get("language"), "content": text})
 
         if any(item["language"] == "Go" for item in inventory):
-            try:
-                go_mod = repo.get_contents("go.mod")
-                if not isinstance(go_mod, list):
-                    inventory.append(
-                        {
-                            "path": "go.mod",
-                            "language": "GoModule",
-                            "content": go_mod.decoded_content.decode("utf-8"),
-                        }
-                    )
-            except (GithubException, UnicodeDecodeError, AttributeError):
-                pass
+            for row in repository_rows:
+                path = row.get("file_path")
+                if not path or not path.endswith("go.mod"):
+                    continue
+                try:
+                    go_mod = repo.get_contents(path)
+                    if not isinstance(go_mod, list):
+                        inventory.append(
+                            {
+                                "path": path,
+                                "language": "GoModule",
+                                "content": go_mod.decoded_content.decode("utf-8"),
+                            }
+                        )
+                except (GithubException, UnicodeDecodeError, AttributeError):
+                    continue
         return inventory
 
     def _remove_existing_edges(self, file_entity_ids: list[str], company_id: str) -> None:

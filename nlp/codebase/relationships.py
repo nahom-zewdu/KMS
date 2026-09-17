@@ -147,8 +147,8 @@ class ImplementationRelationshipExtractor:
         inventory: Mapping[str, Mapping[str, str]],
     ) -> set[ImplementationRelation]:
         """Resolve Go imports using the repository's go.mod module path."""
-        module_name = self._go_module_name(inventory)
-        if not module_name:
+        modules = self._go_modules(inventory)
+        if not modules:
             return set()
 
         imports = re.findall(
@@ -162,29 +162,41 @@ class ImplementationRelationshipExtractor:
 
         result: set[ImplementationRelation] = set()
         for imported in paths:
-            if not imported.startswith(module_name + "/"):
-                continue
-            package_path = imported[len(module_name) + 1 :].strip("/")
-            target = self._resolve_go_package(package_path, inventory)
-            if target:
-                result.add(ImplementationRelation(source_path, target, "IMPORTS"))
+            for module_name, module_root in modules:
+                if imported == module_name:
+                    package_path = ""
+                elif imported.startswith(module_name + "/"):
+                    package_path = imported[len(module_name) + 1 :].strip("/")
+                else:
+                    continue
+                target = self._resolve_go_package(module_root, package_path, inventory)
+                if target:
+                    result.add(ImplementationRelation(source_path, target, "IMPORTS"))
+                break
         return result
 
-    def _go_module_name(self, inventory: Mapping[str, Mapping[str, str]]) -> str | None:
-        """Read the module declaration from indexed go.mod content."""
-        go_mod = inventory.get("go.mod")
-        if not go_mod or not go_mod.get("content"):
-            return None
-        match = re.search(r"(?m)^\s*module\s+(\S+)\s*$", go_mod["content"])
-        return match.group(1) if match else None
+    def _go_modules(
+        self, inventory: Mapping[str, Mapping[str, str]]
+    ) -> list[tuple[str, str]]:
+        """Read module declarations and their repository-relative roots."""
+        modules = []
+        for path, item in inventory.items():
+            if not path.endswith("go.mod") or not item.get("content"):
+                continue
+            match = re.search(r"(?m)^\s*module\s+(\S+)\s*$", item["content"])
+            if match:
+                modules.append((match.group(1), str(PurePosixPath(path).parent)))
+        return sorted(modules, key=lambda item: len(item[1]), reverse=True)
 
     def _resolve_go_package(
         self,
+        module_root: str,
         package_path: str,
         inventory: Mapping[str, Mapping[str, str]],
     ) -> str | None:
         """Resolve a Go package to a deterministic representative .go file."""
-        prefix = package_path.rstrip("/") + "/"
+        package_root = "/".join(part for part in (module_root, package_path) if part)
+        prefix = package_root.rstrip("/") + "/"
         candidates = sorted(
             path
             for path, item in inventory.items()
