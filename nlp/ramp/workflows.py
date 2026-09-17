@@ -101,7 +101,15 @@ class WorkflowDiscoverer:
                 tuple(candidate.implementation_refs),
             )
         )
-        return candidates[: self._MAX_CANDIDATES_PER_COMPONENT]
+        unique_candidates: List[WorkflowCandidate] = []
+        seen_signatures = set()
+        for candidate in candidates:
+            signature = tuple(candidate.implementation_refs)
+            if signature in seen_signatures:
+                continue
+            seen_signatures.add(signature)
+            unique_candidates.append(candidate)
+        return unique_candidates[: self._MAX_CANDIDATES_PER_COMPONENT]
 
     def _bounded_paths(
         self,
@@ -114,11 +122,12 @@ class WorkflowDiscoverer:
         paths: List[Tuple[List[str], List[Evidence]]] = []
 
         def visit(current_path: List[str], current_relations: List[Evidence]) -> None:
-            neighbors = [
-                (target, relation)
+            neighbor_map = {
+                (target, relation.ref): (target, relation)
                 for target, relation in adjacency.get(current_path[-1], [])
                 if target in component and target not in current_path
-            ]
+            }
+            neighbors = list(neighbor_map.values())
             neighbors.sort(key=lambda item: (-by_path[item[0]].importance, item[0], item[1].ref))
             if len(current_path) >= self._MAX_PATH_FILES or not neighbors:
                 if len(current_path) >= 2:
