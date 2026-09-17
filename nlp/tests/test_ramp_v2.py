@@ -146,3 +146,72 @@ def test_planner_does_not_fabricate_workflow_without_relationship_evidence():
     assert all(step["evidence"] for step in plan["steps"])
     assert all(step["machine"]["eligible"] for step in plan["steps"])
     planner.store.save_plan.assert_called_once()
+
+
+def test_large_component_is_decomposed_into_bounded_paths():
+    discoverer = WorkflowDiscoverer()
+    paths = [
+        ["api/entry.go", "api/validate.go", "api/service.go", "api/store.go", "api/queue.go", "api/worker.go", "api/result.go", "api/audit.go", "api/extra.go"],
+        ["api/entry.go", "api/validate.go", "api/service.go", "api/store.go", "api/queue.go", "api/notify.go"],
+    ]
+    surfaces = [surface(path, importance=1.0 - index * 0.02) for index, path in enumerate(sorted({item for path in paths for item in path}))]
+    evidence = [relation(source, target) for path in paths for source, target in zip(path, path[1:])]
+
+    workflows = discoverer.discover(surfaces, evidence, "backend-engineer")
+
+    assert len(workflows) == 2
+    assert all(2 <= len(item.implementation_refs) <= discoverer._MAX_PATH_FILES for item in workflows)
+    assert all("api/extra.go" not in item.implementation_refs for item in workflows)
+    assert any("api/audit.go" in item.implementation_refs for item in workflows)
+    assert any("api/notify.go" in item.implementation_refs for item in workflows)
+
+
+def test_workflow_decomposition_is_deterministic_and_evidence_bounded():
+    discoverer = WorkflowDiscoverer()
+    surfaces = [surface("api/a.go"), surface("api/b.go"), surface("api/c.go")]
+    evidence = [relation("api/a.go", "api/b.go"), relation("api/b.go", "api/c.go")]
+
+    first = discoverer.discover(surfaces, evidence, "backend-engineer")
+    second = discoverer.discover(list(reversed(surfaces)), list(reversed(evidence)), "backend-engineer")
+
+    assert first == second
+    known_paths = {item.path for item in surfaces}
+    known_evidence = {item.ref for item in evidence}
+    for workflow in first:
+        assert set(workflow.implementation_refs) <= known_paths
+        assert set(workflow.evidence_refs) <= known_paths | known_evidence
+        assert all(signal["from"] in known_paths and signal["to"] in known_paths for signal in workflow.signals)
+
+
+def test_cycles_hubs_and_isolated_files_remain_bounded():
+    discoverer = WorkflowDiscoverer()
+    surfaces = [
+        surface("pkg/cycle_a.go"),
+        surface("pkg/cycle_b.go"),
+        surface("pkg/hub.go"),
+        surface("pkg/leaf_a.go"),
+        surface("pkg/leaf_b.go"),
+        surface("pkg/isolated.go"),
+    ]
+    evidence = [
+        relation("pkg/cycle_a.go", "pkg/cycle_b.go"),
+        relation("pkg/cycle_b.go", "pkg/cycle_a.go"),
+        relation("pkg/hub.go", "pkg/leaf_a.go"),
+        relation("pkg/hub.go", "pkg/leaf_b.go"),
+    ]
+
+    workflows = discoverer.discover(surfaces, evidence, "backend-engineer")
+
+    assert workflows
+    assert all(len(item.implementation_refs) <= discoverer._MAX_PATH_FILES for item in workflows)
+    assert all("pkg/isolated.go" not in item.implementation_refs for item in workflows)
+    assert any(set(item.implementation_refs) == {"pkg/cycle_a.go", "pkg/cycle_b.go"} for item in workflows)
+    assert len(workflows) <= discoverer._MAX_CANDIDATES_PER_COMPONENT * 2
+
+
+def test_decomposition_abstains_when_no_meaningful_path_exists():
+    discoverer = WorkflowDiscoverer()
+    surfaces = [surface("pkg/a.go"), surface("pkg/b.go")]
+    evidence = [relation("pkg/a.go", "pkg/b.go", strength="inferred")]
+
+    assert discoverer.discover(surfaces, evidence, "backend-engineer") == []
