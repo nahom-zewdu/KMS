@@ -210,14 +210,11 @@ See `docs/architecture/ramp.md` and `docs/product/ramp-intelligence-model.md`. S
 
 ### Current limitation (verified)
 
-- `nlp/ramp/models.py` — typed evidence, implementation, workflow, and candidate models.
-- `nlp/ramp/evidence.py` — company-scoped extraction from `codebase_files`, `codebase_modules`, `edges`, and GitHub `raw_data`.
-- `nlp/ramp/workflows.py` — workflow candidate discovery over normalized implementation evidence; inferred relationships remain explicitly inferred.
-- `nlp/ramp/candidates.py` — deterministic gates, scoring, contribution gate, prerequisite-aware selection.
-- `nlp/ramp/store.py` — isolated plan/progress persistence boundary.
-- `nlp/ramp/generator_v2.py` — new Ramp planner; no inheritance from the legacy generator.
-- `nlp/api.py` — production Ramp endpoints now instantiate `RampPlanner`.
-- Legacy `evidence_generator.py` and legacy generator implementation have been removed from the production design.
+Workflow *candidates* are bounded directed paths over graph edges whose endpoints are FILE entities, excluding `PART_OF` and `OWNS`. On the live evaluation snapshot, every supporting signal was a direct `IMPORTS` edge.
+
+`IMPORTS` with extractor confidence `1.0` is stored as a direct graph fact. `WorkflowDiscoverer` then labels the path `<first-module-segment> implementation flow` and sets workflow confidence from relation strength (`direct` when confidence ≥ 0.8). That confidence describes the **import edges**, not a verified control/data-flow workflow.
+
+Go package imports resolve to the first sorted non-test `.go` file in the package, not a specific symbol. Unresolved/external imports are dropped, not stored as inferred facts.
 
 ### Current limitation
 
