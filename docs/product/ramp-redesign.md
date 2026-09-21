@@ -5,6 +5,8 @@
 **Last updated:** 2026-09-21 (status pointers only; design content retained)
 **Scope:** Ramp generation and the knowledge model it depends on
 
+Execution state lives in `docs/development/roadmap.md`. Current architecture: `docs/architecture/ramp.md`. Import vs workflow: `docs/decisions/ADR-004-imports-are-not-workflows.md`.
+
 ## 1. Why this document exists
 
 The first Ramp implementation proved that KMS can assemble a company-scoped, role-scoped onboarding plan with stable step identity, repository evidence, ownership signals, progress, and contextual Ask.
