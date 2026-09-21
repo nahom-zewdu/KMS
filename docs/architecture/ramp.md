@@ -69,7 +69,7 @@ Candidates represent bounded outcomes. A candidate may reference files/modules/i
 
 ### Deterministic selection owns trust
 
-Eligibility, risk, evidence strength, score, prerequisites, ordering, and contribution readiness are deterministic. LLM output cannot override them.
+Eligibility, risk, evidence strength, score, prerequisites, ordering, and contribution readiness are deterministic. LLM output cannot override them. `polish_why` is accepted by `POST /ramp-plans/generate` and is unused by `RampPlanner`.
 
 ### Persistence is an adapter
 
