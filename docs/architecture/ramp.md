@@ -80,8 +80,8 @@ Eligibility, risk, evidence strength, score, prerequisites, ordering, and contri
 `nlp/ramp/` contains:
 
 - `models.py` — normalized reasoning objects;
-- `evidence.py` — company-scoped evidence extraction;
-- `workflows.py` — workflow candidate discovery;
+- `evidence.py` — company-scoped evidence extraction, including FILE-to-FILE graph edges;
+- `workflows.py` — bounded directed-path candidate discovery;
 - `candidates.py` — candidate gates/scoring/sequence;
 - `store.py` — persistence/progress;
 - `generator_v2.py` — `RampPlanner` orchestration.
