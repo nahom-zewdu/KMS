@@ -281,6 +281,51 @@ Do not treat a direct interface call as proof of the concrete implementation, co
 
 ---
 
+## RID-09 — Route → handler → direct-operation evidence composition — IMPLEMENTED
+
+RID-07 and RID-08 established two read-only source signals: explicit Gin route → handler resolution and explicit handler-field → dependency-method calls. RID-09 composes those facts without changing graph indexing, WorkflowDiscoverer, scoring, planner behavior, or persistence.
+
+### Objective
+
+Test whether:
+
+```text
+HTTP route → concrete handler → explicitly called dependency operation
+```
+
+forms a more actionable onboarding boundary than import paths or route-only evidence.
+
+### Scope
+
+In:
+
+- composition of `RouteEvidence` + `HandlerCallEvidence`;
+- deterministic joins on handler symbol and handler source file;
+- source-backed next-inspection target equal to the observed dependency field/method;
+- focused unit tests and a dated structural evaluation.
+
+Out:
+
+- interface implementation resolution;
+- generic call graphs / SSA / CFG / DFG;
+- runtime ordering;
+- ownership or contribution-safety inference;
+- graph writes, Ramp-plan writes, planner/scoring changes.
+
+### Current status
+
+Implemented as `nlp/ramp/evidence_composition.py` with focused tests in `nlp/tests/test_evidence_composition.py`.
+
+The evaluation artifact is `docs/product/ramp-evidence-composition-evaluation-2026-09-22.md`.
+
+The structural decision is **PROMOTE TO HUMAN USEFULNESS TEST, not production integration**. The signal is most useful for domain-service boundaries such as GitHub ingestion and baseline synchronization; shared Redis operations are weaker because they describe transport mechanics rather than business responsibility.
+
+### Verification / acceptance
+
+Local execution is still required before marking RID-09 VERIFIED. Acceptance additionally requires a dated human usefulness evaluation with an engineer who did not build KMS. Until then the composition layer remains read-only and unintegrated.
+
+---
+
 ## Known limitations and unresolved questions
 
 | Item | State |
