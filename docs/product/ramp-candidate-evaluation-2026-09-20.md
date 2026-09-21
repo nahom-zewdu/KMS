@@ -1,6 +1,7 @@
 # Ramp Candidate Usefulness Evaluation
 
 **Date:** 2026-09-20  
+**Status:** VERIFIED structural snapshot (not human usefulness, not customer validation)  
 **Scope:** live company `comp_1785181837594`, repository `nahom-zewdu/KMS`  
 **Mode:** read-only Supabase query; no graph or plan writes
 
