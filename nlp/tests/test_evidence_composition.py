@@ -1,6 +1,6 @@
-from nlp.ramp.evidence_composition import GoEvidenceComposer
-from nlp.ramp.handler_call_evidence import HandlerCallEvidence
-from nlp.ramp.route_evidence import RouteEvidence
+from ramp.evidence_composition import GoEvidenceComposer
+from ramp.handler_call_evidence import HandlerCallEvidence
+from ramp.route_evidence import RouteEvidence
 
 
 def route(path="/github", symbol="GitHubHandler.HandleGitHubWebhook"):
