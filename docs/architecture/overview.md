@@ -67,7 +67,7 @@ The broader KMS knowledge-query capability also exists in the backend architectu
 
 ## Current state versus intended state
 
-Some reliability/security/schema work has already landed on `feat/ramp`; some earlier reports describe branches that no longer exist separately. The branch itself is authoritative for what is currently implemented.
+Some reliability/security/schema work landed on `feat/ramp` before it merged. Current Ramp relationship work is on `feat/implementation-relations`. The current branch is authoritative for what is implemented.
 
 Do not assume these properties merely because older README text claims them:
 
