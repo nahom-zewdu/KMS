@@ -4,6 +4,8 @@
 **Scope:** live company `comp_1785181837594`, repository `nahom-zewdu/KMS`  
 **Mode:** read-only Supabase query; no graph or plan writes
 
+This file is the source of truth for that snapshot. Do not copy the candidate table elsewhere. Decision that follows from it: `docs/decisions/ADR-004-imports-are-not-workflows.md`. Selected next task: RID-07 in `docs/development/roadmap.md`.
+
 ## Evaluation method
 
 `RampEvidenceStore.implementation_relationships()` maps company-scoped FILE
