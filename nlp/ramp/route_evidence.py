@@ -29,7 +29,7 @@ class GoRouteEvidenceExtractor:
 
     _CONSTRUCTOR_RE = re.compile(
         r"(?m)^\s*(?P<variable>[A-Za-z_]\w*)\s*:=\s*New"
-        r"(?P<handler>[A-Za-z_]\w*)Handler\s*\("
+        r"(?P<handler>[A-Za-z_]\w*Handler)\s*\("
     )
     _HANDLER_TYPE_RE_TEMPLATE = r"(?m)^\s*type\s+{handler}\s+struct\s*\{{"
     _ROUTE_RE = re.compile(
