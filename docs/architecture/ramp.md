@@ -113,7 +113,7 @@ Live quality of the resulting candidates (one company, 2026-09-20) is recorded i
 
 ## 6. Contribution boundary
 
-Ramp must not generate a first coding task merely because a file looks relevant. Contribution candidates require bounded change evidence, verification, controlled risk, credible help, and sufficient history/change precedent.
+Ramp must not generate a first coding task merely because a file looks relevant or is imported. Contribution candidates require bounded change evidence, verification, controlled risk, credible help, and sufficient history/change precedent.
 
 Until those signals exist, Ramp should stop at investigation/readiness.
 
