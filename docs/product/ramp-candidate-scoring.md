@@ -1,8 +1,8 @@
 # Ramp Candidate Scoring and Sequencing
 
-**Status:** RID-04 accepted / implementation not started  
-**Branch:** `feat/ramp`  
-**Last updated:** 2026-09-12  
+**Status:** RID-04 accepted as spec; subset implemented on `feat/implementation-relations`  
+**Branch:** `feat/implementation-relations`  
+**Last updated:** 2026-09-21  
 **Scope:** Deterministic ranking, sequencing, and contribution eligibility for Ramp candidates
 
 This is the scoring **specification**. Runtime objects and current code behavior are in `docs/product/ramp-intelligence-model.md` and `nlp/ramp/candidates.py` / `nlp/ramp/models.py`. Execution status is in `docs/development/roadmap.md`.
@@ -312,7 +312,9 @@ Selected workflow candidate W1 because:
 
 The deterministic model remains authoritative.
 
-## 11. KMS proof under RID-04
+## 11. KMS proof under RID-04 (spec expectation)
+
+This section is the RID-04 **intended** ranking for a manually established GitHub ingestion workflow. It is not a claim that `WorkflowDiscoverer` currently emits that candidate from `IMPORTS` edges. Live generated candidates: `docs/product/ramp-candidate-evaluation-2026-09-20.md`.
 
 For the existing GitHub ingestion example:
 
@@ -370,9 +372,9 @@ Role keyword matching remains a weak signal. The planner's role-surface action t
 
 ## 12. Implementation boundary for RID-05 (historical)
 
-RID-04 intentionally does **not** require replacing the whole generator.
+Written when RID-05 had not started. The planner rewrite later exceeded this slice. Remaining gaps are listed in §11a and `docs/development/roadmap.md`.
 
-The smallest implementation target should be:
+The original smallest implementation target was:
 
 ```text
 existing KMS evidence
