@@ -75,12 +75,14 @@ A Ramp step is a learning/work outcome, not a module, directory, feature, techno
 | Ramp contextual Ask | IMPLEMENTED | Query engine can pass Ramp context into synthesis (`nlp/tests/test_query_engine_context.py`). Live worker usefulness is unverified. |
 | Ramp frontend rendering | UNVERIFIED | Frontend lives in `kms-frontend`, outside this repository. |
 | RID-01 evidence model | ACCEPTED | Target reasoning objects and evidence strength defined. |
-| RID-02 evidence inventory | ACCEPTED | Existing KMS evidence and limitations mapped. |
-| RID-03 real KMS proof | ACCEPTED | GitHub ingestion demonstrates a real workflow proof; contribution remains unqualified. |
-| RID-04 candidate scoring + sequencing | ACCEPTED | Gates, scoring, prerequisites, risk, explainability defined. |
-| RID-05 clean Ramp intelligence rewrite | IN_PROGRESS | Legacy module-first intelligence is being replaced, not incrementally decorated. |
-| RID-06 evaluation fixture | PLANNED | Before/after quality measurement after the new planner is coherent. |
-| Customer validation | NOT STARTED | Begins once the new planner produces credible company-specific outcomes. |
+| RID-02 evidence inventory | ACCEPTED | Existing KMS evidence and limitations mapped; inventory has grown since acceptance (see RID-05). |
+| RID-03 real KMS proof | ACCEPTED | GitHub ingestion is a manual proof of a real workflow. Generated candidates are not this proof. |
+| RID-04 candidate scoring + sequencing | ACCEPTED (spec) / IMPLEMENTED (subset) | Spec remains authoritative. Weighted learning scores, learning/contribution gates, and prerequisite-aware selection exist. See scoring gaps below. |
+| RID-05 clean Ramp intelligence rewrite | IN_PROGRESS | Production path is `RampPlanner`. Workflow candidates are bounded import-path graphs, not validated workflows. |
+| RID-06 legacy before/after fixture | REJECTED | The module-first generator is gone, so a before/after vs that output cannot be reproduced. Superseded by the 2026-09-20 live candidate evaluation. |
+| Live candidate-quality evaluation | VERIFIED (structural snapshot) | `docs/product/ramp-candidate-evaluation-2026-09-20.md`. Human usefulness is not validated. |
+| RID-07 Go route/handler corroboration | SPECIFIED | Selected next task. Read-only; no graph or plan writes. |
+| Customer validation | NOT STARTED | No repository evidence of an engineer-who-did-not-build-KMS using Ramp. |
 | Live DB/schema reconciliation | PLANNED | Live Supabase schema is ahead of repo SQL; not a current Ramp blocker. |
 | RLS/security reconciliation | PLANNED | Required before broad customer exposure. |
 | Canonical migration workflow | PLANNED | Required before future schema changes accumulate. |
