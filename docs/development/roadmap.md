@@ -121,7 +121,7 @@ Evidence strength is explicitly classified as `direct`, `derived`, `inferred`, o
 
 ## RID-02 — Current evidence inventory — ACCEPTED
 
-KMS already provides company-scoped repositories/files/modules, ownership signals, GitHub-derived history, and source-code-backed ingestion behavior. It does not yet provide a normalized Ramp intelligence graph containing reliable workflow relationships, change precedent, and verification evidence.
+KMS provides company-scoped repositories/files/modules, ownership edges, GitHub-derived `raw_data`, and (as of this branch) deterministic Python/Go `IMPORTS` edges written during baseline sync.
 
 Do not invent missing intelligence. Extract what KMS actually knows and represent uncertainty explicitly.
 
