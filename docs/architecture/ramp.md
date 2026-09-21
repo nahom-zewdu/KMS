@@ -15,7 +15,7 @@ Ramp has two separate concerns:
 1. **Intelligence** — determine what a new engineer should understand/do next from company evidence.
 2. **Persistence/API** — save plans, hydrate progress, and expose the existing frontend contract.
 
-The old module-first generator is not part of the intelligence architecture.
+The deleted module-first generator is not part of the intelligence architecture. There is no `nlp/ramp/generator.py` on this branch.
 
 ## 2. Target architecture
 
