@@ -6,8 +6,8 @@
 > Current Ramp runtime: `docs/architecture/ramp.md`.
 > Scoring spec vs implemented subset: `docs/product/ramp-candidate-scoring.md`.
 
-**Last updated:** 2026-09-12
-**Current branch:** `feat/ramp`
+**Last updated:** 2026-09-21
+**Current branch:** `feat/implementation-relations`
 **Current milestone:** MVP-1 — New Engineer Ramp
 **Current objective:** Prove that Ramp can move a new engineer from unfamiliarity to useful, safe contribution faster than normal onboarding.
 
@@ -154,13 +154,19 @@ Defined deterministic learning gates, weighted scoring, contribution readiness g
 
 Important decisions:
 
-- gates precede scores;
-- contribution readiness is separate from learning relevance;
-- inferred evidence may support learning but never qualifies an unsupported contribution;
-- prerequisite-aware selection replaces global top-N module ranking;
-- shorter meaningful Ramps beat seven-step filler;
-- deterministic metadata survives into the generated plan;
-- LLM output may explain evidence but cannot invent or override company facts.
+- weighted 0–100 learning score on `RampCandidate`;
+- learning eligibility gates (company scope, evidence, action, verification, non-high/unknown risk);
+- contribution eligibility gates; the planner emits **no** contribution candidates;
+- prerequisite + stage-order selection.
+
+Not implemented (do not claim otherwise):
+
+- evidence corroboration bonus;
+- role-relevance trust ladder beyond path/module keyword tokens;
+- contribution readiness score and 70/100 threshold;
+- redundancy penalty;
+- explicit shorter-sequence cap (selection currently keeps every eligible candidate whose prerequisites are satisfied);
+- LLM explanation (`polish_why` is accepted by the API and unused by `RampPlanner`).
 
 ---
 
@@ -174,8 +180,6 @@ KMS indexed knowledge
   RampEvidenceStore
         ↓
  normalized evidence
-See `docs/architecture/ramp.md` and `docs/product/ramp-intelligence-model.md`. Short form:
-
         ↓
  WorkflowDiscoverer + role reasoning
         ↓
@@ -224,48 +228,7 @@ RID-05 is accepted only when:
 
 Compare the legacy output captured before the rewrite against the new planner using:
 
-## Selected next task — RID-07 — Read-only Go route/handler corroboration — SPECIFIED
-
-Chosen because the largest evidence-backed gap is not missing path heuristics. It is that Ramp cannot yet tell a new engineer **what a component does** or **what to inspect next** with evidence stronger than `A imports B`. The 2026-09-20 snapshot classified all live candidates as fragments, ordinary dependency chains, or merely potentially useful exploration paths. Adding more import-ranking rules would not close that gap.
-
-### Objective
-
-Determine which existing import-path candidates can be corroborated by one behavioral source signal—Go HTTP route registration and the handler/service files those routes reference—without claiming a full workflow and without writing to the graph or Ramp plans.
-
-### Scope
-
-In:
-
-- `api/handlers/routes.go` and referenced Go handler/service files in this repository;
-- the 16-candidate fixture in `docs/product/ramp-candidate-evaluation-2026-09-20.md`;
-- a **read-only** extractor (tests + local report). The extractor may parse source in the working tree or a fetched snapshot; it must not `upsert`/`delete` `edges`, entities, or `ramp_plans`.
-
-Out:
-
-- new graph relation types in production indexing;
-- changes to `WorkflowDiscoverer` caps, labels, or scoring weights;
-- contribution candidates;
-- frontend work;
-- Python call-graph extraction;
-- mutating the live Supabase project.
-
-### Acceptance criteria
-
-1. The extractor reports route method, path, and referenced handler symbol/file when those facts are present in source; it abstains rather than guessing missing links.
-2. Each of the 16 fixture candidates is reclassified using the evaluation's criteria (recognizable responsibility, potentially useful exploration path, ordinary dependency chain, fragment), now allowing route/handler corroboration as additional evidence.
-3. The report states, for each candidate, whether corroboration was found, what exact source span supports it, and which claims remain unsupported.
-4. No production data is written. Tests cover parse success, abstention on unsupported files, and stability of output for `api/handlers/routes.go`.
-5. A follow-up recommendation is written only after the report: either promote corroborated facts into Ramp evidence, or document why this signal is still too weak.
-
-### Verification method
-
-- Unit tests for the read-only extractor against `api/handlers/routes.go` and at least one negative fixture.
-- A checked-in evaluation addendum (new dated file or a clearly marked section) comparing the 16 candidates before vs after corroboration.
-- `git diff` review confirming no indexer, discoverer, or persistence behavior change unless a documentation inconsistency cannot be resolved otherwise (not expected).
-
-### Non-goal
-
-Do not treat a Gin route registration as proof of runtime execution order, ownership, or a safe first contribution.
+- meaningfulness;
 - role relevance;
 - workflow coherence;
 - evidence strength;
@@ -281,3 +244,13 @@ The fixture should expose whether the redesign is genuinely better rather than m
 ## Deferred infrastructure
 
 Live Supabase schema reconciliation, RLS/security hardening, and canonical migration workflow remain separate workstreams. Do not use them as reasons to preserve incorrect Ramp abstractions, and do not pull them into the Ramp rewrite unless the current implementation actually requires them.
+| Item | State |
+|---|---|
+| Import paths as Ramp workflow steps | Implemented; **not** validated as useful onboarding |
+| Semantic correctness of candidate labels | Labels are first module-path segment + `implementation flow` |
+| Live full `RampPlanner.generate` output for the evaluated company | Unverified in this pass; evaluation inspected discoverer inputs/outputs, not a persisted plan |
+| Frontend rendering of v2 step shapes | Unverified (separate repo) |
+| Contextual Ask live usefulness | Unverified |
+| Customer / new-engineer validation | Not started |
+| `company_id` API fallback `"default"` | Present in `nlp/api.py`; production tenant-safety of that fallback is unverified here |
+| Score weights and contribution threshold | Calibration parameters; not empirically tuned |
