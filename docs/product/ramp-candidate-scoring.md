@@ -5,6 +5,8 @@
 **Last updated:** 2026-09-12  
 **Scope:** Deterministic ranking, sequencing, and contribution eligibility for Ramp candidates
 
+This is the scoring **specification**. Runtime objects and current code behavior are in `docs/product/ramp-intelligence-model.md` and `nlp/ramp/candidates.py` / `nlp/ramp/models.py`. Execution status is in `docs/development/roadmap.md`.
+
 ## 1. Purpose
 
 Ramp needs to choose **outcomes**, not modules, and it must be able to explain why one outcome was selected before another.
