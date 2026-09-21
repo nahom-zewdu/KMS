@@ -93,7 +93,9 @@ only the relationship evidence on its path. Cycles use deterministic fallback
 starts, isolated surfaces are ignored, and weak-only relationships do not produce
 workflow candidates.
 
-`nlp/api.py` uses `RampPlanner` directly.
+- `nlp/codebase/relationships.py` — Python AST imports and Go `import` paths resolved against the file inventory;
+- `nlp/codebase/relationship_indexer.py` — rebuilds company-scoped `IMPORTS` edges for one repository;
+- called from `nlp/codebase/baseline.py` after file/module indexing.
 
 `WorkflowDiscoverer` decomposes FILE-to-FILE relations into deterministic directed paths rather than treating each weakly connected component as one workflow. Paths are limited to eight files and eight candidates per component; each candidate keeps only the relationship evidence on its path. Cycles use deterministic fallback starts, isolated surfaces are ignored, and inferred-only relationships do not produce candidates.
 
