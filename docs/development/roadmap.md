@@ -6,8 +6,8 @@
 > Current Ramp runtime: `docs/architecture/ramp.md`.
 > Scoring spec vs implemented subset: `docs/product/ramp-candidate-scoring.md`.
 
-**Last updated:** 2026-09-12
-**Current branch:** `feat/ramp`
+**Last updated:** 2026-09-21
+**Current branch:** `feat/implementation-relations`
 **Current milestone:** MVP-1 — New Engineer Ramp
 **Current objective:** Prove that Ramp can move a new engineer from unfamiliarity to useful, safe contribution faster than normal onboarding.
 
@@ -46,7 +46,7 @@ Implementation is not verification. Acceptance requires appropriate tests, runti
 
 ## Product direction
 
-Ramp is not an attractive checklist. It is an evidence-backed progression of bounded engineering outcomes that moves a new engineer from:
+Ramp is an evidence-backed progression of bounded engineering outcomes:
 
 ```text
 ORIENT → BUILD MENTAL MODEL → UNDERSTAND ROLE SURFACE
@@ -60,7 +60,9 @@ The central product question is:
 
 > Given everything KMS knows about a company and a new engineer's role, what is the smallest sequence of understanding and real work that gets that engineer to their first safe, meaningful contribution?
 
-A Ramp step is a learning/work outcome, not a module, directory, feature, technology, or file. Those are evidence and implementation entities that a step may reference.
+A Ramp step is a learning/work outcome. Files, modules, and import edges are evidence, not the unit of onboarding.
+
+An `IMPORTS` edge (`A imports B`) is a structural dependency. It does not, by itself, prove runtime execution order, a business workflow, ownership, or that a path is useful to a new engineer. See `docs/decisions/ADR-004-imports-are-not-workflows.md`.
 
 ---
 
@@ -91,25 +93,11 @@ A Ramp step is a learning/work outcome, not a module, directory, feature, techno
 
 ## Ramp rewrite decision
 
-The previous implementation strategy was incremental extension of `RampPlanGenerator`. That strategy is now rejected.
+The previous implementation strategy was incremental extension of `RampPlanGenerator`. That strategy remains rejected.
 
-The old generator was fundamentally module/directory-first:
+**Decision:** rewrite the Ramp intelligence layer around normalized evidence, workflow *candidates*, deterministic gates/scoring/sequencing, and a thin persistence/API boundary.
 
-```text
-modules + files + ownership + importance + path heuristics
-                    ↓
-             rank modules
-                    ↓
-              select up to 7
-                    ↓
-             generate prose
-```
-
-Adding more fields or adapters around that architecture would preserve the wrong abstraction and increase legacy coupling.
-
-**Decision:** rewrite the Ramp intelligence layer around normalized evidence, behavioral workflow candidates, deterministic gates/scoring/sequencing, and a thin persistence/API boundary. Preserve working infrastructure and external data/API contracts only where they are actually useful.
-
-The old intelligence implementation has been removed from the production path. `RampPlanner` is the new intelligence entrypoint.
+`RampPlanner` (`nlp/ramp/generator_v2.py`) is the production intelligence entrypoint, instantiated from `nlp/api.py`. There is no `nlp/ramp/generator.py` compatibility module on this branch.
 
 ---
 
@@ -117,7 +105,7 @@ The old intelligence implementation has been removed from the production path. `
 
 Defined internal reasoning objects for company context, implementation surfaces, implementation relationships, capabilities, workflows, ownership/history, risk/verification, role relevance, learning candidates, and contribution candidates.
 
-Evidence strength is explicitly classified as `direct`, `derived`, `inferred`, or `missing`.
+Evidence strength is classified as `direct`, `derived`, `inferred`, or `missing`.
 
 ---
 
@@ -125,13 +113,13 @@ Evidence strength is explicitly classified as `direct`, `derived`, `inferred`, o
 
 KMS provides company-scoped repositories/files/modules, ownership edges, GitHub-derived `raw_data`, and (as of this branch) deterministic Python/Go `IMPORTS` edges written during baseline sync.
 
-Do not invent missing intelligence. Extract what KMS actually knows and represent uncertainty explicitly.
+It still does not provide route/handler/call/queue/persistence/test evidence that would distinguish a structural dependency path from a runtime workflow. Do not invent that intelligence.
 
 ---
 
 ## RID-03 — Real KMS workflow proof — ACCEPTED
 
-The GitHub ingestion path provides the first concrete behavioral proof:
+The GitHub ingestion path is a **manually established** behavioral proof:
 
 ```text
 GitHub webhook
@@ -144,7 +132,7 @@ GitHub webhook
   → Redis github_jobs publication
 ```
 
-This supports a backend learning outcome such as tracing one GitHub event through those boundaries and explaining where invalid or duplicate deliveries are stopped.
+This supports a backend learning outcome such as tracing one GitHub event through those boundaries.
 
 It does **not** mean `WorkflowDiscoverer` currently emits this chain. Live candidates on 2026-09-20 were import paths labeled `api implementation flow` / `nlp implementation flow`, not this ingestion sequence.
 
@@ -152,11 +140,11 @@ It does **not** justify an autonomous first coding task.
 
 ---
 
-## RID-04 — Candidate scoring + sequencing — ACCEPTED
+## RID-04 — Candidate scoring + sequencing — ACCEPTED (spec)
 
 Defined deterministic learning gates, weighted scoring, contribution readiness gates, prerequisite ordering, stage progression, redundancy handling, risk blocking, and explainability metadata.
 
-Important decisions:
+Implemented subset (code, 2026-09-21):
 
 - weighted 0–100 learning score on `RampCandidate`;
 - learning eligibility gates (company scope, evidence, action, verification, non-high/unknown risk);
@@ -174,28 +162,22 @@ Not implemented (do not claim otherwise):
 
 ---
 
-# RID-05 — Clean Ramp intelligence rewrite — IN PROGRESS
+## RID-05 — Clean Ramp intelligence rewrite — IN_PROGRESS
 
 ### Architecture
+
+See `docs/architecture/ramp.md` and `docs/product/ramp-intelligence-model.md`. Short form:
 
 ```text
 KMS indexed knowledge
         ↓
   RampEvidenceStore
         ↓
- normalized evidence
-See `docs/architecture/ramp.md` and `docs/product/ramp-intelligence-model.md`. Short form:
-
-        ↓
- WorkflowDiscoverer + role reasoning
+ WorkflowDiscoverer (bounded directed import paths)
         ↓
   RampCandidateEngine
         ↓
- gates → score → prerequisites → sequence
-        ↓
-     RampPlanner
-        ↓
-   RampStore / API contract
+     RampPlanner → RampStore / API
 ```
 
 ### Verified on this branch
@@ -218,11 +200,11 @@ Workflow *candidates* are bounded directed paths over graph edges whose endpoint
 
 Go package imports resolve to the first sorted non-test `.go` file in the package, not a specific symbol. Unresolved/external imports are dropped, not stored as inferred facts.
 
-### Current limitation
+`RampCandidateEngine.select` does not cap sequence length or penalize redundant shared-leaf paths. A company with many import paths can therefore receive many workflow-learning steps.
 
-The first rewrite slice still discovers workflows from indexed structural vocabulary. That is a deliberate uncertainty boundary, not a claim of full call-graph understanding. A workflow candidate must direct the engineer to verify relationships in source. The next implementation work is to increase the quality of normalized implementation relationships and workflow evidence rather than adding presentation prose.
+Role surface selection still uses path/module keyword tokens. That is a discovery heuristic, not ownership proof. The generated action text says so; scoring still treats a keyword match as high role relevance.
 
-### Acceptance criteria
+### Acceptance criteria (unchanged; not all met)
 
 RID-05 is accepted only when:
 
@@ -241,25 +223,15 @@ Items 1–3, 6–7, and 9 have repository evidence. Item 4 is partial (titles ar
 
 ---
 
-# RID-06 — Before/after evaluation fixture — PLANNED
+## RID-06 — Legacy before/after evaluation fixture — REJECTED
 
-Compare the legacy output captured before the rewrite against the new planner using:
+Original plan: compare module-first generator output to the new planner.
 
-## Selected next task — RID-07 — Read-only Go route/handler corroboration — SPECIFIED
+That comparison is no longer possible: the legacy generator is gone and its output is not checked in.
 
-Chosen because the largest evidence-backed gap is not missing path heuristics. It is that Ramp cannot yet tell a new engineer **what a component does** or **what to inspect next** with evidence stronger than `A imports B`. The 2026-09-20 snapshot classified all live candidates as fragments, ordinary dependency chains, or merely potentially useful exploration paths. Adding more import-ranking rules would not close that gap.
+**Superseding artifact:** `docs/product/ramp-candidate-evaluation-2026-09-20.md` (read-only live snapshot for company `comp_1785181837594`, repository `nahom-zewdu/KMS`). Structural classification only. Human usefulness is explicitly not validated.
 
-### Objective
-
-Determine which existing import-path candidates can be corroborated by one behavioral source signal—Go HTTP route registration and the handler/service files those routes reference—without claiming a full workflow and without writing to the graph or Ramp plans.
-
-### Scope
-
-In:
-
-- `api/handlers/routes.go` and referenced Go handler/service files in this repository;
-- the 16-candidate fixture in `docs/product/ramp-candidate-evaluation-2026-09-20.md`;
-- a **read-only** extractor (tests + local report). The extractor may parse source in the working tree or a fetched snapshot; it must not `upsert`/`delete` `edges`, entities, or `ramp_plans`.
+---
 
 ## Selected next task — RID-07 — Read-only Go route/handler corroboration — SPECIFIED
 
@@ -296,23 +268,6 @@ Out:
 
 ### Verification method
 
-- new graph relation types in production indexing;
-- changes to `WorkflowDiscoverer` caps, labels, or scoring weights;
-- contribution candidates;
-- frontend work;
-- Python call-graph extraction;
-- mutating the live Supabase project.
-
-### Acceptance criteria
-
-1. The extractor reports route method, path, and referenced handler symbol/file when those facts are present in source; it abstains rather than guessing missing links.
-2. Each of the 16 fixture candidates is reclassified using the evaluation's criteria (recognizable responsibility, potentially useful exploration path, ordinary dependency chain, fragment), now allowing route/handler corroboration as additional evidence.
-3. The report states, for each candidate, whether corroboration was found, what exact source span supports it, and which claims remain unsupported.
-4. No production data is written. Tests cover parse success, abstention on unsupported files, and stability of output for `api/handlers/routes.go`.
-5. A follow-up recommendation is written only after the report: either promote corroborated facts into Ramp evidence, or document why this signal is still too weak.
-
-### Verification method
-
 - Unit tests for the read-only extractor against `api/handlers/routes.go` and at least one negative fixture.
 - A checked-in evaluation addendum (new dated file or a clearly marked section) comparing the 16 candidates before vs after corroboration.
 - `git diff` review confirming no indexer, discoverer, or persistence behavior change unless a documentation inconsistency cannot be resolved otherwise (not expected).
@@ -320,13 +275,10 @@ Out:
 ### Non-goal
 
 Do not treat a Gin route registration as proof of runtime execution order, ownership, or a safe first contribution.
-- role relevance;
-- workflow coherence;
-- evidence strength;
-- actionability;
-- unsupported claims;
-- cognitive load;
-- contribution readiness.
+
+---
+
+## Known limitations and unresolved questions
 
 | Item | State |
 |---|---|
@@ -343,4 +295,4 @@ Do not treat a Gin route registration as proof of runtime execution order, owner
 
 ## Deferred infrastructure
 
-Live Supabase schema reconciliation, RLS/security hardening, and canonical migration workflow remain separate workstreams. Do not use them as reasons to preserve incorrect Ramp abstractions, and do not pull them into the Ramp rewrite unless the current implementation actually requires them.
+Live Supabase schema reconciliation, RLS/security hardening, and canonical migration workflow remain separate workstreams. Do not pull them into RID-07.
