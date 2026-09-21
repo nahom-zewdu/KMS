@@ -47,7 +47,7 @@ Owns HTTP ingress, Slack/GitHub webhook verification, company resolution, event 
 
 Owns Redis consumption, NER/relation extraction, knowledge-graph writes, embeddings/query processing, codebase analysis, baseline synchronization, playbook generation, visualizer data, and Ramp generation/fetching.
 
-The current `feat/ramp` branch includes the durable codebase-analysis stream design: GitHub push ingestion publishes a `codebase_analysis_jobs` job, and `processor.py` registers a dedicated handler. This is part of the current branch rather than merely a planned design.
+GitHub push ingestion publishes a `codebase_analysis_jobs` job, and `processor.py` registers a dedicated handler. Baseline sync also indexes Python/Go `IMPORTS` edges. That is implemented, not merely planned.
 
 ### Frontend
 
