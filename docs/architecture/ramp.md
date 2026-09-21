@@ -99,7 +99,9 @@ workflow candidates.
 
 ## 5. Current evidence boundary
 
-The first workflow implementation uses indexed structural evidence. For example, multiple GitHub/webhook/ingestion/Redis implementation surfaces can form a **workflow candidate**. The workflow relationship is still an inferred signal until source-level implementation relationship extraction exists.
+Indexed `IMPORTS` edges are **direct structural facts** when extraction resolved both endpoints. They are not runtime traces.
+
+`RampEvidenceStore.implementation_relationships()` maps FILE entity IDs to paths, skips `PART_OF` and `OWNS`, and classifies remaining edges by stored confidence (`≥ 0.8` direct, `≥ 0.6` derived, else inferred). The extractor writes `IMPORTS` at confidence `1.0`, so live import evidence is classified **direct**.
 
 The user-facing action therefore asks the engineer to verify the actual control/data flow in source and explicitly mark unsupported links as unknown.
 
