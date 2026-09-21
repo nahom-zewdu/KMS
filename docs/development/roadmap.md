@@ -326,7 +326,16 @@ Do not treat a Gin route registration as proof of runtime execution order, owner
 - cognitive load;
 - contribution readiness.
 
-The fixture should expose whether the redesign is genuinely better rather than merely longer or more structured.
+| Item | State |
+|---|---|
+| Import paths as Ramp workflow steps | Implemented; **not** validated as useful onboarding |
+| Semantic correctness of candidate labels | Labels are first module-path segment + `implementation flow` |
+| Live full `RampPlanner.generate` output for the evaluated company | Unverified in this pass; evaluation inspected discoverer inputs/outputs, not a persisted plan |
+| Frontend rendering of v2 step shapes | Unverified (separate repo) |
+| Contextual Ask live usefulness | Unverified |
+| Customer / new-engineer validation | Not started |
+| `company_id` API fallback `"default"` | Present in `nlp/api.py`; production tenant-safety of that fallback is unverified here |
+| Score weights and contribution threshold | Calibration parameters; not empirically tuned |
 
 ---
 
