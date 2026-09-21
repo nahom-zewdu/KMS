@@ -68,12 +68,12 @@ A Ramp step is a learning/work outcome, not a module, directory, feature, techno
 
 | Area | Status | Notes |
 |---|---|---|
-| Reliability Batch 1 | ACCEPTED | Tenant/failure semantics hardened. |
-| Reliability Batch 2 | ACCEPTED | Redis pending-message recovery/ACK semantics hardened. |
-| Reliability Batch 3 | ACCEPTED | Durable codebase-analysis lifecycle and failure propagation. |
-| Ramp progress | ACCEPTED | User-specific progress persists and hydrates. |
-| Ramp contextual Ask | IMPLEMENTED / VERIFYING | Structured question/context path exists; live worker verification remains required. |
-| Ramp frontend rendering compatibility | IN PROGRESS | Normalize historical/current target-file shapes at the UI boundary. |
+| Reliability Batch 1 | ACCEPTED | Tenant/failure semantics hardened. Unchanged by this branch; not re-verified on 2026-09-21. |
+| Reliability Batch 2 | ACCEPTED | Redis pending-message recovery/ACK semantics hardened. Not re-verified on 2026-09-21. |
+| Reliability Batch 3 | ACCEPTED | Durable codebase-analysis lifecycle and failure propagation. Not re-verified on 2026-09-21. |
+| Ramp progress | ACCEPTED | User-specific progress persists and hydrates (code + prior tests). Not re-verified on 2026-09-21. |
+| Ramp contextual Ask | IMPLEMENTED | Query engine can pass Ramp context into synthesis (`nlp/tests/test_query_engine_context.py`). Live worker usefulness is unverified. |
+| Ramp frontend rendering | UNVERIFIED | Frontend lives in `kms-frontend`, outside this repository. |
 | RID-01 evidence model | ACCEPTED | Target reasoning objects and evidence strength defined. |
 | RID-02 evidence inventory | ACCEPTED | Existing KMS evidence and limitations mapped. |
 | RID-03 real KMS proof | ACCEPTED | GitHub ingestion demonstrates a real workflow proof; contribution remains unqualified. |
