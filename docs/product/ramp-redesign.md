@@ -1,8 +1,8 @@
 # Ramp Redesign — Engineering Onboarding Intelligence
 
-**Status:** Accepted direction / pre-implementation design
-**Branch:** `feat/ramp`
-**Last updated:** 2026-09-12
+**Status:** Accepted design direction (not an execution ledger)
+**Branch written:** `feat/ramp` (2026-09-12). Current work: `feat/implementation-relations`.
+**Last updated:** 2026-09-21 (status pointers only; design content retained)
 **Scope:** Ramp generation and the knowledge model it depends on
 
 ## 1. Why this document exists
