@@ -233,7 +233,9 @@ RID-05 is accepted only when:
 7. unsupported contribution candidates are not emitted;
 8. stable step IDs and existing progress behavior continue to work;
 9. focused and relevant backend tests pass locally;
-10. a real populated company smoke test produces a coherent Ramp with customer-indexed evidence.
+10. a real populated company smoke test produces a coherent Ramp with customer-indexed evidence **that a new engineer can use as onboarding, not merely an import-path dump**.
+
+Items 1–3, 6–7, and 9 have repository evidence. Item 4 is partial (titles are outcome-shaped; workflow names are module-segment labels). Item 5 is partial (import facts are direct; calling the path a workflow is not). Item 8 is implemented in code (UUID5 step IDs, `RampStore` progress) but not re-verified in this pass. Item 10 fails the 2026-09-20 snapshot: no candidate was a confirmed recognizable responsibility.
 
 ---
 
