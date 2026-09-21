@@ -119,6 +119,6 @@ Until those signals exist, Ramp should stop at investigation/readiness. The curr
 
 ## 7. Migration rule
 
-Do not add new features to the former module-first generator. If a useful behavior is discovered there, reimplement the behavior against the new evidence/candidate model or deliberately discard it.
+Do not add features to a restored module-first generator. If a useful behavior is needed, implement it against the evidence/candidate model or discard it.
 
 Working infrastructure—Supabase, ingestion, progress persistence, API routes, and the existing frontend workspace—is preserved because it is infrastructure, not the old Ramp reasoning model.
