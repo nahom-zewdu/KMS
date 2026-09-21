@@ -1,6 +1,6 @@
 # Architecture Overview
 
-> Current-state snapshot: `feat/ramp`, 2026-08-30. This document describes the system as it exists, not an aspirational architecture.
+> Current-state snapshot: system shape as of `feat/ramp` (merged) plus `feat/implementation-relations` (2026-09-21). This document describes the system as it exists, not an aspirational architecture. Ramp intelligence detail: `docs/architecture/ramp.md`.
 
 ## System boundary
 
