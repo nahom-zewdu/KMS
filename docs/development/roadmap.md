@@ -144,7 +144,9 @@ GitHub webhook
 
 This supports a backend learning outcome such as tracing one GitHub event through those boundaries and explaining where invalid or duplicate deliveries are stopped.
 
-It does **not** yet justify an autonomous first coding task because bounded-change, history, ownership, and verification evidence are not sufficiently integrated.
+It does **not** mean `WorkflowDiscoverer` currently emits this chain. Live candidates on 2026-09-20 were import paths labeled `api implementation flow` / `nlp implementation flow`, not this ingestion sequence.
+
+It does **not** justify an autonomous first coding task.
 
 ---
 
