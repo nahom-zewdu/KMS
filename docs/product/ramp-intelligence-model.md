@@ -1,15 +1,15 @@
 # Ramp Intelligence Model — Evidence to Engineering Outcomes
 
 **Status:** Active implementation baseline
-**Branch:** `feat/ramp`
-**Last updated:** 2026-09-12
-**Scope:** RID-01 through RID-05
+**Branch:** `feat/implementation-relations`
+**Last updated:** 2026-09-21
+**Scope:** RID-01 through RID-05; next work is RID-07 in `docs/development/roadmap.md`
 
 ## 1. Product question
 
 > Given everything KMS knows about a company and a new engineer's role, what is the smallest sequence of understanding and real work that gets that engineer to their first safe, meaningful contribution?
 
-A Ramp step is a bounded learning/work outcome. It is not a module, directory, feature, technology, or file.
+A Ramp step is a bounded learning/work outcome. It is not a module, directory, feature, technology, file, or import path.
 
 ---
 
@@ -41,6 +41,8 @@ Every signal is classified as:
 
 An inferred workflow shape may create a learning candidate, but it must be presented as a hypothesis to verify. Inferred evidence never qualifies an autonomous first-contribution candidate.
 
+A **direct** `IMPORTS` edge is a direct fact about a structural dependency. Direct import evidence does not make the enclosing path a direct workflow, execution trace, or ownership claim. See `docs/decisions/ADR-004-imports-are-not-workflows.md`.
+
 ---
 
 ## 4. Internal reasoning objects
@@ -57,7 +59,7 @@ The implementation uses four core layers:
 
 ### WorkflowCandidate
 
-A behavioral candidate derived from multiple implementation surfaces. It contains evidence refs, signals, confidence, role relevance, action, verification, risk, and prerequisites.
+A bounded directed path over implementation-relation evidence (today: resolved `IMPORTS` edges). It is a **candidate exploration path**, not a confirmed business workflow. It contains evidence refs, signals, confidence (of those relations), role relevance, action, verification, risk, and prerequisites. Names are labels such as `api implementation flow`, not a feature taxonomy.
 
 ### RampCandidate
 
@@ -101,20 +103,22 @@ The new implementation lives under `nlp/ramp/`:
 
 - `models.py` — normalized reasoning objects;
 - `evidence.py` — company-scoped evidence access;
-- `workflows.py` — behavioral workflow candidate discovery;
+- `workflows.py` — bounded directed-path candidate discovery over implementation relations;
 - `candidates.py` — deterministic eligibility, scoring, and sequencing;
 - `store.py` — persistence/progress boundary;
 - `generator_v2.py` — `RampPlanner`, the production intelligence entrypoint.
 
 `nlp/api.py` instantiates `RampPlanner` directly.
 
-The historical module-first intelligence implementation has been removed. The `generator.py` module is now only a compatibility import surface and contains no legacy intelligence.
+The historical module-first intelligence implementation has been removed. There is no `nlp/ramp/generator.py` on this branch.
+
+File-to-file `IMPORTS` extraction lives under `nlp/codebase/relationships.py` and is indexed during baseline sync. Unresolved imports are omitted. Go packages resolve to the first sorted non-test `.go` file in the package.
 
 ---
 
-## 7. First workflow proof
+## 7. Manual workflow proof vs generated candidates
 
-KMS has a concrete GitHub ingestion behavior that can support a backend learning outcome:
+KMS has a concrete GitHub ingestion behavior that can support a backend learning outcome. That chain was established by reading the implementation (RID-03), not by `WorkflowDiscoverer`:
 
 ```text
 GitHub webhook
@@ -127,9 +131,11 @@ GitHub webhook
  → Redis github_jobs publication
 ```
 
-The current normalized workflow discovery may identify this as a GitHub-ingestion candidate from indexed implementation structure. The workflow relationship itself remains an inferred signal until source-level relationship extraction is available.
+Generated candidates on the 2026-09-20 live snapshot were import paths grouped as `api implementation flow` / `nlp implementation flow`. They are not this ingestion sequence and are not validated workflows. Source-level **import** extraction exists; source-level **behavioral** extraction (routes, calls, queues, tests) does not.
 
-Therefore the generated learning action explicitly requires source verification and records unsupported links as unknown.
+The generated learning action requires source verification and recording unsupported control/data-flow links as unknown. That hedging is required; it does not make the path a verified workflow.
+
+Live classification: `docs/product/ramp-candidate-evaluation-2026-09-20.md`.
 
 ---
 
@@ -158,12 +164,16 @@ It may not:
 
 ## 10. Next implementation frontier
 
-The next quality increase is **relationship evidence**, not more onboarding prose:
+Import-path relationship evidence is **implemented**. It is not sufficient onboarding intelligence.
+
+The next quality increase is **behavioral corroboration of existing candidates**, not more import heuristics or onboarding prose. Selected task: RID-07 in `docs/development/roadmap.md`.
 
 ```text
 indexed files/modules
        ↓
-implementation relationships
+IMPORTS (implemented; structural only)
+       ↓
+route/call/queue/test corroboration (not implemented)
        ↓
 verified workflow structure
        ↓
@@ -172,4 +182,4 @@ change/history/verification evidence
 credible contribution candidates
 ```
 
-Do not return to the old module-first generator or add compatibility adapters that recreate its behavior.
+Do not return to the old module-first generator or add adapters that recreate its behavior.
