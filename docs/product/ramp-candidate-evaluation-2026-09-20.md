@@ -105,12 +105,13 @@ Before calling a candidate a useful workflow, require all of the following:
 
 ## Minimal next implementation step
 
-Do not add another path heuristic. Add a read-only source evidence extractor for
-one existing boundary, preferably route registration and handler/service calls in
-the Go API, and attach those facts to candidate evaluation without changing the
-existing `IMPORTS` graph or workflow output yet. Use the artifact above as the
-before fixture, then compare whether the same 16 candidates gain corroboration or
-are rejected as ordinary dependency chains.
+Selected as **RID-07** in `docs/development/roadmap.md`. Do not add another path
+heuristic. Add a read-only source evidence extractor for one existing boundary,
+preferably route registration and handler/service calls in the Go API, and attach
+those facts to candidate evaluation without changing the existing `IMPORTS` graph
+or workflow output yet. Use the artifact above as the before fixture, then compare
+whether the same 16 candidates gain corroboration or are rejected as ordinary
+dependency chains.
 
 Human usefulness has not been validated by this artifact; it is a structural
 evaluation of live evidence only.
