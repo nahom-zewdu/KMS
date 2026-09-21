@@ -1,8 +1,12 @@
 # Ramp Architecture
 
-**Status:** Clean intelligence rewrite in progress
-**Branch:** `feat/ramp`
-**Last updated:** 2026-09-12
+**Status:** Clean intelligence rewrite in progress (RID-05)
+**Branch:** `feat/implementation-relations`
+**Last updated:** 2026-09-21
+
+Product contract: `docs/product/ramp-prd.md`.
+Evidence/candidate semantics: `docs/product/ramp-intelligence-model.md`.
+Execution status: `docs/development/roadmap.md`.
 
 ## 1. Boundary
 
