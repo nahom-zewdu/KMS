@@ -13,9 +13,7 @@ The first Ramp implementation proved that KMS can assemble a company-scoped, rol
 
 It also exposed a more important problem: those capabilities do not automatically produce useful onboarding.
 
-The current generator primarily selects codebase modules/directories using importance, role-word matches, ownership, file counts, and safe/risky path heuristics, then turns those selections into prose. That is useful infrastructure, but it is not yet a sufficiently intelligent model of how a new engineer learns an unfamiliar system and reaches a first meaningful contribution.
-
-This document freezes the redesign direction before more generator features are implemented.
+As of 2026-09-12 this document froze the redesign **before** the intelligence rewrite. That rewrite is now in progress (`RampPlanner`). The module-first generator described below is historical: it is no longer on the production path. The design rules in this file remain the target. They are not a description of live candidate quality.
 
 ## 2. The product outcome
 
