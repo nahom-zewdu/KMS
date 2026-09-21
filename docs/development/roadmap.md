@@ -154,13 +154,19 @@ Defined deterministic learning gates, weighted scoring, contribution readiness g
 
 Important decisions:
 
-- gates precede scores;
-- contribution readiness is separate from learning relevance;
-- inferred evidence may support learning but never qualifies an unsupported contribution;
-- prerequisite-aware selection replaces global top-N module ranking;
-- shorter meaningful Ramps beat seven-step filler;
-- deterministic metadata survives into the generated plan;
-- LLM output may explain evidence but cannot invent or override company facts.
+- weighted 0–100 learning score on `RampCandidate`;
+- learning eligibility gates (company scope, evidence, action, verification, non-high/unknown risk);
+- contribution eligibility gates; the planner emits **no** contribution candidates;
+- prerequisite + stage-order selection.
+
+Not implemented (do not claim otherwise):
+
+- evidence corroboration bonus;
+- role-relevance trust ladder beyond path/module keyword tokens;
+- contribution readiness score and 70/100 threshold;
+- redundancy penalty;
+- explicit shorter-sequence cap (selection currently keeps every eligible candidate whose prerequisites are satisfied);
+- LLM explanation (`polish_why` is accepted by the API and unused by `RampPlanner`).
 
 ---
 
