@@ -103,7 +103,11 @@ Indexed `IMPORTS` edges are **direct structural facts** when extraction resolved
 
 `RampEvidenceStore.implementation_relationships()` maps FILE entity IDs to paths, skips `PART_OF` and `OWNS`, and classifies remaining edges by stored confidence (`≥ 0.8` direct, `≥ 0.6` derived, else inferred). The extractor writes `IMPORTS` at confidence `1.0`, so live import evidence is classified **direct**.
 
-The user-facing action therefore asks the engineer to verify the actual control/data flow in source and explicitly mark unsupported links as unknown.
+That does **not** upgrade a path into a verified workflow. See `docs/decisions/ADR-004-imports-are-not-workflows.md`.
+
+Go imports resolve to the first sorted non-test `.go` file in the imported package. Python unresolved/external imports are omitted.
+
+The user-facing workflow action asks the engineer to follow only observed implementation relationships, verify each boundary in source, and mark missing control/data-flow links as unknown.
 
 This is intentional epistemic behavior, not a hidden fallback.
 
