@@ -395,7 +395,9 @@ The first redesign implementation should prove that richer reasoning produces ma
 
 ## 13. The next execution phase
 
-The next phase is **Ramp Intelligence Discovery**, not another UI or persistence batch.
+The 2026-09-12 phase was **Ramp Intelligence Discovery**. RID-01 through RID-04 are accepted. RID-05 is in progress. RID-06 as a legacy before/after fixture is rejected (legacy generator gone). Live import-path quality is in `docs/product/ramp-candidate-evaluation-2026-09-20.md`. The selected next task is RID-07 in `docs/development/roadmap.md`.
+
+Do not treat the RID list below as current status. It is the original discovery plan, retained for history.
 
 ### RID-01 — Define the target evidence model
 
