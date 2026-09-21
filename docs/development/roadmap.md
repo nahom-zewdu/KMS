@@ -83,7 +83,7 @@ An `IMPORTS` edge (`A imports B`) is a structural dependency. It does not, by it
 | RID-05 clean Ramp intelligence rewrite | IN_PROGRESS | Production path is `RampPlanner`. Workflow candidates are bounded import-path graphs, not validated workflows. |
 | RID-06 legacy before/after fixture | REJECTED | The module-first generator is gone, so a before/after vs that output cannot be reproduced. Superseded by the 2026-09-20 live candidate evaluation. |
 | Live candidate-quality evaluation | VERIFIED (structural snapshot) | `docs/product/ramp-candidate-evaluation-2026-09-20.md`. Human usefulness is not validated. |
-| RID-07 Go route/handler corroboration | SPECIFIED | Selected next task. Read-only; no graph or plan writes. |
+| RID-07 Go route/handler corroboration | IMPLEMENTED | Read-only extractor + focused tests + dated evaluation added. Test execution remains pending; no graph or plan writes. |
 | Customer validation | NOT STARTED | No repository evidence of an engineer-who-did-not-build-KMS using Ramp. |
 | Live DB/schema reconciliation | PLANNED | Live Supabase schema is ahead of repo SQL; not a current Ramp blocker. |
 | RLS/security reconciliation | PLANNED | Required before broad customer exposure. |
@@ -268,7 +268,7 @@ Out:
 
 ### Verification method
 
-- Unit tests for the read-only extractor against `api/handlers/routes.go` and at least one negative fixture.
+- Unit tests for the read-only extractor against route-registration fixtures and at least one negative fixture.
 - A checked-in evaluation addendum (new dated file or a clearly marked section) comparing the 16 candidates before vs after corroboration.
 - `git diff` review confirming no indexer, discoverer, or persistence behavior change unless a documentation inconsistency cannot be resolved otherwise (not expected).
 
