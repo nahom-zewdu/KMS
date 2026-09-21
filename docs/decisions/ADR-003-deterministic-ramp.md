@@ -1,7 +1,9 @@
 # ADR-003: Deterministic Ramp Generation
 
 ## Status
-Accepted, with scope clarified 2026-09-12
+Accepted, with scope clarified 2026-09-12.
+
+Unchanged by later import-path work. What an `IMPORTS` edge is allowed to prove is recorded separately in `docs/decisions/ADR-004-imports-are-not-workflows.md` (accepted 2026-09-21). Do not read this ADR as if it had defined import-path candidates.
 
 ## Context
 
