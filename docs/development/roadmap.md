@@ -13,6 +13,24 @@
 
 ---
 
+## Documentation map
+
+| Document | Authority |
+|---|---|
+| `docs/product/ramp-prd.md` | Customer outcome and product contract |
+| `docs/product/ramp-redesign.md` | Accepted design direction (historical RID plan; not execution status) |
+| `docs/product/ramp-intelligence-model.md` | Current evidence/candidate objects and epistemic rules |
+| `docs/product/ramp-candidate-scoring.md` | Scoring/sequencing spec; notes where code differs |
+| `docs/architecture/ramp.md` | Current Ramp intelligence and API boundary |
+| `docs/product/ramp-candidate-evaluation-2026-09-20.md` | Read-only live candidate-quality snapshot |
+| `docs/decisions/ADR-003-deterministic-ramp.md` | Deterministic fact/selection layer |
+| `docs/decisions/ADR-004-imports-are-not-workflows.md` | Import edges are structural, not behavioral proof |
+| this file | Task state, verified status, selected next work |
+
+Do not copy pipeline diagrams into every document. Link here or to the intelligence model.
+
+---
+
 ## Execution rules
 
 ```text
