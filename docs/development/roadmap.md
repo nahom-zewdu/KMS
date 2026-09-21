@@ -83,7 +83,7 @@ An `IMPORTS` edge (`A imports B`) is a structural dependency. It does not, by it
 | RID-05 clean Ramp intelligence rewrite | IN_PROGRESS | Production path is `RampPlanner`. Workflow candidates are bounded import-path graphs, not validated workflows. |
 | RID-06 legacy before/after fixture | REJECTED | The module-first generator is gone, so a before/after vs that output cannot be reproduced. Superseded by the 2026-09-20 live candidate evaluation. |
 | Live candidate-quality evaluation | VERIFIED (structural snapshot) | `docs/product/ramp-candidate-evaluation-2026-09-20.md`. Human usefulness is not validated. |
-| RID-07 Go route/handler corroboration | IMPLEMENTED | Read-only extractor + focused tests + dated evaluation added. Test execution remains pending; no graph or plan writes. |
+| RID-07 Go route/handler corroboration | VERIFIED | Read-only extractor + focused tests + dated evaluation. Local verification: 3 route-evidence tests and 9 Ramp-v2 tests passed. Not yet accepted for product usefulness. No graph or plan writes. |
 | Customer validation | NOT STARTED | No repository evidence of an engineer-who-did-not-build-KMS using Ramp. |
 | Live DB/schema reconciliation | PLANNED | Live Supabase schema is ahead of repo SQL; not a current Ramp blocker. |
 | RLS/security reconciliation | PLANNED | Required before broad customer exposure. |
@@ -233,48 +233,51 @@ That comparison is no longer possible: the legacy generator is gone and its outp
 
 ---
 
-## Selected next task — RID-07 — Read-only Go route/handler corroboration — SPECIFIED
+## RID-08 — Go handler → direct service-call corroboration — IMPLEMENTED
 
 Chosen because the largest evidence-backed gap is not missing path heuristics. It is that Ramp cannot yet tell a new engineer **what a component does** or **what to inspect next** with evidence stronger than `A imports B`. The 2026-09-20 snapshot classified all live candidates as fragments, ordinary dependency chains, or merely potentially useful exploration paths. Adding more import-ranking rules would not close that gap.
 
 ### Objective
 
-Determine which existing import-path candidates can be corroborated by one behavioral source signal—Go HTTP route registration and the handler/service files those routes reference—without claiming a full workflow and without writing to the graph or Ramp plans.
+Determine whether explicit direct calls from an already-resolved HTTP handler through its declared dependency fields provide materially stronger onboarding evidence than `IMPORTS` or route→handler evidence, without claiming a full workflow and without writing to the graph or Ramp plans.
 
 ### Scope
 
 In:
 
-- `api/handlers/routes.go` and referenced Go handler/service files in this repository;
-- the 16-candidate fixture in `docs/product/ramp-candidate-evaluation-2026-09-20.md`;
-- a **read-only** extractor (tests + local report). The extractor may parse source in the working tree or a fetched snapshot; it must not `upsert`/`delete` `edges`, entities, or `ramp_plans`.
+- already-resolved Go HTTP handlers from RID-07;
+- direct `h.<field>.<method>(...)` calls through fields declared on the handler struct;
+- a **read-only** extractor, focused tests, and dated evaluation report.
 
 Out:
 
+- generic Go call graphs;
+- SSA/CFG/DFG analysis;
+- interface implementation resolution;
 - new graph relation types in production indexing;
-- changes to `WorkflowDiscoverer` caps, labels, or scoring weights;
+- changes to `WorkflowDiscoverer`, scoring, or persistence;
 - contribution candidates;
-- frontend work;
-- Python call-graph extraction;
 - mutating the live Supabase project.
 
 ### Acceptance criteria
 
-1. The extractor reports route method, path, and referenced handler symbol/file when those facts are present in source; it abstains rather than guessing missing links.
-2. Each of the 16 fixture candidates is reclassified using the evaluation's criteria (recognizable responsibility, potentially useful exploration path, ordinary dependency chain, fragment), now allowing route/handler corroboration as additional evidence.
-3. The report states, for each candidate, whether corroboration was found, what exact source span supports it, and which claims remain unsupported.
-4. No production data is written. Tests cover parse success, abstention on unsupported files, and stability of output for `api/handlers/routes.go`.
-5. A follow-up recommendation is written only after the report: either promote corroborated facts into Ramp evidence, or document why this signal is still too weak.
+1. The extractor reports handler symbol, declared receiver field, called method, source file, and line for direct dependency calls when those facts are present.
+2. It abstains rather than guessing unresolved handler fields, methods, or implementations.
+3. Tests cover direct detection, unrelated package calls, missing fields, multiple calls, and interface-boundary non-resolution.
+4. The dated evaluation compares `IMPORTS` → route→handler → route→handler→direct-operation evidence.
+5. No production data or Ramp behavior is mutated.
+6. The evaluation states whether the signal is strong enough for a narrow promotion and identifies the smallest next product experiment.
 
 ### Verification method
 
-- Unit tests for the read-only extractor against route-registration fixtures and at least one negative fixture.
-- A checked-in evaluation addendum (new dated file or a clearly marked section) comparing the 16 candidates before vs after corroboration.
-- `git diff` review confirming no indexer, discoverer, or persistence behavior change unless a documentation inconsistency cannot be resolved otherwise (not expected).
+- Focused handler-call extractor tests.
+- Existing RID-07 route-evidence tests.
+- Existing focused Ramp-v2 tests.
+- `git diff` review confirming no planner/indexer/persistence behavior change.
 
 ### Non-goal
 
-Do not treat a Gin route registration as proof of runtime execution order, ownership, or a safe first contribution.
+Do not treat a direct interface call as proof of the concrete implementation, complete workflow, ownership, or safe contribution.
 
 ---
 
