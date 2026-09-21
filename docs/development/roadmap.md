@@ -194,7 +194,19 @@ See `docs/architecture/ramp.md` and `docs/product/ramp-intelligence-model.md`. S
    RampStore / API contract
 ```
 
-### Implemented slices
+### Verified on this branch
+
+| Claim | Evidence |
+|---|---|
+| Production API uses `RampPlanner` | `nlp/api.py` |
+| No module-first generator on the production path | no `nlp/ramp/generator.py`; planner does not inherit a legacy generator |
+| Company scoping at evidence extraction | `RampEvidenceStore` filters by `company_id` |
+| Contribution candidates are not emitted | `RampPlanner._build_candidates` |
+| Bounded directed paths, caps, cycle fallback, isolated-file ignore, weak-relation abstention | `nlp/ramp/workflows.py` + `nlp/tests/test_ramp_v2.py` |
+| Python/Go `IMPORTS` extraction and indexing | `nlp/codebase/relationships.py`, `relationship_indexer.py`, `nlp/tests/test_relationships.py`; indexer called from baseline sync |
+| Planner does not invent workflows without relationship evidence | `test_planner_does_not_fabricate_workflow_without_relationship_evidence` |
+
+### Current limitation (verified)
 
 - `nlp/ramp/models.py` — typed evidence, implementation, workflow, and candidate models.
 - `nlp/ramp/evidence.py` — company-scoped extraction from `codebase_files`, `codebase_modules`, `edges`, and GitHub `raw_data`.
