@@ -43,5 +43,7 @@ Determinism is a means to trustworthiness, not the product itself. The redesigne
 ## Related documentation
 
 - `docs/product/ramp-prd.md` — customer outcome and product contract
-- `docs/product/ramp-redesign.md` — target intelligence model and execution plan
-- `docs/architecture/ramp.md` — technical architecture and migration strategy
+- `docs/product/ramp-redesign.md` — target intelligence model (design intent)
+- `docs/architecture/ramp.md` — current Ramp runtime
+- `docs/decisions/ADR-004-imports-are-not-workflows.md` — import edges vs workflows
+- `docs/development/roadmap.md` — execution status
