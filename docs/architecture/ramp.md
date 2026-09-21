@@ -86,12 +86,9 @@ Eligibility, risk, evidence strength, score, prerequisites, ordering, and contri
 - `store.py` — persistence/progress;
 - `generator_v2.py` — `RampPlanner` orchestration.
 
-`WorkflowDiscoverer` decomposes implementation evidence into deterministic directed
-paths rather than treating each weakly connected component as one workflow. Paths
-are limited to eight files and eight candidates per component; each candidate keeps
-only the relationship evidence on its path. Cycles use deterministic fallback
-starts, isolated surfaces are ignored, and weak-only relationships do not produce
-workflow candidates.
+`nlp/api.py` instantiates `RampPlanner` directly.
+
+Implementation relationships are extracted during baseline sync:
 
 - `nlp/codebase/relationships.py` — Python AST imports and Go `import` paths resolved against the file inventory;
 - `nlp/codebase/relationship_indexer.py` — rebuilds company-scoped `IMPORTS` edges for one repository;
