@@ -65,7 +65,7 @@ The deleted module-first generator is not part of the intelligence architecture.
 
 ### Candidates own reasoning
 
-Candidates represent bounded outcomes. A candidate may reference files/modules/workflows, but those entities are not themselves onboarding steps.
+Candidates represent bounded outcomes. A candidate may reference files/modules/import paths, but those entities are not themselves onboarding steps.
 
 ### Deterministic selection owns trust
 
