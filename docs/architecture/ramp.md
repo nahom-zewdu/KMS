@@ -109,7 +109,7 @@ Go imports resolve to the first sorted non-test `.go` file in the imported packa
 
 The user-facing workflow action asks the engineer to follow only observed implementation relationships, verify each boundary in source, and mark missing control/data-flow links as unknown.
 
-This is intentional epistemic behavior, not a hidden fallback.
+Live quality of the resulting candidates (one company, 2026-09-20) is recorded in `docs/product/ramp-candidate-evaluation-2026-09-20.md`. That snapshot is not customer validation.
 
 ## 6. Contribution boundary
 
