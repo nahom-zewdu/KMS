@@ -1,6 +1,10 @@
 # KMS Development Roadmap
 
 > Canonical execution ledger for KMS product development.
+> Product contract: `docs/product/ramp-prd.md`.
+> Current intelligence objects: `docs/product/ramp-intelligence-model.md`.
+> Current Ramp runtime: `docs/architecture/ramp.md`.
+> Scoring spec vs implemented subset: `docs/product/ramp-candidate-scoring.md`.
 
 **Last updated:** 2026-09-12
 **Current branch:** `feat/ramp`
