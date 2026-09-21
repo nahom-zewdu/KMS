@@ -345,7 +345,30 @@ Reason:
 
 The system must not convert a high-level engineering idea into a contribution merely because it sounds plausible.
 
-## 12. Implementation boundary for RID-05
+## 11a. Implemented subset and gaps (2026-09-21)
+
+Present in code:
+
+- learning score weights in `RampCandidate.score_breakdown` (same 0–100 dimensions as §4);
+- learning eligibility in `RampCandidateEngine.eligible`;
+- contribution eligibility in `contribution_eligible` (stricter than §3.2 on numeric thresholds: evidence ≥ 0.8, verification ≥ 0.8, history ≥ 0.6, `risk == "low"`);
+- prerequisite + stage-order selection;
+- no contribution candidates emitted by `RampPlanner`;
+- `machine` metadata on serialized steps (`candidate_id`, score, breakdown, prerequisites, eligibility, evidence refs).
+
+Not present in code (spec still desired; do not treat as done):
+
+- corroboration bonus in §4.1 (strongest relation strength is used instead);
+- role-relevance trust order in §4.2 (path/module keyword tokens only);
+- contribution readiness score and 70/100 threshold in §5;
+- redundancy penalty and shorter-sequence preference in §6.3–6.4 (`select` keeps every eligible candidate with satisfied prerequisites);
+- LLM presentation in §10 (`polish_why` unused).
+
+Role keyword matching remains a weak signal. The planner's role-surface action text tells the engineer not to treat it as ownership proof; the numeric `role_relevance` for a keyword match is still 1.0.
+
+---
+
+## 12. Implementation boundary for RID-05 (historical)
 
 RID-04 intentionally does **not** require replacing the whole generator.
 
