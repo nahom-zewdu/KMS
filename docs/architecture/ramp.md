@@ -115,7 +115,7 @@ Live quality of the resulting candidates (one company, 2026-09-20) is recorded i
 
 Ramp must not generate a first coding task merely because a file looks relevant or is imported. Contribution candidates require bounded change evidence, verification, controlled risk, credible help, and sufficient history/change precedent.
 
-Until those signals exist, Ramp should stop at investigation/readiness.
+Until those signals exist, Ramp should stop at investigation/readiness. The current planner emits no contribution candidates.
 
 ## 7. Migration rule
 
