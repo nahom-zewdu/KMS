@@ -70,6 +70,10 @@ Slack / GitHub webhooks
 
 ## Environment
 
+The root [`.env.example`](./.env.example) lists all environment variables read by
+the Go API, NLP worker, and NLP services. The GitHub API token is optional and is
+used for baseline tree walks.
+
 ### `api/`
 
 ```bash
@@ -80,7 +84,7 @@ REDIS_PASSWORD=
 SLACK_BOT_TOKEN=
 SLACK_SIGNING_SECRET=
 GITHUB_WEBHOOK_SECRET=
-PORT=9090
+PORT=8080
 ```
 
 ### `nlp/`
