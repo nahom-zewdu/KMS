@@ -2,18 +2,18 @@
 
 ## Backend API
 
-Requirements: Go 1.21+ and environment variables for Supabase, Redis, Slack, and GitHub integration as applicable.
+Requirements: Go 1.21+ and environment variables for Supabase, Redis, Slack, and GitHub integration as applicable. See the root [`.env.example`](../../.env.example) for the complete variable list. When running from `api/`, place the API values in `api/.env`; the API loads `.env` from its working directory.
 
 ```bash
 cd api
 go run main.go
 ```
 
-The API listens on the configured `PORT` (README default: `9090`).
+The API listens on the configured `PORT` (default: `8080`).
 
 ## NLP worker
 
-Requirements: Python 3.11+ and `uv` recommended.
+Requirements: Python 3.11+ and `uv` recommended. The NLP worker and services use the variables listed in the root [`.env.example`](../../.env.example).
 
 ```bash
 cd nlp
