@@ -8,7 +8,7 @@ This file is the source of truth for the hardening program and survives Copilot 
 |---|---|---:|---|
 | Batch 0 | Baseline and architecture verification | IMPLEMENTED | Architecture reviewed and documented; no production security changes made in this batch. |
 | Batch 1 | Tenant isolation and database security | VERIFIED | Tenant validation tightened in core access paths; migration guardrails added for company-scoped data; Go tenant tests pass. |
-| Batch 2 | Authentication and authorization | PLANNED | Pending auth model validation across Go/Python services. |
+| Batch 2 | Authentication and authorization | VERIFIED | Explicit company-membership validation added to tenant-scoped API routes; authz tests pass. |
 | Batch 3 | GitHub integration security | PLANNED | Pending OAuth state and callback hardening review. |
 | Batch 4 | Go API protection and rate limiting | PLANNED | Pending route trust-boundary review and rate-limit design. |
 | Batch 5 | Go HTTP server hardening | PLANNED | Pending server timeout and shutdown review. |
@@ -137,3 +137,50 @@ VERIFIED
 ### Recommended next batch
 
 Batch 2 — Authentication and authorization.
+
+## Batch 2
+
+### Objective
+
+Centralize tenant-scoped authorization checks for the public Python API so only company members can access company-specific resources, and verify role boundaries explicitly.
+
+### Findings before implementation
+
+- `nlp/api.py` accepted company-scoped requests without verifying the caller’s company membership, even though `company_members` is the project’s canonical tenant model.
+- The API used header-based identity (`X-User-Id`) without validating it against the requested company.
+- Cross-company access was possible in principle whenever a caller supplied any non-empty, non-default `company_id` value.
+
+### Files changed
+
+- `nlp/api.py`
+- `nlp/tests/test_authz.py`
+- `docs/backend-hardening/PROGRESS.md`
+
+### Security decisions
+
+- Require `X-User-Id` and a valid non-default `company_id` on tenant-scoped endpoints.
+- Query `company_members` to verify membership before executing any company-specific operation.
+- Treat missing member records as an authorization failure (403) rather than silently continuing.
+- Keep role checks explicit and centralized for admin-only routes when a future endpoint requires them.
+
+### Tests added
+
+- Added focused authz tests covering missing user IDs, invalid default company IDs, non-membership, valid membership, and admin-role rejection.
+
+### Commands executed and actual results
+
+1. `cd /home/nahom/Projects/personal/KMS/nlp && PYTHONPATH=. pytest -q tests/test_authz.py`
+   - Result: passed (`5 passed in 1.40s`).
+
+### Remaining risks
+
+- This batch validates the explicit company-membership boundary at the Python API layer; it does not replace a full authentication review across the frontend and Go ingress.
+- The live Supabase project still needs a full RLS and policy review before more tables are exposed directly.
+
+### Status
+
+VERIFIED
+
+### Recommended next batch
+
+Batch 3 — GitHub integration security.
