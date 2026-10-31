@@ -131,6 +131,7 @@ async def get_ramp(
     """Fetch active Ramp and hydrate caller progress when requested."""
     effective_company_id = require_company_id(company_header or company_id, "company_id")
     try:
+        require_company_membership(user_id, effective_company_id)
         plan = ramp_generator.get_active(effective_company_id, role, user_id)
         if not plan:
             return JSONResponse({"success": False, "error": "No active ramp plan", "plan": None}, status_code=404)
