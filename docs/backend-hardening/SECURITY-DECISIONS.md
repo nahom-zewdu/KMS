@@ -153,3 +153,21 @@ The API uses `http.Server` with 5s `ReadHeaderTimeout`, 30s `ReadTimeout`, 90s `
 ### Verification boundary
 
 Go handler/repository/service and server tests, plus the race detector, passed locally. The frontend TypeScript check passed. No live Supabase or production webhook/runtime was exercised; the exact deployed grants, repository rows, delivery constraint, API routing, key configuration, and termination window remain deployment checks. Rate limiting is explicitly not part of this change.
+
+## Decision 15: service-role access must be explicitly tenant-scoped
+
+The Go and Python service-role call sites were inventoried. Tenant data is filtered in database queries or by repository IDs first resolved with a company predicate; Python query/Ramp paths and graph/vector RPC calls carry verified company context. The Go graph-search helper now requires a real company ID. Contribution metrics now require a company ID and repository for reads, include company scope in writes, and use a tenant-specific upsert conflict key.
+
+The contributions migration maps existing rows only where `repo_name` resolves to one company. It aborts transactionally for orphaned, ambiguous, default-company, or inconsistent rows and does not delete data. The migration and RLS harness passed against a disposable PostgreSQL 16 instance.
+
+Global access is limited to declared operational/analytics cases: integration identity resolution (provider plus globally unique external identity), event idempotency (globally unique delivery ID), maintenance enumeration of company IDs before per-company backfill, and minimized query-hash analytics. `pull_requests` and `issues` have no active retrieval/write callers and remain backend-only legacy tables without company ownership; they must not be used for tenant-facing retrieval.
+
+### Verification boundary
+
+Application tests assert company filters in actual PostgREST request parameters, and worker query-builder tests assert repository updates include the tenant predicate. The Python focused suite passed. However, the checked-in base schema lacks `events.company_id` even though Go writes it; deployed schema parity must be verified before rollout. The pgvector `match_documents` function was inspected but not runtime-tested because the disposable database lacked pgvector. Live Supabase grants, actual service-role key configuration, and deployed object inventory were not queried. Therefore service-role isolation is **IMPLEMENTED**, locally **PARTIALLY VERIFIED**, and overall deployment verification remains **BLOCKED**.
+
+## Decision 16: rate limiting remains a design only
+
+Prepared controls use shared Redis atomic windows for per-user and per-company query limits, per-user/per-company baseline-sync limits, and per-integration webhook controls. Redis leases bound concurrent expensive work across replicas. Limit exhaustion should produce 429 with `Retry-After` and reset/remaining metadata; Redis failure should fail closed with retryable 503 responses rather than bypass limits. Webhook 429 retry semantics require provider-specific validation before implementation.
+
+The proposed starting limits and failure behavior are documented in `ARCHITECTURE.md`. They are not yet product-approved or implemented. Rate limiting remains **NOT STARTED** until the prior isolation/reliability blockers are accepted or resolved.
