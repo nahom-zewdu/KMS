@@ -226,8 +226,9 @@ async def sync_baseline(
 ):
     """Sync the baseline for a specific repository."""
     try:
-        effective_company_id = require_company_id(company_id, "company_id")
-        success = CodebaseBaselineSync(supabase).sync_repository(repo, company_id=effective_company_id)
+        effective_company_id = require_company_id(company_header or company_id, "company_id")
+        require_company_membership(user_id, effective_company_id)
+        success = CodebaseBaselineSync(get_supabase_client()).sync_repository(repo, company_id=effective_company_id)
         if success:
             return JSONResponse({"success": True, "message": f"Baseline synced for {repo}"})
         return JSONResponse({"success": False, "error": f"Failed to sync baseline for {repo}"}, status_code=500)
