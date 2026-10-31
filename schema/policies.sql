@@ -140,16 +140,23 @@ USING (
     SELECT company_id FROM public.company_members
     WHERE user_id = auth.uid() AND role = 'admin'
   )
+)
+WITH CHECK (
+  company_id IS NOT NULL
+  AND lower(btrim(company_id)) <> 'default'
+  AND company_id IN (
+    SELECT company_id FROM public.company_members
+    WHERE user_id = auth.uid() AND role = 'admin'
+  )
 );
 
--- Ramp plans policies
-create policy "Members can read company ramp plans"
-on public.ramp_plans
-for select
-using (
-  company_id in (
-    select company_id from public.company_members
-    where user_id = auth.uid()
+-- Ramp step progress: members can read their own progress and admins manage company entries.
+CREATE POLICY "Members can read company ramp progress"
+ON public.ramp_step_progress
+FOR SELECT
+USING (
+  company_id IN (
+    SELECT company_id FROM public.company_members WHERE user_id = auth.uid()
   )
 );
 
