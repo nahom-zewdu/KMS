@@ -1,5 +1,4 @@
-from types import SimpleNamespace
-
+import jwt
 import pytest
 from fastapi import HTTPException
 
@@ -13,16 +12,21 @@ class FakeResponse:
 
 class FakeTable:
     def __init__(self, rows):
-        self.rows = rows
+        self.rows = list(rows)
+        self.filters = {}
 
     def select(self, *args, **kwargs):
         return self
 
-    def eq(self, *args, **kwargs):
+    def eq(self, field, value):
+        self.filters[field] = value
         return self
 
     def execute(self):
-        return FakeResponse(self.rows)
+        rows = list(self.rows)
+        for field, value in self.filters.items():
+            rows = [row for row in rows if row.get(field) == value]
+        return FakeResponse(rows)
 
 
 class FakeSupabase:
