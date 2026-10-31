@@ -3,8 +3,11 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"time"
 )
+
+var ErrUnauthenticated = errors.New("unauthenticated")
 
 // IngestRequest represents a request to ingest an event from any source.
 type IngestRequest struct {
@@ -61,6 +64,9 @@ type StoragePort interface {
 	QueryKnowledgeGraphSupabase(ctx context.Context, query string) (string, error)
 	ResolveCompanyByIntegration(ctx context.Context, provider, externalID string) (string, error)
 	ResolveCompanyByInstallation(ctx context.Context, installationID string) (string, error)
+	AuthenticateUser(ctx context.Context, accessToken string) (string, error)
+	IsCompanyMember(ctx context.Context, userID, companyID string) (bool, error)
+	ResolveRepositoryForCompany(ctx context.Context, companyID, repository string) (string, error)
 }
 
 // MetricsService defines the interface for metrics computation.
