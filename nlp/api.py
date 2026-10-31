@@ -8,13 +8,11 @@ from typing import Any
 import jwt
 import uvicorn
 from fastapi import FastAPI, Header, HTTPException
-from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from codebase.baseline import CodebaseBaselineSync
 from playbooks.generator import PlaybookGenerator
-from visualizer.service import VisualizerService
 from ramp.generator_v2 import RampPlanner
 from utils.supabase import init_supabase
 from visualizer.service import VisualizerService
@@ -104,7 +102,7 @@ def normalize_company_id(company_id: str | None) -> str:
 def require_company_membership(user_id: str | None, company_id: str | None, *, require_role: str | None = None) -> dict:
     """Validate that a user belongs to the requested company and optionally has a required role."""
     if not user_id:
-        raise HTTPException(status_code=401, detail="X-User-Id header is required")
+        raise HTTPException(status_code=401, detail="Verified user identity is required")
 
     effective_company_id = normalize_company_id(company_id)
     membership = {
@@ -166,13 +164,15 @@ def require_company_id(company_id: str | None, field_name: str = "company_id") -
 @app.post("/ramp-plans/generate")
 async def generate_ramp(
     payload: dict,
-    user_id: str | None = Header(default=None, alias="X-User-Id"),
+    authorization: str | None = Header(default=None, alias="Authorization"),
+    legacy_user_id: str | None = Header(default=None, alias="X-User-Id"),
     company_id_header: str | None = Header(default=None, alias="X-Company-Id"),
 ):
     """Generate or refresh Ramp for a company and role."""
     try:
+        identity = require_authenticated_identity(authorization, legacy_user_id=legacy_user_id)
         company_id = require_company_id(company_id_header or payload.get("company_id"), "company_id")
-        require_company_membership(user_id, company_id)
+        require_company_membership(identity["user_id"], company_id)
         plan = ramp_generator.generate(
             role=payload.get("role") or "software-engineer",
             company_id=company_id,
@@ -191,14 +191,16 @@ async def generate_ramp(
 async def get_ramp(
     company_id: str | None = None,
     role: str = "software-engineer",
-    user_id: str | None = Header(default=None, alias="X-User-Id"),
+    authorization: str | None = Header(default=None, alias="Authorization"),
+    legacy_user_id: str | None = Header(default=None, alias="X-User-Id"),
     company_header: str | None = Header(default=None, alias="X-Company-Id"),
 ):
     """Fetch active Ramp and hydrate caller progress when requested."""
     effective_company_id = require_company_id(company_header or company_id, "company_id")
     try:
-        require_company_membership(user_id, effective_company_id)
-        plan = ramp_generator.get_active(effective_company_id, role, user_id)
+        identity = require_authenticated_identity(authorization, legacy_user_id=legacy_user_id)
+        require_company_membership(identity["user_id"], effective_company_id)
+        plan = ramp_generator.get_active(effective_company_id, role, identity["user_id"])
         if not plan:
             return JSONResponse({"success": False, "error": "No active ramp plan", "plan": None}, status_code=404)
         return JSONResponse({"success": True, "plan": plan})
