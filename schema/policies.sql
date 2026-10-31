@@ -21,9 +21,14 @@ USING (
 CREATE POLICY "Authenticated users can create companies"
 ON public.companies
 FOR INSERT
-WITH CHECK (auth.uid() = user_id);
+WITH CHECK (
+  auth.uid() IS NOT NULL
+  AND id IS NOT NULL
+  AND lower(btrim(id)) <> 'default'
+);
 
-CREATE POLICY "Select own memberships"
+-- Membership: users may read only their own membership or admin-managed membership records.
+CREATE POLICY "Users can read their memberships"
 ON public.company_members
 FOR SELECT
 USING (auth.uid() = user_id);
