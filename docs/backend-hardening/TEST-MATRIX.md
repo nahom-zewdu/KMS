@@ -81,3 +81,29 @@ No live Supabase database was changed. Do not treat disposable PostgreSQL result
 | Real Slack/GitHub provider delivery, retry schedule, and production termination window | Not run | **BLOCKED** |
 
 Unit and local HTTP tests do not establish production security. Supabase service key permissions, Auth endpoint behavior, the deployed `events.delivery_id` unique constraint, Go API network exposure, and shutdown timing must be checked in the target environment before production security is claimed. Rate limiting remains **BLOCKED / NOT STARTED**.
+
+## Post-ingress service-role and Slack reliability review
+
+| Area | Exact command | Result | Coverage and limits |
+|---|---|---|---|
+| Go API tests | `cd api && go test -count=1 ./...` | **VERIFIED — passed** | Includes actual PostgREST parameter assertions for company-scoped graph search and contribution reads/upserts; Slack subscribe-before-publish and lifecycle cases. |
+| Go race detector | `cd api && go test -race -count=1 ./...` | **VERIFIED — passed** | All Go packages pass under the race detector, including immediate/delayed Slack responses, publish failure, worker failure/no result, worker result-channel close, cancellation, timeout, and subscription cleanup. |
+| Go static analysis | `cd api && go vet ./...` | **VERIFIED — passed** | No diagnostics. |
+| Python query/Ramp/worker tenant checks | `cd nlp && PYTHONPATH=. pytest tests/test_authz.py tests/test_ramp_v2.py tests/test_evidence_composition.py tests/test_query_engine_context.py tests/test_relationships.py tests/test_repository_updates_are_scoped.py -q` | **VERIFIED — 45 passed, 2 deprecation warnings** | Includes repository update tests asserting both the row ID and `company_id` predicates. Fakes record and enforce the query chain rather than dropping filters. |
+| Python expanded focused attempt | `cd nlp && PYTHONPATH=. pytest tests/test_authz.py tests/test_ramp_v2.py tests/test_evidence_composition.py tests/test_query_engine_context.py tests/test_relationships.py tests/test_failure_semantics.py tests/test_repository_updates_are_scoped.py -q` | **BLOCKED — collection error** | `tests/test_failure_semantics.py` imports `sentence_transformers`, which is not installed. No dependency was installed for an unrelated test module; rerunning the applicable suite without that module passed (45 tests). |
+| RLS and tenant migration harness | `PGPASSWORD=kms-local-review psql -h 127.0.0.1 -p 55432 -U postgres -d postgres -v ON_ERROR_STOP=1 -f schema/tests/tenant_rls.sql` | **VERIFIED — passed** on disposable PostgreSQL 16 | Applied the tenant guardrail and access-policy migrations twice and the new contributions tenant migration twice; verified membership/RLS behavior and mapped a historical contribution only through its company-owned repository. The disposable container was stopped afterward. |
+| `match_documents` pgvector RPC | No runtime command available | **BLOCKED** | The disposable image lacked pgvector. SQL and caller both include company filtering, but RPC execution was not verified. |
+| Live Supabase schema, grants, key role, and data | No live query or migration was performed | **BLOCKED** | In particular, checked-in `events` lacks `company_id` although Go event writes include it. Production schema parity and service-role configuration require operator verification. |
+| Rate limiting | Documentation review only | **NOT STARTED** | Shared Redis counter/lease design and proposed limits are documented; no middleware, counters, leases, or 429 behavior were implemented. |
+
+### Post-ingress security regression coverage
+
+| Requirement | Evidence | Status |
+|---|---|---|
+| Slack fast-worker response cannot beat subscription setup | Fake Redis rejects publish until its result subscription is established; immediate-response test passes | **VERIFIED** |
+| Delayed Slack worker response, publish failure, worker failure/no result, result-channel closure, cancellation, and timeout | `api/services/slack_bot_test.go`; operation context cancellation observed by subscription fake | **VERIFIED** |
+| Go graph search requires a real tenant and applies the filter in the HTTP request | Supabase repository tests inspect `company_id=eq.company-a`; empty/default rejection covered | **VERIFIED** |
+| Contribution query and write are tenant-scoped | Go tests assert company/repository filters, company value, and `company_id,person_name,repo_name` conflict target | **VERIFIED** |
+| Baseline and incremental repository updates preserve tenant predicates | Python query-builder tests record actual filters and require both repository ID and company ID | **VERIFIED** |
+| Cross-tenant vector retrieval at the live RPC boundary | `match_documents` SQL has a tenant predicate; no pgvector runtime test environment | **BLOCKED** |
+| End-to-end service-role isolation against deployed Supabase | No live project access by design | **BLOCKED** |
