@@ -103,11 +103,12 @@ async def update_step_progress(
 async def get_step_progress(
     plan_id: str,
     step_id: str,
-    company_id: str = Header(default="default", alias="X-Company-Id"),
+    company_id: str | None = Header(default=None, alias="X-Company-Id"),
     user_id: str = Header(..., alias="X-User-Id"),
 ):
     """Read one user's Ramp step progress."""
-    progress = ramp_generator.get_step_progress(plan_id, step_id, company_id, user_id)
+    effective_company_id = require_company_id(company_id, "X-Company-Id")
+    progress = ramp_generator.get_step_progress(plan_id, step_id, effective_company_id, user_id)
     if not progress:
         return JSONResponse({"success": False, "error": "Step progress not found", "progress": None}, status_code=404)
     return JSONResponse({"success": True, "progress": progress})
