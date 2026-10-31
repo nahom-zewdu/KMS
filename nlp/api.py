@@ -25,6 +25,26 @@ def get_supabase_client():
     return supabase
 
 
+def verify_bearer_token(token: str | None, *, secret_env: str) -> dict[str, Any]:
+    """Verify a bearer token using the configured secret and return the verified claims."""
+    if not token:
+        raise HTTPException(status_code=401, detail="Bearer token is required")
+
+    secret = os.getenv(secret_env)
+    if not secret:
+        raise HTTPException(status_code=503, detail=f"{secret_env} is not configured")
+
+    try:
+        claims = jwt.decode(token, secret, algorithms=["HS256"], options={"require": ["sub"]})
+    except jwt.PyJWTError as exc:
+        raise HTTPException(status_code=401, detail="Invalid or expired bearer token") from exc
+
+    user_id = claims.get("sub") or claims.get("user_id")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Bearer token does not include a user identity")
+
+    return {"user_id": str(user_id), "claims": claims}
+
 def normalize_company_id(company_id: str | None) -> str:
     """Reject blank or shared fallback company identifiers."""
     normalized = (company_id or "").strip()
