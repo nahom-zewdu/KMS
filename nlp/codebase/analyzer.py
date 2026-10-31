@@ -107,7 +107,7 @@ class CodebaseAnalyzer:
             physical_repo_id = existing.data[0]["id"]
             self.supabase.table("repositories").update(
                 {"updated_at": now}
-            ).eq("id", physical_repo_id).execute()
+            ).eq("id", physical_repo_id).eq("company_id", company_id).execute()
         else:
             physical_repo_id = str(uuid.uuid4())
             ref = payload.get("ref") or ""
