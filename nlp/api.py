@@ -30,24 +30,71 @@ def get_supabase_client():
 
 
 def verify_bearer_token(token: str | None, *, secret_env: str) -> dict[str, Any]:
-    """Verify a bearer token using the configured secret and return the verified claims."""
+    """Verify a Supabase user token and return claims scoped to the authenticated audience."""
     if not token:
         raise HTTPException(status_code=401, detail="Bearer token is required")
 
     secret = os.getenv(secret_env)
     if not secret:
         raise HTTPException(status_code=503, detail=f"{secret_env} is not configured")
+    if len(secret.encode("utf-8")) < 32:
+        raise HTTPException(status_code=503, detail=f"{secret_env} must be at least 32 bytes")
+
+    issuer = os.getenv("SUPABASE_JWT_ISSUER")
+    if not issuer:
+        supabase_url = os.getenv("SUPABASE_URL")
+        issuer = f"{supabase_url.rstrip('/')}/auth/v1" if supabase_url else None
+    if not issuer:
+        raise HTTPException(status_code=503, detail="SUPABASE_JWT_ISSUER or SUPABASE_URL is required")
+
+    audience = os.getenv("SUPABASE_JWT_AUDIENCE", "authenticated")
 
     try:
-        claims = jwt.decode(token, secret, algorithms=["HS256"], options={"require": ["sub"]})
+        claims = jwt.decode(
+            token,
+            secret,
+            algorithms=["HS256"],
+            issuer=issuer,
+            audience=audience,
+            options={"require": ["exp", "iat", "iss", "aud", "sub", "role"]},
+        )
     except jwt.PyJWTError as exc:
         raise HTTPException(status_code=401, detail="Invalid or expired bearer token") from exc
 
-    user_id = claims.get("sub") or claims.get("user_id")
-    if not user_id:
-        raise HTTPException(status_code=401, detail="Bearer token does not include a user identity")
+    if str(claims.get("role", "")).lower() != "authenticated":
+        raise HTTPException(status_code=401, detail="Bearer token is not a user token")
 
-    return {"user_id": str(user_id), "claims": claims}
+    return {"user_id": str(claims["sub"]), "claims": claims, "source": "supabase_user"}
+
+
+def verify_internal_service_token(token: str | None) -> dict[str, Any]:
+    """Validate a service token independently; this identity is not accepted by user routes."""
+    if not token:
+        raise HTTPException(status_code=401, detail="Service bearer token is required")
+
+    secret = os.getenv("INTERNAL_SERVICE_SECRET")
+    issuer = os.getenv("INTERNAL_SERVICE_ISSUER")
+    audience = os.getenv("INTERNAL_SERVICE_AUDIENCE")
+    if not secret or not issuer or not audience:
+        raise HTTPException(status_code=503, detail="Internal service token configuration is incomplete")
+    if len(secret.encode("utf-8")) < 32:
+        raise HTTPException(status_code=503, detail="INTERNAL_SERVICE_SECRET must be at least 32 bytes")
+
+    try:
+        claims = jwt.decode(
+            token,
+            secret,
+            algorithms=["HS256"],
+            issuer=issuer,
+            audience=audience,
+            options={"require": ["exp", "iat", "iss", "aud", "sub", "role"]},
+        )
+    except jwt.PyJWTError as exc:
+        raise HTTPException(status_code=401, detail="Invalid or expired service token") from exc
+
+    if str(claims.get("role", "")).lower() != "service":
+        raise HTTPException(status_code=401, detail="Token is not an internal service token")
+    return {"service_id": str(claims["sub"]), "claims": claims, "source": "internal_service"}
 
 
 def require_authenticated_identity(
@@ -55,7 +102,7 @@ def require_authenticated_identity(
     *,
     legacy_user_id: str | None = None,
 ) -> dict[str, Any]:
-    """Require a verified JWT or internal service token; reject legacy X-User-Id carrier headers."""
+    """Require a verified Supabase user JWT; service identities cannot impersonate users."""
     if legacy_user_id is not None:
         raise HTTPException(
             status_code=401,
@@ -69,24 +116,7 @@ def require_authenticated_identity(
     if scheme.lower() != "bearer" or not token:
         raise HTTPException(status_code=401, detail="Authorization header must use Bearer token format")
 
-    for secret_env in ("SUPABASE_JWT_SECRET", "JWT_SECRET"):
-        try:
-            return verify_bearer_token(token, secret_env=secret_env)
-        except HTTPException as exc:
-            if exc.status_code == 503:
-                continue
-            last_error = exc
-    service_secret = os.getenv("INTERNAL_SERVICE_SECRET")
-    if service_secret:
-        try:
-            claims = jwt.decode(token, service_secret, algorithms=["HS256"], options={"require": ["sub"]})
-        except jwt.PyJWTError as exc:
-            raise HTTPException(status_code=401, detail="Invalid or expired bearer token") from exc
-        service_user_id = claims.get("sub") or claims.get("user_id")
-        if service_user_id and str(claims.get("role") or "").lower() in {"service", "internal", "system"}:
-            return {"user_id": str(service_user_id), "claims": claims, "source": "internal_service"}
-
-    raise HTTPException(status_code=401, detail="Invalid or expired bearer token")
+    return verify_bearer_token(token, secret_env="SUPABASE_JWT_SECRET")
 
 
 def normalize_company_id(company_id: str | None) -> str:
