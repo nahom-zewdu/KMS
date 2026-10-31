@@ -69,6 +69,14 @@ def test_require_company_membership_requires_user_id(monkeypatch):
     assert exc.value.status_code == 401
 
 
+def test_require_company_membership_rejects_cross_tenant_lookup(monkeypatch):
+    fake_rows = [{"company_id": "company-456", "user_id": "user-1", "role": "member"}]
+    monkeypatch.setattr(api, "supabase", FakeSupabase(fake_rows))
+    with pytest.raises(HTTPException) as exc:
+        api.require_company_membership("user-1", "company-123")
+    assert exc.value.status_code == 403
+
+
 def test_require_company_membership_rejects_non_member(monkeypatch):
     monkeypatch.setattr(api, "supabase", FakeSupabase([]))
     with pytest.raises(HTTPException) as exc:
