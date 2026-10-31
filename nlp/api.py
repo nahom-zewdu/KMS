@@ -197,7 +197,11 @@ async def get_step_progress(
 
 
 @app.post("/playbooks/generate")
-async def generate_playbook(payload: dict):
+async def generate_playbook(
+    payload: dict,
+    user_id: str | None = Header(default=None, alias="X-User-Id"),
+    company_id_header: str | None = Header(default=None, alias="X-Company-Id"),
+):
     """Generate a role-specific onboarding playbook."""
     try:
         role = payload.get("role", "software-engineer")
