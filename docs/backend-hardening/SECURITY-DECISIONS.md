@@ -86,3 +86,42 @@ The project's own guidance explicitly warns against claiming guarantees without 
 ### Consequence
 
 The corrective review now records the relevant negative tests, deployment secret requirements, and remaining live-environment verification tasks. We do not claim final production hardening until the live Supabase policy set is applied and reviewed in context.
+
+## Decision 8: user JWTs and internal service tokens are separate credentials
+
+### Decision
+
+User-facing Python API routes accept only Supabase user JWTs. Verification is HS256-only and requires `exp`, `iat`, `iss`, `aud`, `sub`, and `role`; issuer and audience are checked, and `role` must be `authenticated`. Legacy `X-User-Id` is rejected. An independently configured service-token validator is not an alternate identity source for user routes.
+
+### Deployment assumptions
+
+- Configure `SUPABASE_JWT_SECRET` with at least 32 bytes.
+- Configure `SUPABASE_JWT_ISSUER` or provide `SUPABASE_URL`, from which `/auth/v1` is appended.
+- Configure `SUPABASE_JWT_AUDIENCE` if it differs from `authenticated`.
+- The live Supabase signing algorithm has not been verified. Asymmetric/JWKS tokens are unsupported until a separate verifier is implemented.
+
+## Decision 9: membership authorization is non-recursive and admin-controlled
+
+### Decision
+
+`company_members` RLS calls `public.is_company_member`, a narrowly scoped `SECURITY DEFINER` predicate with fixed `search_path`, rather than querying its own RLS-protected table in policy expressions. Users cannot insert themselves or alter their own role. Managers may add a member-only row; only admins may change another non-owner membership role. Owners cannot be modified or removed through ordinary membership policies.
+
+Company creation and first owner membership are created atomically by `public.create_company_with_owner`, and the frontend creation route uses that RPC. There is no implemented invitation persistence/acceptance lifecycle or owner-transfer RPC; those product flows remain explicitly blocked rather than treated as secure.
+
+## Decision 10: authenticated reads are RLS-scoped; service-role writes require explicit tenant filters
+
+### Decision
+
+RLS is enabled for checked-in tenant tables. Authenticated access is limited to company membership, and graph edges are constrained to endpoints in the same company. Codebase files/modules inherit tenant scope through their repository. Tables containing provider credentials and legacy unscoped event/analytics records are service-only.
+
+The Supabase `service_role` bypasses RLS by design. Backend and worker paths must include an explicit `company_id` filter for reads and updates; RLS is not claimed as a substitute for this application boundary. `match_documents` and `search_edges_by_entity` reject missing, blank, or `default` tenant filters.
+
+## Decision 11: tenant migrations fail closed on unmapped historical data
+
+### Decision
+
+Guardrail migrations do not infer company ownership, delete data, or silently backfill. They preflight blank/default/orphaned/cross-company rows, add constraints idempotently, and abort transactionally when existing rows need operator review. `raw_data.company_id` is now part of the checked-in base schema; existing raw records without a verified mapping must be backfilled explicitly before deployment.
+
+### Verification boundary
+
+The policies and migration behavior passed against disposable PostgreSQL 16 using a minimal Supabase `auth.uid()` compatibility stub. This does not verify the live Supabase object inventory, production grants, signing configuration, or pgvector RPC runtime. No changes were applied to live Supabase.
