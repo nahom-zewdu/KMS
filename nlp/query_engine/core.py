@@ -55,7 +55,9 @@ class QueryEngine:
         if ramp_context is not None:
             ramp_context = str(ramp_context).strip() or None
 
-        company_id = (job.get("company_id") or payload.get("company_id") or "default").strip() or "default"
+        company_id = str(job.get("company_id") or payload.get("company_id") or "").strip()
+        if not company_id or company_id.lower() == "default":
+            raise ValueError("A real company_id is required for query processing")
 
         logger.info(f"Query {query_id} | company={company_id} | question={question} | ramp_context_present={bool(ramp_context)}")
 
