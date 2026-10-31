@@ -279,13 +279,15 @@ async def generate_playbook(
 async def sync_baseline(
     repo: str,
     company_id: str | None = None,
-    user_id: str | None = Header(default=None, alias="X-User-Id"),
+    authorization: str | None = Header(default=None, alias="Authorization"),
+    legacy_user_id: str | None = Header(default=None, alias="X-User-Id"),
     company_header: str | None = Header(default=None, alias="X-Company-Id"),
 ):
     """Sync the baseline for a specific repository."""
     try:
+        identity = require_authenticated_identity(authorization, legacy_user_id=legacy_user_id)
         effective_company_id = require_company_id(company_header or company_id, "company_id")
-        require_company_membership(user_id, effective_company_id)
+        require_company_membership(identity["user_id"], effective_company_id)
         success = CodebaseBaselineSync(get_supabase_client()).sync_repository(repo, company_id=effective_company_id)
         if success:
             return JSONResponse({"success": True, "message": f"Baseline synced for {repo}"})
@@ -309,7 +311,7 @@ async def get_visualizer(
     try:
         identity = require_authenticated_identity(authorization, legacy_user_id=legacy_user_id)
         effective_company_id = require_company_id(company_header or company_id, "company_id")
-        require_company_membership(user_id, effective_company_id)
+        require_company_membership(identity["user_id"], effective_company_id)
         data = VisualizerService(get_supabase_client()).build_for_role(role, company_id=effective_company_id)
         return JSONResponse({"success": True, "data": data})
     except HTTPException:
