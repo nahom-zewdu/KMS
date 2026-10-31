@@ -20,6 +20,7 @@ class RampStore:
 
     def save_plan(self, plan: Dict[str, Any]) -> None:
         """Upsert one active company/role plan."""
+        self._require_company_id(plan.get("company_id"))
         record = {
             "company_id": plan["company_id"],
             "role": plan["role"],
@@ -33,6 +34,7 @@ class RampStore:
 
     def get_active(self, company_id: str, role: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Return the active plan in the shape expected by the Ramp API."""
+        self._require_company_id(company_id)
         response = (
             self.supabase.table("ramp_plans")
             .select("*")
@@ -69,6 +71,7 @@ class RampStore:
 
     def get_plan(self, plan_id: str, company_id: str) -> Optional[Dict[str, Any]]:
         """Return a plan only when it belongs to the requested company."""
+        self._require_company_id(company_id)
         response = (
             self.supabase.table("ramp_plans")
             .select("*")
@@ -82,6 +85,7 @@ class RampStore:
 
     def progress_for_plan(self, plan_id: str, company_id: str, user_id: str) -> Dict[str, Dict[str, Any]]:
         """Return one user's progress keyed by stable step ID."""
+        self._require_company_id(company_id)
         response = (
             self.supabase.table("ramp_step_progress")
             .select("*")
@@ -103,6 +107,7 @@ class RampStore:
             raise ValueError(f"status must be one of: {', '.join(sorted(STATUSES))}")
         if not user_id:
             raise ValueError("user_id is required")
+        self._require_company_id(company_id)
         plan = self.get_plan(plan_id, company_id)
         if not plan:
             raise ValueError("ramp plan not found")
@@ -123,3 +128,8 @@ class RampStore:
         }
         self.supabase.table("ramp_step_progress").upsert(record, on_conflict="plan_id,step_id,user_id").execute()
         return record
+
+    @staticmethod
+    def _require_company_id(company_id: str | None) -> None:
+        if not company_id or company_id.strip().lower() == "default":
+            raise ValueError("A real company_id is required for Ramp persistence")
