@@ -31,7 +31,13 @@ WITH CHECK (
 CREATE POLICY "Users can read their memberships"
 ON public.company_members
 FOR SELECT
-USING (auth.uid() = user_id);
+USING (
+  user_id = auth.uid()
+  OR company_id IN (
+    SELECT company_id FROM public.company_members
+    WHERE user_id = auth.uid() AND role IN ('admin', 'manager')
+  )
+);
 
 CREATE POLICY "Update own memberships"
 ON public.company_members
