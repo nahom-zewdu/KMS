@@ -26,5 +26,5 @@ type GitHubIngestService interface {
 
 // CodebaseService handles repository baseline sync and codebase intelligence.
 type CodebaseService interface {
-	SyncRepository(ctx context.Context, repoFullName string) error
+	SyncRepository(ctx context.Context, companyID, repoFullName string) error
 }
