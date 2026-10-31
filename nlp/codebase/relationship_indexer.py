@@ -73,12 +73,6 @@ class ImplementationRelationshipIndexer:
 
     def _load_repository_rows(self, repo, company_id: str) -> list[dict[str, Any]]:
         """Load all file records belonging to this tenant's physical repository."""
-        rows = (
-            self.supabase.table("codebase_files")
-            .select("file_path,language,repository_id")
-            .eq("company_id", company_id)
-            .execute()
-        )
         repo_row = (
             self.supabase.table("repositories")
             .select("id")
@@ -90,10 +84,13 @@ class ImplementationRelationshipIndexer:
         if not repo_row.data:
             return []
         repository_id = repo_row.data[0]["id"]
-        return [
-            row for row in (rows.data or [])
-            if row.get("repository_id") == repository_id and row.get("file_path")
-        ]
+        rows = (
+            self.supabase.table("codebase_files")
+            .select("file_path,language,repository_id")
+            .eq("repository_id", repository_id)
+            .execute()
+        )
+        return [row for row in (rows.data or []) if row.get("file_path")]
 
     def _load_source_inventory(
         self, repo, repository_rows: list[dict[str, Any]]
