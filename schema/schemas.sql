@@ -191,7 +191,7 @@ CREATE INDEX IF NOT EXISTS idx_entities_type_code ON entities(type) WHERE type I
 -- 1. Repositories table
 CREATE TABLE IF NOT EXISTS public.repositories (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    company_id TEXT NOT NULL DEFAULT 'default',
+    company_id TEXT NOT NULL,
     full_name TEXT UNIQUE NOT NULL,           -- e.g. "nahom-zewdu/KMS"
     default_branch TEXT DEFAULT 'main',
     description TEXT,
@@ -261,14 +261,14 @@ CREATE INDEX idx_modules_path ON codebase_modules(module_path);
 -----------------------------------------------
 -- Companies table
 CREATE TABLE IF NOT EXISTS public.companies (
-  id TEXT PRIMARY KEY DEFAULT 'default',
+  id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Update profiles
 ALTER TABLE public.profiles 
-ADD COLUMN IF NOT EXISTS company_id TEXT REFERENCES public.companies(id) DEFAULT 'default',
+ADD COLUMN IF NOT EXISTS company_id TEXT REFERENCES public.companies(id),
 ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'member' CHECK (role IN ('admin', 'manager', 'member'));
 
 -- RLS policies (basic)
@@ -327,9 +327,9 @@ CREATE INDEX IF NOT EXISTS idx_company_repos_company ON public.company_repos (co
 
 -- KG tenant columns (if missing)
 ALTER TABLE public.entities
-  ADD COLUMN IF NOT EXISTS company_id TEXT NOT NULL DEFAULT 'default';
+  ADD COLUMN IF NOT EXISTS company_id TEXT NOT NULL;
 ALTER TABLE public.edges
-  ADD COLUMN IF NOT EXISTS company_id TEXT NOT NULL DEFAULT 'default';
+  ADD COLUMN IF NOT EXISTS company_id TEXT NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_entities_company ON public.entities (company_id);
 CREATE INDEX IF NOT EXISTS idx_edges_company ON public.edges (company_id);
