@@ -48,6 +48,7 @@ COMMENT ON INDEX idx_events_delivery_id IS 'Index on delivery_id for fast idempo
 -- Raw Data table: summarized event content linked to raw payloads
 CREATE TABLE public.raw_data (
     id UUID PRIMARY KEY,
+    company_id TEXT NOT NULL,
     source TEXT CHECK (source IN ('slack', 'github')) NOT NULL,
     content TEXT NOT NULL,
     record_id TEXT UNIQUE NOT NULL,
@@ -162,17 +163,24 @@ create index idx_query_logs_route on query_logs(route);
 --  GRANT PERMISSIONS (SUPABASE COMPATIBLE)
 -- ============================================================
 
-GRANT ALL ON SCHEMA public TO postgres, anon, authenticated, service_role;
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT ALL ON SCHEMA public TO postgres, service_role;
 
--- Grant existing tables
-GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, anon, authenticated, service_role;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, service_role;
+-- Browser-facing roles receive only explicit table grants from policy migrations.
+REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM anon, authenticated;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, service_role;
 
 -- Ensure future tables also get same privileges
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
-GRANT ALL ON TABLES TO postgres, anon, authenticated, service_role;
+REVOKE ALL ON TABLES FROM anon, authenticated;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
-GRANT ALL ON SEQUENCES TO postgres, anon, authenticated, service_role;
+GRANT ALL ON TABLES TO postgres, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+REVOKE ALL ON SEQUENCES FROM anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+GRANT ALL ON SEQUENCES TO postgres, service_role;
 
 COMMENT ON SCHEMA public IS 'Public schema for KnowSphere, containing event ingestion, knowledge graph, and metrics tables.';
 
