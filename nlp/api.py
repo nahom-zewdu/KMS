@@ -141,11 +141,14 @@ async def sync_baseline(repo: str, company_id: str = "default"):
 
 
 @app.get("/visualizer")
-async def get_visualizer(role: str = "backend-engineer", company_id: str = "default"):
+async def get_visualizer(role: str = "backend-engineer", company_id: str | None = None):
     """Get visualizer data for a specific role."""
     try:
-        data = VisualizerService(supabase).build_for_role(role, company_id=company_id)
+        effective_company_id = require_company_id(company_id, "company_id")
+        data = VisualizerService(supabase).build_for_role(role, company_id=effective_company_id)
         return JSONResponse({"success": True, "data": data})
+    except HTTPException:
+        raise
     except Exception as exc:
         logging.exception("Visualizer failed")
         return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
