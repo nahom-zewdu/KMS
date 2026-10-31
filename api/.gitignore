@@ -6,7 +6,6 @@
 
 # ignore go build artifacts
 *.exe
-go.sum
 *.out
 *.test
 *.log
