@@ -45,6 +45,11 @@ func TestResolveTenantRejectsDefault(t *testing.T) {
 		t.Fatalf("expected default tenant to be rejected, got company=%q err=%v", companyID, err)
 	}
 
+	companyID, err = resolveSlackTenant(context.Background(), tenantStorage{owner: "DEFAULT"}, "T1")
+	if !errors.Is(err, errTenantNotFound) || companyID != "" {
+		t.Fatalf("expected uppercase default tenant to be rejected, got company=%q err=%v", companyID, err)
+	}
+
 	companyID, err = resolveGitHubTenant(context.Background(), tenantStorage{installation: "default"}, "I1", "")
 	if !errors.Is(err, errTenantNotFound) || companyID != "" {
 		t.Fatalf("expected default installation tenant to be rejected, got company=%q err=%v", companyID, err)
