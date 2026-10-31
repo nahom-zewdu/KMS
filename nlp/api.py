@@ -98,7 +98,11 @@ def require_company_id(company_id: str | None, field_name: str = "company_id") -
 
 
 @app.post("/ramp-plans/generate")
-async def generate_ramp(payload: dict):
+async def generate_ramp(
+    payload: dict,
+    user_id: str | None = Header(default=None, alias="X-User-Id"),
+    company_id_header: str | None = Header(default=None, alias="X-Company-Id"),
+):
     """Generate or refresh Ramp for a company and role."""
     try:
         company_id = require_company_id(payload.get("company_id"), "company_id")
