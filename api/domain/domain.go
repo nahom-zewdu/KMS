@@ -78,5 +78,5 @@ type MetricsService interface {
 
 // PlaybookService defines the interface for generating onboarding playbooks.
 type PlaybookService interface {
-	GeneratePlaybook(ctx context.Context, role string, employeeName string) (string, error)
+	GeneratePlaybook(ctx context.Context, role, employeeName, companyID string) (string, error)
 }
