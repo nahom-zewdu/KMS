@@ -21,18 +21,20 @@ func NewCodebaseService(redis domain.RedisStream) domain.CodebaseService {
 	return &CodebaseService{redis: redis}
 }
 
-func (s *CodebaseService) SyncRepository(ctx context.Context, repoFullName string) error {
+func (s *CodebaseService) SyncRepository(ctx context.Context, companyID, repoFullName string) error {
 	start := time.Now()
-	log.Printf("Queueing baseline sync for repository: %s", repoFullName)
+	log.Printf("Queueing baseline sync for company %s repository: %s", companyID, repoFullName)
 
 	payload := domain.JobPayload{
 		ID:        "*",
-		RecordID:  "baseline-" + repoFullName,
+		RecordID:  "baseline-" + companyID + "-" + repoFullName,
 		Source:    "codebase",
 		EventType: "baseline_sync",
 		Content:   "Full repository baseline sync requested",
+		CompanyID: companyID,
 		Payload: map[string]interface{}{
-			"repo": repoFullName,
+			"repo":       repoFullName,
+			"company_id": companyID,
 		},
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	}
