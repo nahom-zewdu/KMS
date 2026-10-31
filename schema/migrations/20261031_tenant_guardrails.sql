@@ -7,6 +7,29 @@ BEGIN;
 ALTER TABLE public.companies
   ALTER COLUMN id DROP DEFAULT;
 
+-- Fail fast if any existing company-scoped rows still use the default tenant. This avoids silently deleting data in production.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM public.companies WHERE id IS NULL OR lower(btrim(id)) = 'default') THEN
+    RAISE EXCEPTION 'shared default company still exists in companies; clean this data before applying tenant guardrails';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.company_members WHERE company_id IS NULL OR lower(btrim(company_id)) = 'default') THEN
+    RAISE EXCEPTION 'shared default company still exists in company_members; clean this data before applying tenant guardrails';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.company_integrations WHERE company_id IS NULL OR lower(btrim(company_id)) = 'default') THEN
+    RAISE EXCEPTION 'shared default company still exists in company_integrations; clean this data before applying tenant guardrails';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.company_repos WHERE company_id IS NULL OR lower(btrim(company_id)) = 'default') THEN
+    RAISE EXCEPTION 'shared default company still exists in company_repos; clean this data before applying tenant guardrails';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.ramp_plans WHERE company_id IS NULL OR lower(btrim(company_id)) = 'default') THEN
+    RAISE EXCEPTION 'shared default company still exists in ramp_plans; clean this data before applying tenant guardrails';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.ramp_step_progress WHERE company_id IS NULL OR lower(btrim(company_id)) = 'default') THEN
+    RAISE EXCEPTION 'shared default company still exists in ramp_step_progress; clean this data before applying tenant guardrails';
+  END IF;
+END $$;
+
 ALTER TABLE public.company_members
   ADD CONSTRAINT company_members_company_id_not_default CHECK (company_id IS NOT NULL AND company_id <> 'default');
 
