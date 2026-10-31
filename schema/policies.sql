@@ -114,6 +114,28 @@ USING (
   )
 )
 WITH CHECK (
+  company_id IS NOT NULL
+  AND lower(btrim(company_id)) <> 'default'
+  AND company_id IN (
+    SELECT company_id FROM public.company_members
+    WHERE user_id = auth.uid() AND role = 'admin'
+  )
+);
+
+-- Ramp plans: company members can read, admins manage.
+CREATE POLICY "Members can read ramp plans"
+ON public.ramp_plans
+FOR SELECT
+USING (
+  company_id IN (
+    SELECT company_id FROM public.company_members WHERE user_id = auth.uid()
+  )
+);
+
+CREATE POLICY "Admins can manage ramp plans"
+ON public.ramp_plans
+FOR ALL
+USING (
   company_id IN (
     SELECT company_id FROM public.company_members
     WHERE user_id = auth.uid() AND role = 'admin'
