@@ -1,7 +1,25 @@
 
--- Simple, non-recursive policies for companies table
-CREATE POLICY "Insert own membership"
-ON public.company_members
+-- Tenant-scoped access policies.
+-- These rules intentionally prevent self-service membership creation or role escalation.
+
+ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.company_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.company_integrations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.ramp_plans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.ramp_step_progress ENABLE ROW LEVEL SECURITY;
+
+-- Companies: members can read their own companies and authenticated users may create a company.
+CREATE POLICY "Members can read their companies"
+ON public.companies
+FOR SELECT
+USING (
+  id IN (
+    SELECT company_id FROM public.company_members WHERE user_id = auth.uid()
+  )
+);
+
+CREATE POLICY "Authenticated users can create companies"
+ON public.companies
 FOR INSERT
 WITH CHECK (auth.uid() = user_id);
 
