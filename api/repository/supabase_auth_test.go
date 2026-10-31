@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -83,6 +84,100 @@ func TestResolveRepositoryForCompanyAppliesCompanyAndRepositoryFilters(t *testin
 	fullName, err := repo.ResolveRepositoryForCompany(context.Background(), "company-a", "123e4567-e89b-12d3-a456-426614174000")
 	if err != nil || fullName != "org/repo" {
 		t.Fatalf("ResolveRepositoryForCompany() = (%q, %v), want org/repo and nil", fullName, err)
+	}
+}
+
+func TestQueryKnowledgeGraphAppliesCompanyFilter(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/rest/v1/raw_data" {
+			http.NotFound(w, r)
+			return
+		}
+		if got := r.URL.Query().Get("company_id"); got != "eq.company-a" {
+			t.Errorf("company_id filter = %q", got)
+		}
+		_, _ = fmt.Fprint(w, `[{"content":"company data"}]`)
+	}))
+	defer server.Close()
+	repo := newTestSupabaseRepo(t, server.URL, "service-api-key")
+
+	answer, err := repo.QueryKnowledgeGraphSupabase(context.Background(), "company", "company-a")
+	if err != nil || answer != "company data" {
+		t.Fatalf("QueryKnowledgeGraphSupabase() = (%q, %v), want company data and nil", answer, err)
+	}
+}
+
+func TestQueryKnowledgeGraphRejectsMissingOrDefaultCompany(t *testing.T) {
+	repo := newTestSupabaseRepo(t, "http://127.0.0.1:1", "service-api-key")
+	for _, companyID := range []string{"", "default", " DEFAULT "} {
+		if _, err := repo.QueryKnowledgeGraphSupabase(context.Background(), "query", companyID); err == nil {
+			t.Errorf("QueryKnowledgeGraphSupabase(companyID=%q) succeeded, want validation error", companyID)
+		}
+	}
+}
+
+func TestContributionQueryRequiresAndAppliesTenantFilters(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/rest/v1/contributions" {
+			http.NotFound(w, r)
+			return
+		}
+		if got := r.URL.Query().Get("company_id"); got != "eq.company-a" {
+			t.Errorf("company_id filter = %q", got)
+		}
+		if got := r.URL.Query().Get("repo_name"); got != "eq.org/repo" {
+			t.Errorf("repo_name filter = %q", got)
+		}
+		_, _ = fmt.Fprint(w, `[{"person_name":"engineer","commit_count":3}]`)
+	}))
+	defer server.Close()
+	repo := newTestSupabaseRepo(t, server.URL, "service-api-key")
+
+	if _, err := repo.Query(context.Background(), "contributions", map[string]interface{}{
+		"company_id": "company-a",
+		"repo_name":  "org/repo",
+	}); err != nil {
+		t.Fatalf("scoped contributions query failed: %v", err)
+	}
+	if _, err := repo.Query(context.Background(), "contributions", map[string]interface{}{
+		"repo_name": "org/repo",
+	}); err == nil {
+		t.Fatal("unscoped contributions query succeeded")
+	}
+}
+
+func TestContributionInsertUsesTenantConflictTarget(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/rest/v1/contributions" {
+			http.NotFound(w, r)
+			return
+		}
+		if got := r.URL.Query().Get("on_conflict"); got != "company_id,person_name,repo_name" {
+			t.Errorf("on_conflict = %q", got)
+		}
+		if !strings.Contains(r.Header.Get("Prefer"), "resolution=merge-duplicates") {
+			t.Errorf("Prefer header = %q, want merge-duplicates", r.Header.Get("Prefer"))
+		}
+		_, _ = fmt.Fprint(w, `[]`)
+	}))
+	defer server.Close()
+	repo := newTestSupabaseRepo(t, server.URL, "service-api-key")
+
+	if err := repo.Insert(context.Background(), "contributions", map[string]interface{}{
+		"id":          "row-1",
+		"company_id":  "company-a",
+		"person_name": "engineer",
+		"repo_name":   "org/repo",
+	}); err != nil {
+		t.Fatalf("scoped contribution insert failed: %v", err)
+	}
+	if err := repo.Insert(context.Background(), "contributions", map[string]interface{}{
+		"id":          "row-2",
+		"company_id":  "default",
+		"person_name": "engineer",
+		"repo_name":   "org/repo",
+	}); err == nil {
+		t.Fatal("default-company contribution insert succeeded")
 	}
 }
 
