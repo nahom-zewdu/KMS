@@ -58,7 +58,25 @@ WITH CHECK (
 CREATE POLICY "Admins can update member roles"
 ON public.company_members
 FOR UPDATE
-USING (auth.uid() = user_id);
+USING (
+  company_id IN (
+    SELECT company_id
+    FROM public.company_members
+    WHERE user_id = auth.uid() AND role IN ('admin', 'manager')
+  )
+)
+WITH CHECK (
+  company_id IS NOT NULL
+  AND lower(btrim(company_id)) <> 'default'
+  AND EXISTS (
+    SELECT 1
+    FROM public.company_members as cm
+    WHERE cm.user_id = auth.uid()
+      AND cm.company_id = company_members.company_id
+      AND cm.role IN ('admin', 'manager')
+  )
+  AND NOT (user_id = auth.uid() AND role IN ('admin', 'manager'))
+);
 
 CREATE POLICY "Admins can remove members"
 ON public.company_members
