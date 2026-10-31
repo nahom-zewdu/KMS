@@ -21,8 +21,12 @@ func VerifySlackRequest(r *http.Request, body []byte) bool {
 	}
 
 	ts, err := strconv.ParseInt(timestamp, 10, 64)
-	if err != nil || time.Now().Unix()-ts > 60*5 {
-		return false // too old
+	if err != nil {
+		return false
+	}
+	delta := time.Since(time.Unix(ts, 0))
+	if delta < -5*time.Minute || delta > 5*time.Minute {
+		return false
 	}
 
 	basestring := fmt.Sprintf("v0:%s:%s", timestamp, string(body))
