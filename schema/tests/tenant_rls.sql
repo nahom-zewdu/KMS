@@ -39,7 +39,17 @@ CREATE TABLE public.playbooks (id uuid PRIMARY KEY, company_id text, role text);
 CREATE TABLE public.ramp_plans (id uuid PRIMARY KEY, company_id text, role text);
 CREATE TABLE public.ramp_step_progress (id uuid PRIMARY KEY, plan_id uuid, company_id text, user_id text, step_id text, status text);
 CREATE TABLE public.events (id uuid PRIMARY KEY);
-CREATE TABLE public.contributions (id uuid PRIMARY KEY);
+CREATE TABLE public.contributions (
+  id uuid PRIMARY KEY,
+  person_name text NOT NULL,
+  repo_name text NOT NULL,
+  commit_count integer DEFAULT 0,
+  pr_count integer DEFAULT 0,
+  issue_count integer DEFAULT 0,
+  bus_factor double precision DEFAULT 0,
+  updated_at timestamptz DEFAULT now(),
+  UNIQUE(person_name, repo_name)
+);
 CREATE TABLE public.pull_requests (id uuid PRIMARY KEY);
 CREATE TABLE public.issues (id uuid PRIMARY KEY);
 CREATE TABLE public.query_logs (id uuid PRIMARY KEY);
@@ -52,6 +62,12 @@ INSERT INTO auth.users VALUES
   ('00000000-0000-0000-0000-000000000002'),
   ('00000000-0000-0000-0000-000000000003');
 INSERT INTO public.companies VALUES ('company-a','Company A'),('company-b','Company B');
+INSERT INTO public.repositories VALUES
+  ('50000000-0000-0000-0000-000000000001','company-a','org/repo-a');
+INSERT INTO public.contributions (id, person_name, repo_name, commit_count)
+VALUES ('60000000-0000-0000-0000-000000000001','engineer','org/repo-a',3);
+\ir ../migrations/20261101_contributions_tenant_scope.sql
+\ir ../migrations/20261101_contributions_tenant_scope.sql
 INSERT INTO public.company_members VALUES
   ('10000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000001','company-a','admin',true),
   ('10000000-0000-0000-0000-000000000002','00000000-0000-0000-0000-000000000002','company-a','member',false),
@@ -144,6 +160,9 @@ DO $$ DECLARE row_count integer; BEGIN
   IF row_count <> 2 THEN RAISE EXCEPTION 'service role should access both tenants; got %', row_count; END IF;
   INSERT INTO public.raw_data (id, company_id, content)
   VALUES ('40000000-0000-0000-0000-000000000003','company-b','worker write');
+  SELECT count(*) INTO row_count FROM public.contributions
+  WHERE company_id = 'company-a' AND repo_name = 'org/repo-a';
+  IF row_count <> 1 THEN RAISE EXCEPTION 'historical contribution company mapping failed'; END IF;
 END $$;
 RESET ROLE;
 
