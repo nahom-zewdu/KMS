@@ -15,4 +15,3 @@ nlp/query_engine/
 ├── decay.py               # Redis result cache (24h TTL)
 ├── errors.py               # Redis result cache (24h TTL)
 └── core.py                # Public handle_query() entrypoint
-
