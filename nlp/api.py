@@ -206,7 +206,8 @@ async def generate_playbook(
     try:
         role = payload.get("role", "software-engineer")
         employee_name = payload.get("employee_name", "New Engineer")
-        company_id = require_company_id(payload.get("company_id"), "company_id")
+        company_id = require_company_id(company_id_header or payload.get("company_id"), "company_id")
+        require_company_membership(user_id, company_id)
         playbook = generator.generate(role=role, employee_name=employee_name, company_id=company_id)
         return JSONResponse({"success": True, "role": role, "playbook": playbook, "message": f"Playbook for {role} generated successfully."})
     except HTTPException:
