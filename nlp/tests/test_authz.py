@@ -34,6 +34,27 @@ class FakeSupabase:
         return FakeTable(self.rows)
 
 
+def test_require_authenticated_identity_accepts_verified_token(monkeypatch):
+    monkeypatch.setenv("SUPABASE_JWT_SECRET", "super-secret")
+    token = jwt.encode({"sub": "user-123", "role": "authenticated"}, "super-secret", algorithm="HS256")
+    identity = api.require_authenticated_identity(f"Bearer {token}")
+    assert identity["user_id"] == "user-123"
+
+
+def test_require_authenticated_identity_rejects_forged_user_header(monkeypatch):
+    monkeypatch.setenv("SUPABASE_JWT_SECRET", "super-secret")
+    with pytest.raises(HTTPException) as exc:
+        api.require_authenticated_identity(None, legacy_user_id="forged-user")
+    assert exc.value.status_code == 401
+
+
+def test_require_authenticated_identity_rejects_invalid_bearer_token(monkeypatch):
+    monkeypatch.setenv("SUPABASE_JWT_SECRET", "super-secret")
+    with pytest.raises(HTTPException) as exc:
+        api.require_authenticated_identity("Bearer invalid.token.value")
+    assert exc.value.status_code == 401
+
+
 def test_require_company_membership_rejects_default(monkeypatch):
     monkeypatch.setattr(api, "supabase", FakeSupabase([]))
     with pytest.raises(HTTPException) as exc:
