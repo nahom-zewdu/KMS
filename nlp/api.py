@@ -183,10 +183,17 @@ async def get_step_progress(
 ):
     """Read one user's Ramp step progress."""
     effective_company_id = require_company_id(company_id, "X-Company-Id")
-    progress = ramp_generator.get_step_progress(plan_id, step_id, effective_company_id, user_id)
-    if not progress:
-        return JSONResponse({"success": False, "error": "Step progress not found", "progress": None}, status_code=404)
-    return JSONResponse({"success": True, "progress": progress})
+    try:
+        require_company_membership(user_id, effective_company_id)
+        progress = ramp_generator.get_step_progress(plan_id, step_id, effective_company_id, user_id)
+        if not progress:
+            return JSONResponse({"success": False, "error": "Step progress not found", "progress": None}, status_code=404)
+        return JSONResponse({"success": True, "progress": progress})
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logging.exception("Ramp step progress read failed")
+        return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
 
 
 @app.post("/playbooks/generate")
