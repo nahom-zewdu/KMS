@@ -29,8 +29,10 @@ class PlaybookGenerator:
         self.supabase = supabase
         self.visualizer = VisualizerService(supabase)
 
-    def generate(self, role: str, company_id: str = "default", employee_name: str = None) -> Dict[str, Any]:
+    def generate(self, role: str, company_id: str, employee_name: str = None) -> Dict[str, Any]:
         """Main generation entrypoint."""
+        if not company_id or company_id.strip().lower() == "default":
+            raise ValueError("A real company_id is required for playbook generation")
         logger.info(f"Generating playbook for role: {role}")
 
         visualizer_data = self.visualizer.build_for_role(role, company_id=company_id)
@@ -98,7 +100,7 @@ class PlaybookGenerator:
 
         return playbook
 
-    def _gather_compact_context(self, role: str, company_id: str = "default") -> str:
+    def _gather_compact_context(self, role: str, company_id: str) -> str:
         """Very compact, high-signal context for LLM."""
         parts = []
 
@@ -113,8 +115,17 @@ class PlaybookGenerator:
             parts.append("Recent: " + " | ".join(r["content"][:80] for r in recent.data))
 
         # Key files
-        files = self.supabase.table("codebase_files").select("file_path").eq("company_id", company_id).limit(6).execute()
-        if files.data:
+        repositories = self.supabase.table("repositories").select("id").eq("company_id", company_id).execute()
+        repository_ids = [row["id"] for row in repositories.data or [] if row.get("id")]
+        files = (
+            self.supabase.table("codebase_files")
+            .select("file_path")
+            .in_("repository_id", repository_ids)
+            .limit(6)
+            .execute()
+            if repository_ids else None
+        )
+        if files and files.data:
             parts.append("Files: " + ", ".join(f["file_path"] for f in files.data))
 
         return "\n".join(parts) if parts else "No additional context available."
