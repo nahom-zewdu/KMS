@@ -37,7 +37,7 @@ func (s *securityStorage) Insert(context.Context, string, map[string]interface{}
 func (s *securityStorage) Query(context.Context, string, map[string]interface{}) ([]map[string]interface{}, error) {
 	return nil, nil
 }
-func (s *securityStorage) QueryKnowledgeGraphSupabase(context.Context, string) (string, error) {
+func (s *securityStorage) QueryKnowledgeGraphSupabase(context.Context, string, string) (string, error) {
 	return "", nil
 }
 func (s *securityStorage) ResolveCompanyByIntegration(_ context.Context, provider, externalID string) (string, error) {
