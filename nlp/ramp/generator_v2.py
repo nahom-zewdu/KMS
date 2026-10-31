@@ -32,12 +32,14 @@ class RampPlanner:
     def generate(
         self,
         role: str,
-        company_id: str = "default",
+        company_id: str,
         employee_name: Optional[str] = None,
         polish_why: bool = True,
     ) -> Dict[str, Any]:
         """Generate and persist a fresh Ramp plan from current company evidence."""
-        company_id = (company_id or "default").strip() or "default"
+        company_id = (company_id or "").strip()
+        if not company_id or company_id.lower() == "default":
+            raise ValueError("A real company_id is required for Ramp generation")
         role_key = self._normalize_role(role)
         surfaces = self.evidence.implementation_surfaces(company_id)
         modules = self.evidence.module_records(company_id)
