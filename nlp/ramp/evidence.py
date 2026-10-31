@@ -24,13 +24,16 @@ class RampEvidenceStore:
         if not company_id:
             return []
         try:
+            repository_ids = self._repository_ids(company_id)
+            if not repository_ids:
+                return []
             response = (
                 self.supabase.table("codebase_files")
                 .select(
                     "id, repository_id, file_path, module_path, language, file_name, "
                     "last_author, last_commit_sha, importance_score, metadata"
                 )
-                .eq("company_id", company_id)
+                .in_("repository_id", repository_ids)
                 .limit(5000)
                 .execute()
             )
@@ -62,19 +65,31 @@ class RampEvidenceStore:
         if not company_id:
             return []
         try:
+            repository_ids = self._repository_ids(company_id)
+            if not repository_ids:
+                return []
             response = (
                 self.supabase.table("codebase_modules")
                 .select(
                     "id, repository_id, module_path, module_name, inferred_type, "
                     "description, importance_score, metadata"
                 )
-                .eq("company_id", company_id)
+                .in_("repository_id", repository_ids)
                 .limit(1000)
                 .execute()
             )
             return [row for row in (getattr(response, "data", []) or []) if isinstance(row, dict)]
         except Exception:
             return []
+
+    def _repository_ids(self, company_id: str) -> List[str]:
+        response = (
+            self.supabase.table("repositories")
+            .select("id")
+            .eq("company_id", company_id)
+            .execute()
+        )
+        return [row["id"] for row in (getattr(response, "data", []) or []) if row.get("id")]
 
     def ownership(self, company_id: str) -> List[Dict[str, Any]]:
         """Return ownership edges available in the existing knowledge graph."""
