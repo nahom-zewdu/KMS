@@ -45,6 +45,46 @@ def verify_bearer_token(token: str | None, *, secret_env: str) -> dict[str, Any]
 
     return {"user_id": str(user_id), "claims": claims}
 
+
+def require_authenticated_identity(
+    authorization: str | None = None,
+    *,
+    legacy_user_id: str | None = None,
+) -> dict[str, Any]:
+    """Require a verified JWT or internal service token; reject legacy X-User-Id carrier headers."""
+    if legacy_user_id is not None:
+        raise HTTPException(
+            status_code=401,
+            detail="X-User-Id is not accepted for authentication. Use Authorization: Bearer <jwt>",
+        )
+
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authorization header is required")
+
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        raise HTTPException(status_code=401, detail="Authorization header must use Bearer token format")
+
+    for secret_env in ("SUPABASE_JWT_SECRET", "JWT_SECRET"):
+        try:
+            return verify_bearer_token(token, secret_env=secret_env)
+        except HTTPException as exc:
+            if exc.status_code == 503:
+                continue
+            last_error = exc
+    service_secret = os.getenv("INTERNAL_SERVICE_SECRET")
+    if service_secret:
+        try:
+            claims = jwt.decode(token, service_secret, algorithms=["HS256"], options={"require": ["sub"]})
+        except jwt.PyJWTError as exc:
+            raise HTTPException(status_code=401, detail="Invalid or expired bearer token") from exc
+        service_user_id = claims.get("sub") or claims.get("user_id")
+        if service_user_id and str(claims.get("role") or "").lower() in {"service", "internal", "system"}:
+            return {"user_id": str(service_user_id), "claims": claims, "source": "internal_service"}
+
+    raise HTTPException(status_code=401, detail="Invalid or expired bearer token")
+
+
 def normalize_company_id(company_id: str | None) -> str:
     """Reject blank or shared fallback company identifiers."""
     normalized = (company_id or "").strip()
