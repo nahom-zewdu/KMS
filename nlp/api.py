@@ -41,13 +41,16 @@ def require_company_id(company_id: str | None, field_name: str = "company_id") -
 async def generate_ramp(payload: dict):
     """Generate or refresh Ramp for a company and role."""
     try:
+        company_id = require_company_id(payload.get("company_id"), "company_id")
         plan = ramp_generator.generate(
             role=payload.get("role") or "software-engineer",
-            company_id=payload.get("company_id") or "default",
+            company_id=company_id,
             employee_name=payload.get("employee_name"),
             polish_why=bool(payload.get("polish_why", True)),
         )
         return JSONResponse({"success": True, "plan": plan})
+    except HTTPException:
+        raise
     except Exception as exc:
         logging.exception("Ramp generation failed")
         return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
