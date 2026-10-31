@@ -108,7 +108,7 @@ func (c *CoreIngest) Ingest(ctx context.Context, req domain.IngestRequest) error
 
 	companyID := req.CompanyID
 	companyID = strings.TrimSpace(companyID)
-	if companyID == "" || companyID == "default" {
+	if companyID == "" || strings.EqualFold(companyID, "default") {
 		log.Printf("RecordID: %s - Missing company ID in %.3fs", req.RecordID, time.Since(start).Seconds())
 		return fmt.Errorf("company_id must resolve to a real company")
 	}
@@ -149,7 +149,7 @@ func (c *CoreIngest) Ingest(ctx context.Context, req domain.IngestRequest) error
 	log.Printf("RecordID: %s - Stored %s raw_data in %.3fs", req.RecordID, req.Source, time.Since(start).Seconds())
 
 	// Create a separate context with timeout for publishing
-	publishCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	publishCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	// Publish to Redis stream
@@ -166,7 +166,7 @@ func (c *CoreIngest) Ingest(ctx context.Context, req domain.IngestRequest) error
 	})
 	if err != nil {
 		log.Printf("RecordID: %s - Failed to publish to %s in %.3fs: %v", req.RecordID, streamName, time.Since(start).Seconds(), err)
-		return fmt.Errorf("failed to publish to %s: %v", streamName, err)
+		return fmt.Errorf("failed to publish to %s: %w", streamName, err)
 	}
 	log.Printf("RecordID: %s - Published to %s in %.3fs", req.RecordID, streamName, time.Since(start).Seconds())
 
