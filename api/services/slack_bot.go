@@ -45,7 +45,7 @@ func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, 
 	if cleanQuery == "" {
 		log.Printf("QueryID: <none>, Channel: %s, Thread: %s - Empty query after cleaning, original: %s", channel, threadTs, query)
 		startPost := time.Now()
-		_, _, err := sb.client.PostMessage(channel,
+		_, _, err := sb.client.PostMessageContext(ctx, channel,
 			slack.MsgOptionText("Please provide a valid query (e.g., 'Who owns github?').", false),
 			slack.MsgOptionTS(threadTs))
 		if err != nil {
@@ -74,7 +74,7 @@ func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, 
 			playbookMsg = "Sorry, I couldn't generate the playbook right now."
 		}
 
-		_, _, err = sb.client.PostMessage(channel,
+		_, _, err = sb.client.PostMessageContext(ctx, channel,
 			slack.MsgOptionText(playbookMsg, false),
 			slack.MsgOptionTS(threadTs))
 		return err
@@ -94,7 +94,7 @@ func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, 
 	if err != nil {
 		log.Printf("QueryID: %s, Channel: %s, Thread: %s - Failed to publish to query_jobs in %.3fs: %v", queryID, channel, threadTs, time.Since(start).Seconds(), err)
 		startPost := time.Now()
-		_, _, err = sb.client.PostMessage(channel,
+		_, _, err = sb.client.PostMessageContext(ctx, channel,
 			slack.MsgOptionText("Sorry, I couldn't process that query. Try again?", false),
 			slack.MsgOptionTS(threadTs))
 		if err != nil {
@@ -117,7 +117,7 @@ func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, 
 	select {
 	case answer := <-answerChan:
 		startPost := time.Now()
-		_, _, err = sb.client.PostMessage(channel,
+		_, _, err = sb.client.PostMessageContext(ctx, channel,
 			slack.MsgOptionText(answer, false),
 			slack.MsgOptionTS(threadTs))
 		if err != nil {
@@ -127,13 +127,6 @@ func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, 
 		log.Printf("QueryID: %s, Channel: %s, Thread: %s - Posted answer '%s' in %.3fs", queryID, channel, threadTs, answer, time.Since(startPost).Seconds())
 	case <-ctx.Done():
 		log.Printf("QueryID: %s, Channel: %s, Thread: %s - Query timeout in %.3fs: %v", queryID, channel, threadTs, time.Since(start).Seconds(), ctx.Err())
-		startPost := time.Now()
-		_, _, err = sb.client.PostMessage(channel,
-			slack.MsgOptionText("Sorry, I couldn't process that query. Try again?", false),
-			slack.MsgOptionTS(threadTs))
-		if err != nil {
-			log.Printf("QueryID: %s, Channel: %s, Thread: %s - Failed to post timeout message in %.3fs: %v", queryID, channel, threadTs, time.Since(startPost).Seconds(), err)
-		}
 		return fmt.Errorf("query timeout: %v", ctx.Err())
 	}
 
@@ -142,15 +135,15 @@ func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, 
 }
 
 // GetBotID retrieves the Slack bot's ID.
-func (sb *SlackBot) GetBotID() string {
+func (sb *SlackBot) GetBotID(ctx context.Context) (string, error) {
 	start := time.Now()
-	auth, err := sb.client.AuthTest()
+	auth, err := sb.client.AuthTestContext(ctx)
 	if err != nil {
 		log.Printf("Failed to get bot ID in %.3fs: %v", time.Since(start).Seconds(), err)
-		return ""
+		return "", err
 	}
 	log.Printf("Successfully got bot ID %s in %.3fs", auth.BotID, time.Since(start).Seconds())
-	return auth.BotID
+	return auth.BotID, nil
 }
 
 // removeBotMention cleans a query by removing bot mentions and invalid characters.
