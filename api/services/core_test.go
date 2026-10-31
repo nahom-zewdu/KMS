@@ -37,7 +37,7 @@ func (s *idempotencyStorage) Query(_ context.Context, table string, filter map[s
 	}
 	return matched, nil
 }
-func (*idempotencyStorage) QueryKnowledgeGraphSupabase(context.Context, string) (string, error) {
+func (*idempotencyStorage) QueryKnowledgeGraphSupabase(context.Context, string, string) (string, error) {
 	return "", nil
 }
 func (*idempotencyStorage) ResolveCompanyByIntegration(context.Context, string, string) (string, error) {
