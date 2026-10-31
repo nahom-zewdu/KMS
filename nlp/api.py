@@ -236,14 +236,16 @@ async def update_step_progress(
 async def get_step_progress(
     plan_id: str,
     step_id: str,
+    authorization: str | None = Header(default=None, alias="Authorization"),
+    legacy_user_id: str | None = Header(default=None, alias="X-User-Id"),
     company_id: str | None = Header(default=None, alias="X-Company-Id"),
-    user_id: str = Header(..., alias="X-User-Id"),
 ):
     """Read one user's Ramp step progress."""
     effective_company_id = require_company_id(company_id, "X-Company-Id")
     try:
-        require_company_membership(user_id, effective_company_id)
-        progress = ramp_generator.get_step_progress(plan_id, step_id, effective_company_id, user_id)
+        identity = require_authenticated_identity(authorization, legacy_user_id=legacy_user_id)
+        require_company_membership(identity["user_id"], effective_company_id)
+        progress = ramp_generator.get_step_progress(plan_id, step_id, effective_company_id, identity["user_id"])
         if not progress:
             return JSONResponse({"success": False, "error": "Step progress not found", "progress": None}, status_code=404)
         return JSONResponse({"success": True, "progress": progress})
@@ -257,15 +259,17 @@ async def get_step_progress(
 @app.post("/playbooks/generate")
 async def generate_playbook(
     payload: dict,
-    user_id: str | None = Header(default=None, alias="X-User-Id"),
+    authorization: str | None = Header(default=None, alias="Authorization"),
+    legacy_user_id: str | None = Header(default=None, alias="X-User-Id"),
     company_id_header: str | None = Header(default=None, alias="X-Company-Id"),
 ):
     """Generate a role-specific onboarding playbook."""
     try:
+        identity = require_authenticated_identity(authorization, legacy_user_id=legacy_user_id)
         role = payload.get("role", "software-engineer")
         employee_name = payload.get("employee_name", "New Engineer")
         company_id = require_company_id(company_id_header or payload.get("company_id"), "company_id")
-        require_company_membership(user_id, company_id)
+        require_company_membership(identity["user_id"], company_id)
         playbook = generator.generate(role=role, employee_name=employee_name, company_id=company_id)
         return JSONResponse({"success": True, "role": role, "playbook": playbook, "message": f"Playbook for {role} generated successfully."})
     except HTTPException:
