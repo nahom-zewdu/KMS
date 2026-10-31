@@ -31,7 +31,7 @@ class CodebaseBaselineSync:
 
     def sync_repository(self, repo_full_name: str, company_id: str) -> bool:
         """Perform a full baseline sync for the given repository."""
-        if not company_id or company_id.strip() == "default":
+        if not company_id or company_id.strip().lower() == "default":
             raise ValueError("company_id must resolve to a real company")
         logger.info(f"Starting full baseline sync for {repo_full_name} | company={company_id}")
         try:
@@ -285,7 +285,6 @@ class CodebaseBaselineSync:
             "description": f"Module containing {file_count} files",
             "importance_score": round(importance, 2),
             "metadata": {"file_count": file_count, "company_id": company_id},
-            "company_id": company_id,
         }, on_conflict="repository_id,module_path").execute()
 
     def _create_part_of_edge(self, repo_id: str, file_path: str, company_id: str):
