@@ -1,7 +1,7 @@
 // handlers/slack.go
 // Package handlers provides the Slack webhook handler for KnowSphere, processing message and app_mention
 // events with HMAC-SHA256 verification. It ingests user messages, handles bot mentions for queries, and
-// ensures idempotency using event_ts as record_id. Supports edge cases like bot messages, timeouts, and
+// ensures idempotency using the provider event_id as record_id. Supports edge cases like bot messages, timeouts, and
 // retries for reliability.
 
 package handlers
@@ -120,6 +120,18 @@ func (h *SlackHandler) HandleSlackWebhook(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Unsupported event type"})
 		return
 	}
+	var callbackMetadata struct {
+		EventID string `json:"event_id"`
+	}
+	if err := json.Unmarshal(body, &callbackMetadata); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid callback metadata"})
+		return
+	}
+	eventID := strings.TrimSpace(callbackMetadata.EventID)
+	if eventID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Slack event_id is required"})
+		return
+	}
 
 	innerEvent := eventsAPIEvent.InnerEvent
 	companyID, tenantErr := resolveSlackTenant(c.Request.Context(), h.storage, eventsAPIEvent.TeamID)
@@ -206,7 +218,7 @@ func (h *SlackHandler) HandleSlackWebhook(c *gin.Context) {
 				"thread_ts": ev.ThreadTimeStamp,
 				"text":      ev.Text,
 			},
-			RecordID:  ev.TimeStamp,
+			RecordID:  eventID,
 			CompanyID: companyID,
 			CreatedAt: eventTime,
 		}
