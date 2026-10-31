@@ -128,13 +128,16 @@ async def generate_playbook(payload: dict):
 
 
 @app.get("/github/sync-baseline")
-async def sync_baseline(repo: str, company_id: str = "default"):
+async def sync_baseline(repo: str, company_id: str | None = None):
     """Sync the baseline for a specific repository."""
     try:
-        success = CodebaseBaselineSync(supabase).sync_repository(repo, company_id=company_id)
+        effective_company_id = require_company_id(company_id, "company_id")
+        success = CodebaseBaselineSync(supabase).sync_repository(repo, company_id=effective_company_id)
         if success:
             return JSONResponse({"success": True, "message": f"Baseline synced for {repo}"})
         return JSONResponse({"success": False, "error": f"Failed to sync baseline for {repo}"}, status_code=500)
+    except HTTPException:
+        raise
     except Exception as exc:
         logging.exception("Baseline sync failed")
         return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
