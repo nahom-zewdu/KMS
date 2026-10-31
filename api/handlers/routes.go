@@ -28,16 +28,17 @@ func SetupRoutes(
 	// Initialize handlers
 	slackHandler := NewSlackHandler(slackIngest, slackBot, slackClient, slackSignKey, storage)
 	githubHandler := NewGitHubHandler(githubIngest, githubSecret, storage)
-	queryHandler := NewQueryHandler(slackBot, redis)
-	codebaseHandler := NewCodebaseHandler(codebaseService)
+	queryHandler := NewQueryHandler(slackBot, redis, storage)
+	codebaseHandler := NewCodebaseHandler(codebaseService, storage)
 
 	// Define routes
 	router.POST("/slack/events", slackHandler.HandleSlackWebhook)
 	router.POST("/slack/events/", slackHandler.HandleSlackWebhook)
 	router.POST("/github", githubHandler.HandleGitHubWebhook)
 	router.POST("/github/", githubHandler.HandleGitHubWebhook)
-	router.GET("/github/sync-baseline", codebaseHandler.SyncBaseline)
-	router.POST("/query", queryHandler.HandleQuery)
+	userAuth := requireSupabaseUser(storage)
+	router.GET("/github/sync-baseline", userAuth, codebaseHandler.SyncBaseline)
+	router.POST("/query", userAuth, queryHandler.HandleQuery)
 
 	// Health check endpoint
 	router.GET("/health", func(c *gin.Context) {
