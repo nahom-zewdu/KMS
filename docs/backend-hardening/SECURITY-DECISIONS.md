@@ -171,3 +171,17 @@ Application tests assert company filters in actual PostgREST request parameters,
 Prepared controls use shared Redis atomic windows for per-user and per-company query limits, per-user/per-company baseline-sync limits, and per-integration webhook controls. Redis leases bound concurrent expensive work across replicas. Limit exhaustion should produce 429 with `Retry-After` and reset/remaining metadata; Redis failure should fail closed with retryable 503 responses rather than bypass limits. Webhook 429 retry semantics require provider-specific validation before implementation.
 
 The proposed starting limits and failure behavior are documented in `ARCHITECTURE.md`. They are not yet product-approved or implemented. Rate limiting remains **NOT STARTED** until the prior isolation/reliability blockers are accepted or resolved.
+
+## Decision 17: events are tenant-associated; delivery IDs remain globally unique
+
+Raw provider event payloads contain company data and are not global data. New `events` rows therefore require a real `company_id` referencing `companies`; the company key is also part of the checked-in base schema. The globally unique delivery-ID behavior remains unchanged because provider delivery IDs are the idempotency key independent of tenant.
+
+The versioned migration only infers historical ownership from linked `raw_data` when exactly one valid company is present. It aborts transactionally for unmapped, conflicting, default, orphaned, or duplicate delivery-ID data. An operator must explicitly map unresolved historical events before retrying. Migration tests exist but were **BLOCKED** in this session because no disposable PostgreSQL server was available. No live Supabase database was contacted or changed.
+
+## Decision 18: Slack playbook generation uses a company-bound service identity
+
+Slack tenant resolution in Go is the authority for the company context. The Go playbook client requires that resolved company ID, sends it in the request, and signs a one-minute HS256 internal service token with the same `company_id` claim. The dedicated Python internal endpoint accepts only the configured internal issuer/audience/secret, requires standard time and identity claims, verifies service role and exact request-company equality, then calls the existing generator with that tenant. The user-facing endpoint remains user-JWT and membership protected; internal tokens do not authenticate users.
+
+This avoids treating network location or a caller-provided company ID as authentication. Deployment still requires matching `INTERNAL_SERVICE_SECRET`, `INTERNAL_SERVICE_ISSUER`, and `INTERNAL_SERVICE_AUDIENCE` values in Go and Python. Their live configuration and the deployed API network boundary were not verified.
+
+CoreIngest Redis publishing inherits the request context with a ten-second upper bound. Cancellation is part of the synchronous ingest contract; publishing is not detached after caller cancellation. There is a known recovery gap: cancellation after the database inserts but before Redis publish leaves persisted rows without a job, and a duplicate delivery currently skips rather than republishes. Durable outbox/reconciliation behavior is not implemented and must be addressed before claiming reliable recovery. Slack callback delivery identity is the provider `event_id`, not the message timestamp; missing IDs are rejected, and the database keeps a global unique delivery key.
