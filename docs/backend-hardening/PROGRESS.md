@@ -7,7 +7,7 @@ This file is the source of truth for the hardening program and survives Copilot 
 | Batch | Objective | Status | Notes |
 |---|---|---:|---|
 | Batch 0 | Baseline and architecture verification | IMPLEMENTED | Architecture reviewed and documented; no production security changes made in this batch. |
-| Batch 1 | Tenant isolation and database security | PLANNED | Pending explicit policy review and migration work. |
+| Batch 1 | Tenant isolation and database security | VERIFIED | Tenant validation tightened in core access paths; migration guardrails added for company-scoped data; Go tenant tests pass. |
 | Batch 2 | Authentication and authorization | PLANNED | Pending auth model validation across Go/Python services. |
 | Batch 3 | GitHub integration security | PLANNED | Pending OAuth state and callback hardening review. |
 | Batch 4 | Go API protection and rate limiting | PLANNED | Pending route trust-boundary review and rate-limit design. |
@@ -89,3 +89,51 @@ IMPLEMENTED
 ### Recommended next batch
 
 Batch 1 — Tenant isolation and database security.
+
+## Batch 1
+
+### Objective
+
+Enforce tenant validation at the service boundary and add explicit database guardrails to reject the shared default company in tenant-scoped tables.
+
+### Findings before implementation
+
+- `api/handlers/tenant.go` rejected `default` only when it was exactly lower-case, so uppercase or mixed-case variants could slip through.
+- `nlp/api.py` accepted and defaulted `company_id` to `"default"` in public endpoints, directly contradicting the no-shared-default rule.
+- The schema files define `company_id DEFAULT 'default'` in several tenant-scoped tables, which is a policy gap that should be addressed by explicit migration guardrails.
+
+### Files changed
+
+- `api/handlers/tenant.go`
+- `api/handlers/tenant_test.go`
+- `nlp/api.py`
+- `schema/migrations/20261031_tenant_guardrails.sql`
+- `docs/backend-hardening/PROGRESS.md`
+
+### Security decisions
+
+- Treat `default` as an invalid value for any tenant-scoped company ID regardless of casing.
+- Reject missing tenant values before any work is performed on a company-scoped resource.
+- Keep the tenant guardrails in both service logic and versioned database migration files so the runtime and DB schema are aligned.
+
+### Tests added
+
+- Added Go coverage for uppercase `DEFAULT` values to ensure they are rejected as invalid tenants.
+
+### Commands executed and actual results
+
+1. `cd /home/nahom/Projects/personal/KMS/api && go test ./...`
+   - Result: passed.
+
+### Remaining risks
+
+- The repository still contains schema defaults that assume `default` is an acceptable fallback, so a live database reset or migration must be reviewed before applying this to production data.
+- Full end-to-end tenant and RLS coverage remains to be validated against the actual Supabase project configuration.
+
+### Status
+
+VERIFIED
+
+### Recommended next batch
+
+Batch 2 — Authentication and authorization.
