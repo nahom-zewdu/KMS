@@ -43,6 +43,8 @@ class VectorRetriever:
         return self.model.encode(text, normalize_embeddings=True).tolist()
 
     def _call_match_documents(self, embedding: list, top_k: int, threshold: float, company_id: str) -> List[Dict[str, Any]]:
+        if not company_id or company_id.strip().lower() == "default":
+            raise ValueError("A real company_id is required for vector retrieval")
         response = self.supabase.rpc(
             "match_documents",
             {
@@ -54,8 +56,10 @@ class VectorRetriever:
         ).execute()
         return response.data or []
 
-    def retrieve(self, question: str, top_k: int = 8, company_id: str = "default") -> List[Dict]:
+    def retrieve(self, question: str, top_k: int = 8, company_id: str | None = None) -> List[Dict]:
         """Fetch top-k relevant chunks."""
+        if not company_id or company_id.strip().lower() == "default":
+            raise ValueError("A real company_id is required for vector retrieval")
         embedding = self._embed(question)
         thresholds = [0.65, 0.55, 0.45]
         for threshold in thresholds:
@@ -103,9 +107,9 @@ class VectorRetriever:
             logger.warning("Keyword fallback failed: %s", e)
         return []
 
-    def answer(self, question: str) -> str:
+    def answer(self, question: str, company_id: str) -> str:
         """Simple RAG answer (bridge to v2)."""
-        chunks = self.retrieve(question)
+        chunks = self.retrieve(question, company_id=company_id)
         if not chunks:
             return "I don't know."
 
