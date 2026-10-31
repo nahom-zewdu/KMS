@@ -125,3 +125,31 @@ Guardrail migrations do not infer company ownership, delete data, or silently ba
 ### Verification boundary
 
 The policies and migration behavior passed against disposable PostgreSQL 16 using a minimal Supabase `auth.uid()` compatibility stub. This does not verify the live Supabase object inventory, production grants, signing configuration, or pgvector RPC runtime. No changes were applied to live Supabase.
+
+## Decision 12: Go user routes validate Supabase access tokens and membership
+
+### Decision
+
+`POST /query` and `GET /github/sync-baseline` require a bearer access token that is validated against Supabase Auth `/auth/v1/user`. Go derives the user ID from that verified response, not from caller-provided identity claims or headers. Each request must separately prove membership in the exact requested company using the backend Supabase query filtered by both `user_id` and `company_id`.
+
+The requested company ID is a selector only. Empty and `default` values are rejected. Baseline sync additionally resolves the repository by its ID or exact full name while filtering by the authorized company; the service queues only the canonical stored name and authorized company ID. Query and baseline Redis jobs carry company context explicitly.
+
+### Consequences
+
+- Invalid user credentials return 401, missing membership/repository authorization returns 403, and Supabase Auth/membership service failures fail closed.
+- Go API availability for protected user routes depends on Supabase Auth availability. No second JWT key or offline token verifier was introduced.
+- The frontend query proxy forwards its server-verified Supabase session access token to Go and fails closed if no token is present.
+
+## Decision 13: webhook bodies are bounded and handlers own response lifetime
+
+Slack and GitHub webhook bodies are limited to 1 MiB before parsing. Slack timestamps must be within five minutes in the past or future, and signature comparisons use constant-time HMAC comparison. GitHub delivery headers must parse as UUIDs; the ingestion service checks stored delivery IDs and the schema declares the delivery column unique.
+
+Slack event processing now completes synchronously within the handler's request lifetime. It retries transient processing failures and returns an error response after exhaustion; no goroutine may access Gin context or write a response after handler return. This increases acknowledgement latency but avoids silently acknowledging failed work. Durable asynchronous delivery remains a possible later design, not an implicit behavior.
+
+## Decision 14: Go HTTP server shutdown and resource lifecycle are bounded
+
+The API uses `http.Server` with 5s `ReadHeaderTimeout`, 30s `ReadTimeout`, 90s `WriteTimeout`, 120s `IdleTimeout`, and 1 MiB `MaxHeaderBytes`. SIGINT/SIGTERM initiates graceful shutdown bounded to 15 seconds, after which the server is force-closed and the failure surfaced. Redis is closed when the run loop exits.
+
+### Verification boundary
+
+Go handler/repository/service and server tests, plus the race detector, passed locally. The frontend TypeScript check passed. No live Supabase or production webhook/runtime was exercised; the exact deployed grants, repository rows, delivery constraint, API routing, key configuration, and termination window remain deployment checks. Rate limiting is explicitly not part of this change.
