@@ -152,8 +152,6 @@ async def update_step_progress(
     user_id: str = Header(..., alias="X-User-Id"),
 ):
     """Update one user's Ramp step progress."""
-    if not user_id:
-        raise HTTPException(status_code=401, detail="X-User-Id header is required")
     effective_company_id = require_company_id(company_id, "X-Company-Id")
     try:
         require_company_membership(user_id, effective_company_id)
@@ -240,11 +238,17 @@ async def sync_baseline(
 
 
 @app.get("/visualizer")
-async def get_visualizer(role: str = "backend-engineer", company_id: str | None = None):
+async def get_visualizer(
+    role: str = "backend-engineer",
+    company_id: str | None = None,
+    user_id: str | None = Header(default=None, alias="X-User-Id"),
+    company_header: str | None = Header(default=None, alias="X-Company-Id"),
+):
     """Get visualizer data for a specific role."""
     try:
-        effective_company_id = require_company_id(company_id, "company_id")
-        data = VisualizerService(supabase).build_for_role(role, company_id=effective_company_id)
+        effective_company_id = require_company_id(company_header or company_id, "company_id")
+        require_company_membership(user_id, effective_company_id)
+        data = VisualizerService(get_supabase_client()).build_for_role(role, company_id=effective_company_id)
         return JSONResponse({"success": True, "data": data})
     except HTTPException:
         raise
