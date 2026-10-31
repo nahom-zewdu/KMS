@@ -72,9 +72,9 @@ func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, 
 
 		log.Printf("QueryID: %s - Playbook request detected for role: %s", queryID, role)
 
-		playbookMsg, err := sb.playbookService.GeneratePlaybook(ctx, role, "")
+		playbookMsg, err := sb.playbookService.GeneratePlaybook(ctx, role, "", companyID)
 		if err != nil {
-			playbookMsg = "Sorry, I couldn't generate the playbook right now."
+			return fmt.Errorf("generate playbook: %w", err)
 		}
 
 		_, _, err = sb.client.PostMessageContext(ctx, channel,
