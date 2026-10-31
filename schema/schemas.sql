@@ -92,6 +92,7 @@ COMMENT ON TABLE public.edges IS 'Stores relationships between entities (e.g., P
 -- Contributions: metrics per PERSON/PROJECT pair
 CREATE TABLE public.contributions (
     id UUID PRIMARY KEY,
+    company_id TEXT NOT NULL,
     person_name TEXT NOT NULL,
     repo_name TEXT NOT NULL,
     commit_count INTEGER DEFAULT 0,
@@ -99,11 +100,11 @@ CREATE TABLE public.contributions (
     issue_count INTEGER DEFAULT 0,
     bus_factor FLOAT DEFAULT 0.0 CHECK (bus_factor >= 0 AND bus_factor <= 1),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(person_name, repo_name)
+    UNIQUE(company_id, person_name, repo_name)
 );
-CREATE INDEX idx_contributions_repo_name ON public.contributions (repo_name);
+CREATE INDEX idx_contributions_company_repo ON public.contributions (company_id, repo_name);
 COMMENT ON TABLE public.contributions IS 'Tracks contribution metrics per person per repository.';
-COMMENT ON INDEX idx_contributions_repo_name IS 'Index for fast metrics queries by repository.';
+COMMENT ON INDEX idx_contributions_company_repo IS 'Index for fast tenant-scoped metrics queries by repository.';
 
 
 -- Pull Requests
