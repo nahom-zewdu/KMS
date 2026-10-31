@@ -160,14 +160,13 @@ USING (
   )
 );
 
--- Ramp step progress policies
-create policy "Members can manage company ramp progress"
-on public.ramp_step_progress
-for all
-using (
-  company_id in (
-    select company_id from public.company_members
-    where user_id = auth.uid()
+CREATE POLICY "Admins can manage company ramp progress"
+ON public.ramp_step_progress
+FOR ALL
+USING (
+  company_id IN (
+    SELECT company_id FROM public.company_members
+    WHERE user_id = auth.uid() AND role = 'admin'
   )
 )
 with check (
