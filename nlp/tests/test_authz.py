@@ -23,6 +23,7 @@ def make_token(
     include_exp=True,
     include_iat=True,
     include_audience=True,
+    company_id=None,
     algorithm="HS256",
 ):
     now = datetime.now(timezone.utc)
@@ -37,6 +38,8 @@ def make_token(
         claims["aud"] = audience
     if include_exp:
         claims["exp"] = int((expires_at or now + timedelta(minutes=5)).timestamp())
+    if company_id is not None:
+        claims["company_id"] = company_id
     return jwt.encode(claims, secret, algorithm=algorithm)
 
 
@@ -160,6 +163,90 @@ def test_service_token_rejects_wrong_audience(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         api.verify_internal_service_token(token)
     assert exc.value.status_code == 401
+
+
+def test_internal_playbook_requires_company_scoped_service_token(monkeypatch):
+    monkeypatch.setenv("INTERNAL_SERVICE_SECRET", SERVICE_SECRET)
+    monkeypatch.setenv("INTERNAL_SERVICE_ISSUER", "kms-internal")
+    monkeypatch.setenv("INTERNAL_SERVICE_AUDIENCE", "kms-nlp")
+    generated = {}
+
+    class FakeGenerator:
+        def generate(self, *, role, employee_name, company_id):
+            generated.update(role=role, employee_name=employee_name, company_id=company_id)
+            return {"company_id": company_id}
+
+    monkeypatch.setattr(api, "generator", FakeGenerator())
+    token = make_token(
+        SERVICE_SECRET,
+        issuer="kms-internal",
+        audience="kms-nlp",
+        role="service",
+        company_id="company-a",
+    )
+    client = TestClient(api.app)
+
+    response = client.post(
+        "/internal/playbooks/generate",
+        json={"role": "backend-engineer", "company_id": "company-a"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    assert generated == {
+        "role": "backend-engineer",
+        "employee_name": "",
+        "company_id": "company-a",
+    }
+
+    cross_company = client.post(
+        "/internal/playbooks/generate",
+        json={"role": "backend-engineer", "company_id": "company-b"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert cross_company.status_code == 403
+    assert generated["company_id"] == "company-a"
+
+
+def test_internal_playbook_rejects_missing_or_default_company(monkeypatch):
+    monkeypatch.setenv("INTERNAL_SERVICE_SECRET", SERVICE_SECRET)
+    monkeypatch.setenv("INTERNAL_SERVICE_ISSUER", "kms-internal")
+    monkeypatch.setenv("INTERNAL_SERVICE_AUDIENCE", "kms-nlp")
+    token = make_token(
+        SERVICE_SECRET,
+        issuer="kms-internal",
+        audience="kms-nlp",
+        role="service",
+        company_id="company-a",
+    )
+    client = TestClient(api.app)
+    for company_id in (None, "default"):
+        response = client.post(
+            "/internal/playbooks/generate",
+            json={"role": "backend-engineer", "company_id": company_id},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 400
+
+
+def test_internal_playbook_rejects_unsigned_and_user_tokens(monkeypatch):
+    monkeypatch.setenv("INTERNAL_SERVICE_SECRET", SERVICE_SECRET)
+    monkeypatch.setenv("INTERNAL_SERVICE_ISSUER", "kms-internal")
+    monkeypatch.setenv("INTERNAL_SERVICE_AUDIENCE", "kms-nlp")
+    client = TestClient(api.app)
+
+    missing_token = client.post(
+        "/internal/playbooks/generate",
+        json={"role": "backend-engineer", "company_id": "company-a"},
+    )
+    assert missing_token.status_code == 401
+
+    user_token = make_token(company_id="company-a")
+    rejected_user = client.post(
+        "/internal/playbooks/generate",
+        json={"role": "backend-engineer", "company_id": "company-a"},
+        headers={"Authorization": f"Bearer {user_token}"},
+    )
+    assert rejected_user.status_code == 401
 
 
 def test_require_company_membership_rejects_default(monkeypatch):
