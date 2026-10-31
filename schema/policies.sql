@@ -81,31 +81,19 @@ WITH CHECK (
 CREATE POLICY "Admins can remove members"
 ON public.company_members
 FOR DELETE
-USING (auth.uid() = user_id);
+USING (
+  EXISTS (
+    SELECT 1
+    FROM public.company_members as cm
+    WHERE cm.user_id = auth.uid()
+      AND cm.company_id = company_members.company_id
+      AND cm.role IN ('admin', 'manager')
+  )
+  AND user_id <> auth.uid()
+);
 
--- Companies policies (keep simple)
-DROP POLICY IF EXISTS "Authenticated users can create companies" ON public.companies;
-DROP POLICY IF EXISTS "Users can view companies they belong to" ON public.companies;
-
-CREATE POLICY "Authenticated users can create companies"
-ON public.companies
-FOR INSERT
-WITH CHECK (auth.role() = 'authenticated');
-
-CREATE POLICY "Users can view all companies for now"
-ON public.companies
-FOR SELECT
-USING (true);
-
-
--- Company integrations policies
-ALTER TABLE public.company_integrations ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "Admins manage integrations" ON public.company_integrations;
-DROP POLICY IF EXISTS "Members view integrations" ON public.company_integrations;
-
--- Members of a company can read its integrations
-CREATE POLICY "Members view integrations"
+-- Company integrations: members can read, admins manage.
+CREATE POLICY "Members can view integrations"
 ON public.company_integrations
 FOR SELECT
 USING (
