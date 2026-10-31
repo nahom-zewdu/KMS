@@ -29,6 +29,13 @@ func (s tenantStorage) ResolveCompanyByIntegration(context.Context, string, stri
 func (s tenantStorage) ResolveCompanyByInstallation(context.Context, string) (string, error) {
 	return s.installation, nil
 }
+func (tenantStorage) AuthenticateUser(context.Context, string) (string, error) { return "", nil }
+func (tenantStorage) IsCompanyMember(context.Context, string, string) (bool, error) {
+	return false, nil
+}
+func (tenantStorage) ResolveRepositoryForCompany(context.Context, string, string) (string, error) {
+	return "", nil
+}
 
 var _ domain.StoragePort = tenantStorage{}
 
