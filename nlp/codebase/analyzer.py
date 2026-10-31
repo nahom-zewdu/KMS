@@ -22,7 +22,7 @@ class CodebaseAnalyzer:
 
     async def process_push_event(self, payload: Dict[str, Any], record_id: str, company_id: str) -> bool:
         """Process incremental push event."""
-        if not company_id or company_id.strip() == "default":
+        if not company_id or company_id.strip().lower() == "default":
             raise ValueError("company_id must resolve to a real company")
         logger.info(f"Incremental push processing | record={record_id}")
 
