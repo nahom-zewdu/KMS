@@ -56,7 +56,8 @@ func NewSupabaseRepo(url, key string) domain.StoragePort {
 }
 
 // Insert stores data in a specified Supabase table, validating the table and data fields.
-// It supports tables: raw_data, events, contributions, entities, edges, pull_requests, issues.
+// Tenant-associated inserts require a real company_id. Contribution upserts are
+// keyed by company, contributor, and repository.
 // Args:
 //
 //	ctx: Context for cancellation and timeouts.
@@ -75,13 +76,18 @@ func (r *SupabaseRepo) Insert(ctx context.Context, table string, data map[string
 		"contributions":        true,
 		"entities":             true,
 		"edges":                true,
-		"pull_requests":        true,
-		"issues":               true,
 		"company_integrations": true,
 	}
 	if !validTables[table] {
 		log.Printf("RecordID: %v - Invalid table: %s in %.3fs", data["record_id"], table, time.Since(start).Seconds())
 		return fmt.Errorf("invalid table: %s", table)
+	}
+	if table == "events" || table == "raw_data" || table == "contributions" ||
+		table == "entities" || table == "edges" || table == "company_integrations" {
+		companyID, ok := data["company_id"].(string)
+		if !ok || strings.TrimSpace(companyID) == "" || strings.EqualFold(strings.TrimSpace(companyID), "default") {
+			return fmt.Errorf("a real company_id is required for table %s", table)
+		}
 	}
 
 	// Validate record_id for relevant tables
@@ -102,7 +108,11 @@ func (r *SupabaseRepo) Insert(ctx context.Context, table string, data map[string
 	}
 
 	// Perform insert with upsert for contributions to handle updates
-	_, _, err := r.client.From(table).Insert(data, table == "contributions", "", "", "").Execute()
+	onConflict := ""
+	if table == "contributions" {
+		onConflict = "company_id,person_name,repo_name"
+	}
+	_, _, err := r.client.From(table).Insert(data, table == "contributions", onConflict, "", "").Execute()
 	if err != nil {
 		log.Printf("RecordID: %v - Failed to insert into %s in %.3fs: %v", data["record_id"], table, time.Since(start).Seconds(), err)
 		return fmt.Errorf("failed to insert into %s: %v", table, err)
@@ -112,7 +122,8 @@ func (r *SupabaseRepo) Insert(ctx context.Context, table string, data map[string
 }
 
 // Query retrieves records from a specified Supabase table based on a filter.
-// It supports querying events (for idempotency), contributions (for metrics), and other tables.
+// It supports only the globally deduplicated events lookup and tenant-scoped
+// contribution metrics query.
 // Args:
 //
 //	ctx: Context for cancellation and timeouts.
@@ -126,20 +137,29 @@ func (r *SupabaseRepo) Query(ctx context.Context, table string, filter map[strin
 	start := time.Now()
 	// Validate table name
 	validTables := map[string]bool{
-		"raw_data":             true,
-		"events":               true,
-		"contributions":        true,
-		"entities":             true,
-		"edges":                true,
-		"pull_requests":        true,
-		"issues":               true,
-		"company_integrations": true,
-		"company_members":      true,
-		"repositories":         true,
+		"events":        true,
+		"contributions": true,
 	}
 	if !validTables[table] {
 		log.Printf("Failed to query invalid table: %s in %.3fs", table, time.Since(start).Seconds())
 		return nil, fmt.Errorf("invalid table: %s", table)
+	}
+	switch table {
+	case "events":
+		deliveryID, ok := filter["delivery_id"].(string)
+		if !ok || strings.TrimSpace(deliveryID) == "" {
+			return nil, fmt.Errorf("delivery_id filter is required for events")
+		}
+	case "contributions":
+		companyID, ok := filter["company_id"].(string)
+		companyID = strings.TrimSpace(companyID)
+		if !ok || companyID == "" || strings.EqualFold(companyID, "default") {
+			return nil, fmt.Errorf("a real company_id filter is required for contributions")
+		}
+		repoName, ok := filter["repo_name"].(string)
+		if !ok || strings.TrimSpace(repoName) == "" {
+			return nil, fmt.Errorf("repo_name filter is required for contributions")
+		}
 	}
 
 	// Build query with filters
@@ -314,8 +334,12 @@ func isUUID(value string) bool {
 // Returns:
 //
 //	Matching content string and error if query fails.
-func (r *SupabaseRepo) QueryKnowledgeGraphSupabase(ctx context.Context, query string) (string, error) {
+func (r *SupabaseRepo) QueryKnowledgeGraphSupabase(ctx context.Context, query, companyID string) (string, error) {
 	start := time.Now()
+	companyID = strings.TrimSpace(companyID)
+	if companyID == "" || strings.EqualFold(companyID, "default") {
+		return "", fmt.Errorf("a real company ID is required for knowledge graph search")
+	}
 	// Validate query
 	if strings.TrimSpace(query) == "" {
 		log.Printf("QueryID: <none> - Empty query in %.3fs", time.Since(start).Seconds())
@@ -324,6 +348,7 @@ func (r *SupabaseRepo) QueryKnowledgeGraphSupabase(ctx context.Context, query st
 
 	// Search raw_data content (to be enhanced by entities/edges in hf_processor.py)
 	result, _, err := r.client.From("raw_data").Select("content", "", false).
+		Eq("company_id", companyID).
 		Like("content", "%"+strings.ToLower(query)+"%").Execute()
 	if err != nil {
 		log.Printf("QueryID: %s - Failed to query Supabase in %.3fs: %v", query, time.Since(start).Seconds(), err)
