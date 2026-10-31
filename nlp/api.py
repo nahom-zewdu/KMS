@@ -155,10 +155,11 @@ async def update_step_progress(
     if not user_id:
         raise HTTPException(status_code=401, detail="X-User-Id header is required")
     effective_company_id = require_company_id(company_id, "X-Company-Id")
-    status = str((payload or {}).get("status") or "").strip().lower()
-    if not status:
-        raise HTTPException(status_code=400, detail="status is required")
     try:
+        require_company_membership(user_id, effective_company_id)
+        status = str((payload or {}).get("status") or "").strip().lower()
+        if not status:
+            raise HTTPException(status_code=400, detail="status is required")
         progress = ramp_generator.update_step_progress(plan_id, step_id, effective_company_id, user_id, status)
         return JSONResponse({"success": True, "progress": progress})
     except ValueError as exc:
