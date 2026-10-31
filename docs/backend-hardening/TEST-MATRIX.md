@@ -107,3 +107,30 @@ Unit and local HTTP tests do not establish production security. Supabase service
 | Baseline and incremental repository updates preserve tenant predicates | Python query-builder tests record actual filters and require both repository ID and company ID | **VERIFIED** |
 | Cross-tenant vector retrieval at the live RPC boundary | `match_documents` SQL has a tenant predicate; no pgvector runtime test environment | **BLOCKED** |
 | End-to-end service-role isolation against deployed Supabase | No live project access by design | **BLOCKED** |
+
+## Ingestion and tenant-context corrective work — 2026-10-31
+
+| Area | Exact command | Result | Coverage and limits |
+|---|---|---|---|
+| Go API regression tests | `cd api && go test -count=1 ./...` | **VERIFIED — passed** | Includes CoreIngest event `company_id`, cancellation/deadline propagation, Slack provider event-ID use, company-bound internal playbook JWT, and SlackBot tenant propagation. |
+| Go race detector | `cd api && go test -race -count=1 ./...` | **VERIFIED — passed** | All Go packages pass under the race detector. |
+| Go static analysis | `cd api && go vet ./...` | **VERIFIED — passed** | No diagnostics. |
+| Python auth and internal playbook tests | `cd nlp && PYTHONPATH=. pytest tests/test_authz.py -q` | **VERIFIED — 22 passed, 2 third-party deprecation warnings** | Checks missing/user/service tokens, token scope, company-bound internal tokens, and cross-company rejection. |
+| Python related query/Ramp tests | `cd nlp && PYTHONPATH=. pytest tests/test_authz.py tests/test_ramp_v2.py tests/test_evidence_composition.py tests/test_query_engine_context.py -q` | **VERIFIED — 40 passed, 2 third-party deprecation warnings** | Focused auth, tenant filtering, retrieval, evidence, and Ramp paths. |
+| Events migration/RLS harness | `pg_isready -h 127.0.0.1 -p 55432; psql 'postgresql://postgres@127.0.0.1:55432/postgres' -v ON_ERROR_STOP=1 -f schema/tests/tenant_rls.sql` | **BLOCKED — no PostgreSQL server responded; psql connection refused** | Neither repeat application, historical mapping, global delivery-ID uniqueness, nor unmapped-data rollback has been executed in this session. |
+| Live Supabase schema or migration | Not run | **BLOCKED** | No live database was contacted or changed. |
+
+### New regression assertions
+
+| Requirement | Evidence | Status |
+|---|---|---|
+| CoreIngest observes parent cancellation and inherits its deadline while enforcing the 10-second maximum | `api/services/core_test.go` | **VERIFIED** |
+| Slack ingestion uses provider `event_id`; missing event IDs are rejected | `api/handlers/security_test.go` | **VERIFIED** |
+| Slack playbook service receives the integration-resolved company ID | `api/services/playbook_test.go` | **VERIFIED** |
+| Go playbook call carries a signed, short-lived, company-bound service JWT | `api/services/playbook_test.go` | **VERIFIED** |
+| Python internal playbook route rejects absent tokens, user tokens, missing/default companies, and mismatched company claims | `nlp/tests/test_authz.py` | **VERIFIED** |
+| Historical events map only from one unambiguous linked `raw_data` company; unmapped rows abort without deletion | `schema/tests/tenant_rls.sql`, `schema/tests/events_tenant_migration_unmapped.sql` | **IMPLEMENTED; database verification BLOCKED** |
+
+The migration has not been applied to a live or disposable database in this run; schema/database behavior must not be reported as verified. Rate limiting remains **BLOCKED / NOT STARTED**.
+
+CoreIngest cancellation verification covers propagation to Redis, not durable recovery after the database inserts. A cancellation in that interval can leave stored rows without a queued job; duplicate delivery currently does not republish. Durable outbox/reconciliation behavior remains **BLOCKED**.
