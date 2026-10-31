@@ -78,7 +78,7 @@ class CodebaseBaselineSync:
                         "last_synced_at": now,
                         "updated_at": now,
                     }
-                ).eq("id", physical_repo_id).execute()
+                ).eq("id", physical_repo_id).eq("company_id", company_id).execute()
             else:
                 physical_repo_id = str(uuid.uuid4())
                 self.supabase.table("repositories").insert(
