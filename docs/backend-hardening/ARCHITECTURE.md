@@ -73,6 +73,29 @@ These should be treated as internal trust boundaries, not as user-triggered auth
 
 - `nlp/api.py` routes such as Ramp, playbook generation, visualizer, and baseline sync currently accept `company_id` defaults and are not yet hardened against missing or spoofed tenant values.
 
+## Corrective review of the identity and tenant boundary
+
+### Identity boundary fix
+
+The Python API is no longer allowed to trust `X-User-Id` as its own authentication primitive. The live request path must carry a verified bearer token and a validated company context.
+
+- Frontend server routes authenticate through Supabase and pass the Supabase access token as `Authorization: Bearer <jwt>`.
+- The Python API validates the bearer token against the configured project secret (`SUPABASE_JWT_SECRET` or `JWT_SECRET`) and rejects legacy header-based identity.
+- Internal service tokens can use `INTERNAL_SERVICE_SECRET`, but they still must be signed and validated before any tenant-scoped membership check runs.
+
+### Membership and RLS correction
+
+The database policy set now treats `company_members` as an admin-controlled membership table instead of a user-owned self-service table.
+
+- Members may read their own association and authorized company data.
+- Admins/managers can invite members and manage role assignments.
+- Self-insertion and self-promotion are rejected by policy.
+- Tenant-scoped tables are protected by RLS and default-tenant invariant checks.
+
+### Production assumptions and deployment dependency
+
+The live environment must set the identity secrets before the Python API is exposed beyond trusted infrastructure. Without a configured JWT secret, the service intentionally fails safe instead of trusting client-provided identifiers.
+
 ## Conclusion
 
-The architecture is coherent for a small layered system, but the tenant enforcement model is not uniformly enforced across all public endpoints. The codebase is operationally understandable, but the production security posture still needs explicit tenant validation and policy enforcement in the user-facing API layer.
+The architecture is coherent for a small layered system, and the company-scoped tenant boundary is now enforced at the API identity layer and at the database policy layer. There remain live-environment deployment checks for the exact Supabase RLS configuration, but the code path is aligned with the explicit no-default-tenant and no-legacy-header rules.
