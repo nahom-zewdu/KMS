@@ -27,6 +27,16 @@ app.add_middleware(
 )
 
 
+def require_company_id(company_id: str | None, field_name: str = "company_id") -> str:
+    """Reject shared default tenant values and empty company IDs."""
+    normalized = (company_id or "").strip()
+    if not normalized:
+        raise HTTPException(status_code=400, detail=f"{field_name} is required")
+    if normalized.lower() == "default":
+        raise HTTPException(status_code=400, detail=f"{field_name} cannot be the shared default tenant")
+    return normalized
+
+
 @app.post("/ramp-plans/generate")
 async def generate_ramp(payload: dict):
     """Generate or refresh Ramp for a company and role."""
