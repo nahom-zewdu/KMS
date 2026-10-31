@@ -1,9 +1,10 @@
 -- Migration: 20261031_tenant_guardrails.sql
 -- Purpose: enforce tenant validation and reject the shared default company in company-scoped data paths.
+-- This migration is intentionally conservative: it fails fast when historical rows still use the default tenant.
 
 BEGIN;
 
--- Prevent accidental writes to the shared default company in tenant-scoped tables.
+-- Remove the shared default from the canonical company identifier source.
 ALTER TABLE public.companies
   ALTER COLUMN id DROP DEFAULT;
 
@@ -40,27 +41,26 @@ ALTER TABLE public.entities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.edges ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE public.company_members
-  ADD CONSTRAINT company_members_company_id_not_default CHECK (company_id IS NOT NULL AND company_id <> 'default');
+  ADD CONSTRAINT company_members_company_id_not_default CHECK (company_id IS NOT NULL AND btrim(company_id) <> '' AND lower(btrim(company_id)) <> 'default');
 
 ALTER TABLE public.company_integrations
-  ADD CONSTRAINT company_integrations_company_id_not_default CHECK (company_id IS NOT NULL AND company_id <> 'default');
+  ADD CONSTRAINT company_integrations_company_id_not_default CHECK (company_id IS NOT NULL AND btrim(company_id) <> '' AND lower(btrim(company_id)) <> 'default');
 
 ALTER TABLE public.company_repos
-  ADD CONSTRAINT company_repos_company_id_not_default CHECK (company_id IS NOT NULL AND company_id <> 'default');
+  ADD CONSTRAINT company_repos_company_id_not_default CHECK (company_id IS NOT NULL AND btrim(company_id) <> '' AND lower(btrim(company_id)) <> 'default');
 
 ALTER TABLE public.ramp_plans
-  ADD CONSTRAINT ramp_plans_company_id_not_default CHECK (company_id IS NOT NULL AND company_id <> 'default');
+  ADD CONSTRAINT ramp_plans_company_id_not_default CHECK (company_id IS NOT NULL AND btrim(company_id) <> '' AND lower(btrim(company_id)) <> 'default');
 
 ALTER TABLE public.ramp_step_progress
-  ADD CONSTRAINT ramp_step_progress_company_id_not_default CHECK (company_id IS NOT NULL AND company_id <> 'default');
+  ADD CONSTRAINT ramp_step_progress_company_id_not_default CHECK (company_id IS NOT NULL AND btrim(company_id) <> '' AND lower(btrim(company_id)) <> 'default');
 
 ALTER TABLE public.entities
-  ADD CONSTRAINT entities_company_id_not_default CHECK (company_id IS NOT NULL AND company_id <> 'default');
+  ADD CONSTRAINT entities_company_id_not_default CHECK (company_id IS NOT NULL AND btrim(company_id) <> '' AND lower(btrim(company_id)) <> 'default');
 
 ALTER TABLE public.edges
-  ADD CONSTRAINT edges_company_id_not_default CHECK (company_id IS NOT NULL AND company_id <> 'default');
+  ADD CONSTRAINT edges_company_id_not_default CHECK (company_id IS NOT NULL AND btrim(company_id) <> '' AND lower(btrim(company_id)) <> 'default');
 
--- Keep this as a strict invariant for all future tenant-scoped payloads.
 CREATE OR REPLACE FUNCTION public.assert_real_company(company_id text)
 RETURNS boolean
 LANGUAGE sql
@@ -70,7 +70,7 @@ AS $$
     AND lower(btrim(company_id)) <> 'default';
 $$;
 
--- Example usage for future writes: the backend should validate before insert/update.
+-- Example usage for future writes: the backend should validate before insert/update and reject default company IDs.
 -- CREATE POLICY ... USING (public.assert_real_company(company_id));
 
 COMMIT;
