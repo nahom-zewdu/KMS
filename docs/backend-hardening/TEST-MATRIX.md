@@ -53,3 +53,31 @@ These are historical attempts; the focused Python command below is the later suc
 | Batch 4 — rate limiting | **BLOCKED — not started** | Explicitly deferred until corrective review blockers are resolved or documented as accepted. |
 
 No live Supabase database was changed. Do not treat disposable PostgreSQL results as proof of the live schema, production grants, deployed JWT signing configuration, or pgvector extension behavior.
+
+## Go ingress corrective review — 2026-11-01
+
+| Area | Exact command | Result | Coverage and limits |
+|---|---|---|---|
+| Go API format and tests | `gofmt -w api && cd api && go test ./...` | **VERIFIED — passed** (`api`, `handlers`, `repository`, `services`; `domain` has no tests) | Tests user auth and tenant checks, exact Supabase filter construction, webhook bounds/signatures/timestamps, duplicate delivery idempotency, job tenant propagation, and server settings/shutdown. |
+| Go race detector | `cd api && go test -race ./...` | **VERIFIED — passed** for all Go packages | Includes a blocked-until-released Slack mention handler test verifying handler completion waits for work and race-free response lifetime. |
+| Go vet | `cd api && go vet ./...` | **VERIFIED — passed**, no diagnostics | Static checks for the Go API. |
+| Frontend TypeScript | `cd /home/nahom/Projects/personal/kms-frontend/kms-frontend && npx tsc --noEmit --pretty false` | **VERIFIED — passed**, exit code 0 | Checks the query proxy forwarding the Supabase session bearer token. No frontend runtime integration was run. |
+| Diff whitespace validation | `git diff --check` and `git -C /home/nahom/Projects/personal/kms-frontend/kms-frontend diff --check` | **VERIFIED — passed** | No whitespace errors found. |
+
+### Go regression coverage
+
+| Requirement | Evidence | Status |
+|---|---|---|
+| Missing/invalid Supabase bearer token | Handler auth tests; invalid token rejected by fake auth provider | **VERIFIED** |
+| Non-member company / missing or default company | Query and baseline route tests | **VERIFIED** |
+| Cross-company repository and unauthorized baseline sync | Strict company/repository fake plus real Supabase query parameter assertions | **VERIFIED** |
+| Authorized company context propagated into query/baseline Redis jobs | Handler and service tests inspect both top-level and nested job fields | **VERIFIED** |
+| Body size limit on Slack and GitHub webhook endpoints | Oversize requests return 413 | **VERIFIED** |
+| Invalid Slack signature; Slack timestamps beyond past/future tolerance | Handler and service-verifier signed-body tests | **VERIFIED** |
+| GitHub delivery ID format and duplicate delivery behavior | UUID validation and core ingestion idempotency test with filter-aware storage double | **VERIFIED** |
+| No Gin context writes after handler return | Slack processing blocks until released; handler responds afterward; `go test -race` passes | **VERIFIED** |
+| HTTP timeout/header configuration and graceful shutdown | Server configuration and cancellation/shutdown tests | **VERIFIED** |
+| Live Supabase Auth and database grants/rows | Not contacted | **BLOCKED** |
+| Real Slack/GitHub provider delivery, retry schedule, and production termination window | Not run | **BLOCKED** |
+
+Unit and local HTTP tests do not establish production security. Supabase service key permissions, Auth endpoint behavior, the deployed `events.delivery_id` unique constraint, Go API network exposure, and shutdown timing must be checked in the target environment before production security is claimed. Rate limiting remains **BLOCKED / NOT STARTED**.
