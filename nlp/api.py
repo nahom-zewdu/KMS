@@ -77,17 +77,18 @@ async def update_step_progress(
     plan_id: str,
     step_id: str,
     payload: dict,
-    company_id: str = Header(default="default", alias="X-Company-Id"),
+    company_id: str | None = Header(default=None, alias="X-Company-Id"),
     user_id: str = Header(..., alias="X-User-Id"),
 ):
     """Update one user's Ramp step progress."""
     if not user_id:
         raise HTTPException(status_code=401, detail="X-User-Id header is required")
+    effective_company_id = require_company_id(company_id, "X-Company-Id")
     status = str((payload or {}).get("status") or "").strip().lower()
     if not status:
         raise HTTPException(status_code=400, detail="status is required")
     try:
-        progress = ramp_generator.update_step_progress(plan_id, step_id, company_id, user_id, status)
+        progress = ramp_generator.update_step_progress(plan_id, step_id, effective_company_id, user_id, status)
         return JSONResponse({"success": True, "progress": progress})
     except ValueError as exc:
         code = 400 if "status" in str(exc).lower() else 404
