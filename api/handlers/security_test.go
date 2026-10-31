@@ -89,6 +89,15 @@ func (b *securityBot) HandleEvent(context.Context, string, string, string, strin
 }
 func (b *securityBot) GetBotID(context.Context) (string, error) { return b.botID, nil }
 
+type securitySlackIngest struct {
+	requests []domain.IngestRequest
+}
+
+func (s *securitySlackIngest) IngestSlackEvent(_ context.Context, request domain.IngestRequest) error {
+	s.requests = append(s.requests, request)
+	return nil
+}
+
 type securityRedis struct {
 	published []domain.JobPayload
 	subscribe bool
@@ -287,7 +296,7 @@ func TestWebhookBodyLimitAndSignatureBeforeProcessing(t *testing.T) {
 		t.Fatalf("oversized request status = %d, want %d", oversizedResponse.Code, http.StatusRequestEntityTooLarge)
 	}
 
-	body := []byte(`{"type":"event_callback","team_id":"T1","event":{"type":"message","user":"U1","text":"hello","ts":"1.000001","channel":"C1"}}`)
+	body := []byte(`{"type":"event_callback","event_id":"Ev123","team_id":"T1","event":{"type":"message","user":"U1","text":"hello","ts":"1.000001","channel":"C1"}}`)
 	request := httptest.NewRequest(http.MethodPost, "/slack/events", bytes.NewReader(body))
 	request.Header.Set("X-Slack-Request-Timestamp", fmt.Sprintf("%d", time.Now().Unix()))
 	request.Header.Set("X-Slack-Signature", "v0="+strings.Repeat("0", 64))
@@ -342,7 +351,7 @@ func TestSlackHandlerWaitsForProcessingBeforeReturning(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.POST("/slack/events", handler.HandleSlackWebhook)
-	body := []byte(`{"type":"event_callback","team_id":"T1","event":{"type":"app_mention","user":"U1","text":"@bot hello","ts":"1760533260.035849","channel":"C1"}}`)
+	body := []byte(`{"type":"event_callback","event_id":"Ev123","team_id":"T1","event":{"type":"app_mention","user":"U1","text":"@bot hello","ts":"1760533260.035849","channel":"C1"}}`)
 	request := httptest.NewRequest(http.MethodPost, "/slack/events", bytes.NewReader(body))
 	timestamp := fmt.Sprintf("%d", time.Now().Unix())
 	request.Header.Set("X-Slack-Request-Timestamp", timestamp)
@@ -374,6 +383,43 @@ func TestSlackHandlerWaitsForProcessingBeforeReturning(t *testing.T) {
 	}
 }
 
+func TestSlackIngestionUsesProviderEventIDAndRejectsMissingID(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	storage := &securityStorage{companies: map[string]string{"slack:T1": "company-a"}}
+	ingest := &securitySlackIngest{}
+	handler := NewSlackHandler(ingest, &securityBot{}, nil, "secret", storage)
+	router := gin.New()
+	router.POST("/slack/events", handler.HandleSlackWebhook)
+
+	body := []byte(`{"type":"event_callback","event_id":"Ev-provider-delivery","team_id":"T1","event":{"type":"message","user":"U1","text":"hello","ts":"1760533260.035849","channel":"C1"}}`)
+	request := httptest.NewRequest(http.MethodPost, "/slack/events", bytes.NewReader(body))
+	timestamp := fmt.Sprintf("%d", time.Now().Unix())
+	request.Header.Set("X-Slack-Request-Timestamp", timestamp)
+	request.Header.Set("X-Slack-Signature", slackSignature("secret", timestamp, body))
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body)
+	}
+	if len(ingest.requests) != 1 || ingest.requests[0].RecordID != "Ev-provider-delivery" {
+		t.Fatalf("Slack delivery record IDs = %#v, want provider event ID", ingest.requests)
+	}
+
+	body = []byte(`{"type":"event_callback","team_id":"T1","event":{"type":"message","user":"U1","text":"hello","ts":"1760533260.035849","channel":"C1"}}`)
+	request = httptest.NewRequest(http.MethodPost, "/slack/events", bytes.NewReader(body))
+	timestamp = fmt.Sprintf("%d", time.Now().Unix())
+	request.Header.Set("X-Slack-Request-Timestamp", timestamp)
+	request.Header.Set("X-Slack-Signature", slackSignature("secret", timestamp, body))
+	response = httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("missing event ID status = %d, want %d", response.Code, http.StatusBadRequest)
+	}
+	if len(ingest.requests) != 1 {
+		t.Fatalf("missing event ID was ingested; requests = %d", len(ingest.requests))
+	}
+}
+
 func (s *securityStorage) companyLookupCount() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -381,3 +427,4 @@ func (s *securityStorage) companyLookupCount() int {
 }
 
 var _ domain.StoragePort = (*securityStorage)(nil)
+var _ domain.SlackIngestService = (*securitySlackIngest)(nil)
