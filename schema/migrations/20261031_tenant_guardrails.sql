@@ -30,6 +30,15 @@ BEGIN
   END IF;
 END $$;
 
+ALTER TABLE public.companies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.company_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.company_integrations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.company_repos ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.ramp_plans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.ramp_step_progress ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.entities ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.edges ENABLE ROW LEVEL SECURITY;
+
 ALTER TABLE public.company_members
   ADD CONSTRAINT company_members_company_id_not_default CHECK (company_id IS NOT NULL AND company_id <> 'default');
 
