@@ -28,11 +28,14 @@ model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')  # GPU if availabl
 
 BATCH_SIZE = 32
 
-def fetch_unembedded(batch_size: int = 1000) -> List[dict]:
-    """Fetch raw_data records without embeddings."""
+def fetch_unembedded(company_id: str, batch_size: int = 1000) -> List[dict]:
+    """Fetch unembedded records for one explicitly selected company."""
+    if not company_id or company_id.strip().lower() == "default":
+        raise ValueError("A real company_id is required for embedding backfill")
     response = (
         supabase.table("raw_data")
-        .select("id, content")
+        .select("id, company_id, content")
+        .eq("company_id", company_id)
         .is_("embedding", None)
         .limit(batch_size)
         .execute()
@@ -47,27 +50,34 @@ def main():
     logger.info("Starting embedding backfill...")
     total_processed = 0
 
-    while True:
-        records = fetch_unembedded()
-        if not records:
-            break
+    companies = supabase.table("companies").select("id").execute().data or []
+    for company in companies:
+        company_id = str(company.get("id") or "").strip()
+        if not company_id or company_id.lower() == "default":
+            logger.error("Skipping invalid company identifier during embedding backfill")
+            continue
 
-        texts = [r["content"] for r in records]
-        embeddings = embed_batch(texts)
+        while True:
+            records = fetch_unembedded(company_id)
+            if not records:
+                break
 
-        updates = [
-            {
-                "id": r["id"],
-                "embedding": emb,
-                "embedding_model": "all-MiniLM-L6-v2"
-            }
-            for r, emb in zip(records, embeddings)
-        ]
+            texts = [r["content"] for r in records]
+            embeddings = embed_batch(texts)
 
-        # Batch upsert
-        supabase.table("raw_data").upsert(updates, on_conflict="id").execute()
-        total_processed += len(updates)
-        logger.info(f"Embedded {len(updates)} records (total: {total_processed})")
+            updates = [
+                {
+                    "id": record["id"],
+                    "company_id": company_id,
+                    "embedding": embedding,
+                    "embedding_model": "all-MiniLM-L6-v2",
+                }
+                for record, embedding in zip(records, embeddings)
+            ]
+
+            supabase.table("raw_data").upsert(updates, on_conflict="id").execute()
+            total_processed += len(updates)
+            logger.info("Embedded %d records for one company (total: %d)", len(updates), total_processed)
 
     logger.info(f"Backfill complete: {total_processed} records embedded.")
 
