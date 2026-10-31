@@ -30,6 +30,9 @@ END $$;
 -- Events table: Stores raw GitHub/Slack payloads
 CREATE TABLE public.events (
     id UUID PRIMARY KEY,
+    company_id TEXT NOT NULL CHECK (
+        btrim(company_id) <> '' AND lower(btrim(company_id)) <> 'default'
+    ),
     source TEXT CHECK (source IN ('slack', 'github')) NOT NULL,
     event_type TEXT NOT NULL,
     payload JSONB NOT NULL,
@@ -38,7 +41,7 @@ CREATE TABLE public.events (
     truncated BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
-COMMENT ON TABLE public.events IS 'Stores raw event payloads from GitHub/Slack webhooks for auditability and processing.';
+COMMENT ON TABLE public.events IS 'Stores company-scoped raw GitHub/Slack payloads for auditability and processing.';
 CREATE INDEX idx_events_source ON public.events (source);
 CREATE INDEX idx_events_delivery_id ON public.events (delivery_id);
 COMMENT ON INDEX idx_events_source IS 'Index on source column for efficient filtering by slack/github.';
@@ -274,6 +277,21 @@ CREATE TABLE IF NOT EXISTS public.companies (
   name TEXT NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conrelid = 'public.events'::regclass
+      AND conname = 'events_company_id_fkey'
+  ) THEN
+    ALTER TABLE public.events
+      ADD CONSTRAINT events_company_id_fkey
+      FOREIGN KEY (company_id) REFERENCES public.companies(id);
+  END IF;
+END;
+$$;
 
 -- Update profiles
 ALTER TABLE public.profiles 
