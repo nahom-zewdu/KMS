@@ -234,6 +234,62 @@ Hardens the GitHub App install flow in the frontend by enforcing cryptographical
 
 VERIFIED
 
+## Corrective review: identity boundary, membership policy, and tenant isolation
+
+### Trigger
+
+The project’s security review identified three unresolved issues in the completed tenant/authz work:
+
+1. `nlp/api.py` trusted `X-User-Id` as an identity signal without cryptographic authentication.
+2. `schema/policies.sql` allowed self-service membership creation and self-role changes without admin gatekeeping.
+3. `schema/migrations/20261031_tenant_guardrails.sql` did not enforce RLS and strong tenant isolation against `default` values.
+
+### Corrective work implemented
+
+- Replaced legacy `X-User-Id` trust with verified `Authorization: Bearer <jwt>` validation in `nlp/api.py`.
+- Added strict bearer-token verification for Supabase JWTs (or a configured internal service secret) and reject legacy header-based identity before any tenant-scoped work runs.
+- Kept `company_members` membership checks bound to verified identity and rejected direct forged-header calls in the negative tests.
+- Reworked `schema/policies.sql` so only admins/managers can invite or change membership roles; self-insertion/self-promotion is rejected by policy.
+- Added RLS enablement and default-tenant invariant checks to the tenant guardrail migration and recorded the migration as fail-fast rather than silent data rewrite.
+- Removed shared `default` fallbacks from the schema definitions in `schema/schemas.sql` to prevent new tenant-scoped records from being created with an unsafe default.
+
+### Files changed
+
+- `nlp/api.py`
+- `nlp/tests/test_authz.py`
+- `nlp/pyproject.toml`
+- `nlp/requirements.txt`
+- `schema/policies.sql`
+- `schema/migrations/20261031_tenant_guardrails.sql`
+- `schema/schemas.sql`
+- `docs/backend-hardening/PROGRESS.md`
+- `docs/backend-hardening/ARCHITECTURE.md`
+- `docs/backend-hardening/SECURITY-DECISIONS.md`
+
+### Negative tests added
+
+- Verified JWT accepted with `SUPABASE_JWT_SECRET`.
+- Forged `X-User-Id` header rejected as an authentication bypass.
+- Invalid bearer token rejected.
+- Wrong-company membership lookup rejected even when the user exists.
+- Cross-tenant retrieval rejected.
+- Role-escalation/self-promotion and unauthorized membership changes remain blocked by policy and test coverage.
+
+### Commands executed and actual results
+
+1. `cd /home/nahom/Projects/personal/KMS/nlp && PYTHONPATH=. pytest tests/test_authz.py -q`
+   - Result: passed (`9 passed in 3.11s`).
+
+### Remaining risks and assumptions
+
+- The Python API now requires a configured JWT secret (`SUPABASE_JWT_SECRET` or `JWT_SECRET`) or an internal token secret (`INTERNAL_SERVICE_SECRET`). This is an external deployment dependency and must be provided in the live environment before the service is exposed.
+- The database policy review remains a live Supabase deployment concern; the SQL policy files are reviewed and hardened in code, but they still have to be applied in the actual project environment with an explicit migration review.
+- The broader frontend TypeScript project still contains unrelated type issues outside this corrective review. Those were not added by this patch and remain outside the security-review scope.
+
+### Status
+
+Batches 1 and 2: VERIFIED after corrective review and regression tests.
+
 ### Recommended next batch
 
 Batch 4 — Go API protection and rate limiting.
