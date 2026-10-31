@@ -105,7 +105,8 @@ async def generate_ramp(
 ):
     """Generate or refresh Ramp for a company and role."""
     try:
-        company_id = require_company_id(payload.get("company_id"), "company_id")
+        company_id = require_company_id(company_id_header or payload.get("company_id"), "company_id")
+        require_company_membership(user_id, company_id)
         plan = ramp_generator.generate(
             role=payload.get("role") or "software-engineer",
             company_id=company_id,
