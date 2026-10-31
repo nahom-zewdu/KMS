@@ -10,12 +10,18 @@ class Query:
     """Minimal Supabase query double for Ramp planner tests."""
 
     def __init__(self, data):
-        self.data = data
+        self.data = list(data)
+        self.filters = []
 
     def select(self, *_args, **_kwargs):
         return self
 
     def eq(self, *_args, **_kwargs):
+        self.filters.append(("eq", _args[0], _args[1]))
+        return self
+
+    def in_(self, field, values):
+        self.filters.append(("in", field, values))
         return self
 
     def limit(self, *_args, **_kwargs):
@@ -25,7 +31,13 @@ class Query:
         return self
 
     def execute(self):
-        return type("Response", (), {"data": self.data})()
+        data = self.data
+        for operation, field, expected in self.filters:
+            if operation == "eq":
+                data = [row for row in data if row.get(field) == expected]
+            else:
+                data = [row for row in data if row.get(field) in expected]
+        return type("Response", (), {"data": data})()
 
 
 def surface(path, importance=0.5, author="alice"):
@@ -128,6 +140,7 @@ def test_planner_does_not_fabricate_workflow_without_relationship_evidence():
     supabase.table.side_effect = lambda name: {
         "codebase_files": Query(files),
         "codebase_modules": Query([]),
+        "repositories": Query([{"id": "r1", "company_id": "company-1"}]),
         "entities": Query([]),
         "edges": Query([]),
         "raw_data": Query([]),
