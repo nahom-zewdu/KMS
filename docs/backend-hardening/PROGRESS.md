@@ -9,7 +9,7 @@ This file is the source of truth for the hardening program and survives Copilot 
 | Batch 0 | Baseline and architecture verification | IMPLEMENTED | Architecture reviewed and documented; no production security changes made in this batch. |
 | Batch 1 | Tenant isolation and database security | VERIFIED | Tenant validation tightened in core access paths; migration guardrails added for company-scoped data; Go tenant tests pass. |
 | Batch 2 | Authentication and authorization | VERIFIED | Explicit company-membership validation added to tenant-scoped API routes; authz tests pass. |
-| Batch 3 | GitHub integration security | PLANNED | Pending OAuth state and callback hardening review. |
+| Batch 3 | GitHub integration security | VERIFIED | OAuth state binding, callback validation, and replay protection are hardened; focused tests pass. |
 | Batch 4 | Go API protection and rate limiting | PLANNED | Pending route trust-boundary review and rate-limit design. |
 | Batch 5 | Go HTTP server hardening | PLANNED | Pending server timeout and shutdown review. |
 | Batch 6 | Redis Streams and worker reliability | PLANNED | Pending durable worker review and failure handling work. |
@@ -184,3 +184,56 @@ VERIFIED
 ### Recommended next batch
 
 Batch 3 — GitHub integration security.
+
+## Batch 3
+
+### Objective
+
+Hardens the GitHub App install flow in the frontend by enforcing cryptographically signed, user/company-bound OAuth state, rejecting expired or replayed callbacks, and ensuring the authenticated user is authorized for the target company before persisting the installation.
+
+### Findings before implementation
+
+- The start route generated a client-encoded `base64url` state payload without any server-side signature or expiry check.
+- The callback route accepted a query-only state fallback, allowed cookie+query mismatches, and did not require the logged-in user to match the bound user ID.
+- The callback route did not reject replayed state values or validate that the user was still an admin for the target company.
+- `setup_action` and `installation_id` parameters were not strictly validated before persisting installation metadata.
+
+### Files changed
+
+- `kms-frontend/app/api/integrations/github/start/route.ts`
+- `kms-frontend/app/api/integrations/github/callback/route.ts`
+- `kms-frontend/lib/github-app-state.ts`
+- `kms-frontend/lib/github-app-state.test.ts`
+- `docs/backend-hardening/PROGRESS.md`
+
+### Security decisions
+
+- Use a signed, opaque state token with a cryptographic nonce and a short expiry window.
+- Bind the state to both the authenticated user ID and the target company ID.
+- Require an exact match between the callback cookie and query parameter, reject replayed state markers, and delete the cookie on first successful use.
+- Treat `installation_id` as a positive integer and reject unexpected `setup_action` values.
+- Require the authenticated user to be an admin of the same company before saving installation metadata.
+
+### Tests added
+
+- Added unit tests covering valid state, tampered state, expired state, missing state, user/company mismatches, and replay hash detection.
+
+### Commands executed and actual results
+
+1. `cd /home/nahom/Projects/personal/kms-frontend/kms-frontend && npx --yes tsx --test lib/github-app-state.test.ts`
+   - Result: passed (`6 passed`).
+2. `cd /home/nahom/Projects/personal/kms-frontend/kms-frontend && npx tsc --noEmit --pretty false`
+   - Result: failed due pre-existing TypeScript issues unrelated to this batch in other routes and `lib/auth.ts` typing (`activePlaybooks`, `maxPlaybooks`, missing `role` on user context).
+
+### Remaining risks
+
+- The broader frontend TypeScript project still has unrelated type errors outside the GitHub integration patch.
+- The callback and start flow still require a live runtime test against the actual GitHub App installation lifecycle and environment variables.
+
+### Status
+
+VERIFIED
+
+### Recommended next batch
+
+Batch 4 — Go API protection and rate limiting.
