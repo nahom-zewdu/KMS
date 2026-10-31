@@ -1,17 +1,23 @@
 """
 KMS Onboard API HTTP endpoints for playbook generation.
 """
+import logging
+import os
+from typing import Any
+
+import jwt
+import uvicorn
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from codebase.baseline import CodebaseBaselineSync
 from playbooks.generator import PlaybookGenerator
 from visualizer.service import VisualizerService
 from ramp.generator_v2 import RampPlanner
 from utils.supabase import init_supabase
-import logging
-import uvicorn
+from visualizer.service import VisualizerService
 
 app = FastAPI(title="KMS Onboard API")
 supabase = None
