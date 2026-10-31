@@ -97,6 +97,26 @@ def verify_internal_service_token(token: str | None) -> dict[str, Any]:
     return {"service_id": str(claims["sub"]), "claims": claims, "source": "internal_service"}
 
 
+def require_company_scoped_service_identity(
+    authorization: str | None,
+    company_id: str,
+) -> dict[str, Any]:
+    """Require an internal token cryptographically bound to the requested company."""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Authorization header is required")
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        raise HTTPException(status_code=401, detail="Authorization header must use Bearer format")
+
+    identity = verify_internal_service_token(token)
+    token_company = str(identity["claims"].get("company_id") or "").strip()
+    if not token_company or token_company.lower() == "default":
+        raise HTTPException(status_code=401, detail="Service token is not scoped to a company")
+    if token_company != company_id:
+        raise HTTPException(status_code=403, detail="Service token does not authorize this company")
+    return identity
+
+
 def require_authenticated_identity(
     authorization: str | None = None,
     *,
@@ -317,6 +337,26 @@ async def generate_playbook(
     except Exception as exc:
         logging.exception("Playbook generation failed")
         return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
+
+
+@app.post("/internal/playbooks/generate")
+async def generate_internal_playbook(
+    payload: dict,
+    authorization: str | None = Header(default=None, alias="Authorization"),
+):
+    """Generate a Slack playbook for the tenant bound into an internal service token."""
+    try:
+        company_id = require_company_id(payload.get("company_id"), "company_id")
+        require_company_scoped_service_identity(authorization, company_id)
+        role = payload.get("role", "software-engineer")
+        employee_name = payload.get("employee_name", "")
+        playbook = generator.generate(role=role, employee_name=employee_name, company_id=company_id)
+        return JSONResponse({"success": True, "role": role, "playbook": playbook})
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logging.exception("Internal Slack playbook generation failed")
+        raise HTTPException(status_code=500, detail="Failed to generate playbook") from exc
 
 
 @app.get("/github/sync-baseline")
