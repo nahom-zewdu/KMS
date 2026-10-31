@@ -55,18 +55,20 @@ async def generate_ramp(payload: dict):
 
 @app.get("/ramp-plans")
 async def get_ramp(
-    company_id: str = "default",
+    company_id: str | None = None,
     role: str = "software-engineer",
     user_id: str | None = Header(default=None, alias="X-User-Id"),
     company_header: str | None = Header(default=None, alias="X-Company-Id"),
 ):
     """Fetch active Ramp and hydrate caller progress when requested."""
-    effective_company_id = company_header or company_id or "default"
+    effective_company_id = require_company_id(company_header or company_id, "company_id")
     try:
         plan = ramp_generator.get_active(effective_company_id, role, user_id)
         if not plan:
             return JSONResponse({"success": False, "error": "No active ramp plan", "plan": None}, status_code=404)
         return JSONResponse({"success": True, "plan": plan})
+    except HTTPException:
+        raise
     except Exception as exc:
         logging.exception("Ramp fetch failed")
         return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
