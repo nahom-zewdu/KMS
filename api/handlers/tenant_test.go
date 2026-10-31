@@ -20,7 +20,7 @@ func (s tenantStorage) Insert(context.Context, string, map[string]interface{}) e
 func (s tenantStorage) Query(context.Context, string, map[string]interface{}) ([]map[string]interface{}, error) {
 	return nil, nil
 }
-func (s tenantStorage) QueryKnowledgeGraphSupabase(context.Context, string) (string, error) {
+func (s tenantStorage) QueryKnowledgeGraphSupabase(context.Context, string, string) (string, error) {
 	return "", nil
 }
 func (s tenantStorage) ResolveCompanyByIntegration(context.Context, string, string) (string, error) {
