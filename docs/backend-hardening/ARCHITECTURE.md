@@ -81,13 +81,30 @@ RLS is enabled on the listed tenant tables and on the listed service-only tables
 
 ## Route and trust-boundary summary
 
-### Public/trusted ingress paths
+### Public health and provider-authenticated webhook paths
 
 - `POST /slack/events`
+- `POST /slack/events/` (compatibility alias)
 - `POST /github`
+- `POST /github/` (compatibility alias)
 - `GET /health`
 
-These routes verify provider signatures and resolve the tenant from integration metadata before ingesting events.
+Health is public and does not return tenant data. Webhooks authenticate the provider signature before parsing or acting on payloads, resolve the tenant from integration metadata, and enforce a 1 MiB body limit. Slack uses HMAC-SHA256 with constant-time comparison and rejects timestamps more than five minutes in the past or future. GitHub uses constant-time HMAC comparison and requires a UUID delivery ID.
+
+Webhook processing is synchronous: handlers do not retain Gin request state in goroutines or write a response after returning. Slack AuthTest/API operations and Redis/query work receive request-bounded contexts. Errors return non-success responses so providers can retry. GitHub delivery IDs are checked by the ingestion service and stored under the schema's unique delivery ID constraint.
+
+### Authenticated user routes
+
+| Route | Authorization | Tenant enforcement |
+|---|---|---|
+| `POST /query` | Supabase access token validated by Supabase Auth `/auth/v1/user` | Caller must be a member of the exact requested company. Missing/default company IDs are rejected; verified company ID is propagated to the Redis job and nested payload. Request body is limited to 1 MiB. |
+| `GET /github/sync-baseline` | Same Supabase access-token validation | Caller must be a member of the exact requested company. Repository ID or full name must resolve from `repositories` with an exact company filter; only the stored canonical full name and verified company ID are queued. |
+
+Supabase Auth failures fail closed. Invalid tokens return 401; missing membership or repository ownership returns 403; auth-service failures return 503. Membership checks use the backend Supabase client with both `user_id` and `company_id` filters. Client-supplied company IDs are treated only as selectors and never as authorization evidence.
+
+### Internal HTTP routes
+
+No separate internal service HTTP endpoints are registered. Internal work is dispatched through Redis streams to workers; worker messages must preserve explicit tenant context.
 
 ### Internal/worker paths
 
@@ -95,6 +112,12 @@ These routes verify provider signatures and resolve the tenant from integration 
 - Python ingestion and codebase analysis handlers
 
 These should be treated as internal trust boundaries, not as user-triggered authorization surfaces.
+
+## Go HTTP runtime controls
+
+The Go API uses an explicitly configured `http.Server`: `ReadHeaderTimeout` 5 seconds, `ReadTimeout` 30 seconds, `WriteTimeout` 90 seconds, `IdleTimeout` 120 seconds, and `MaxHeaderBytes` 1 MiB. SIGINT/SIGTERM initiates graceful shutdown bounded to 15 seconds; timeout forces server close and returns an error. Redis is closed as `run` exits. These settings are covered by local tests but have not been verified against production load or deployment termination windows.
+
+The Supabase Auth `/user` request is bounded by an 8-second request context and a 10-second HTTP client timeout. Membership and repository REST lookups use the request context and the same 10-second client bound. The deployed Go API therefore depends on Supabase Auth/PostgREST availability for each protected request; no local JWT-validation fallback exists.
 
 ### Python user API
 
