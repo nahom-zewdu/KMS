@@ -11,7 +11,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -21,8 +24,13 @@ import (
 
 // SupabaseRepo implements the StoragePort interface for Supabase operations.
 type SupabaseRepo struct {
-	client *supabase.Client // Supabase client for database operations
+	client     *supabase.Client
+	projectURL string
+	apiKey     string
+	httpClient *http.Client
 }
+
+const maxSupabaseAuthResponseBytes = 64 << 10
 
 // NewSupabaseRepo creates a new SupabaseRepo with the provided URL and key.
 // It initializes the Supabase client and logs fatal errors if initialization fails.
@@ -39,7 +47,12 @@ func NewSupabaseRepo(url, key string) domain.StoragePort {
 	if err != nil {
 		log.Fatalf("Failed to initialize Supabase client: %v", err)
 	}
-	return &SupabaseRepo{client: client}
+	return &SupabaseRepo{
+		client:     client,
+		projectURL: strings.TrimRight(url, "/"),
+		apiKey:     key,
+		httpClient: &http.Client{Timeout: 10 * time.Second},
+	}
 }
 
 // Insert stores data in a specified Supabase table, validating the table and data fields.
@@ -121,6 +134,8 @@ func (r *SupabaseRepo) Query(ctx context.Context, table string, filter map[strin
 		"pull_requests":        true,
 		"issues":               true,
 		"company_integrations": true,
+		"company_members":      true,
+		"repositories":         true,
 	}
 	if !validTables[table] {
 		log.Printf("Failed to query invalid table: %s in %.3fs", table, time.Since(start).Seconds())
@@ -149,6 +164,144 @@ func (r *SupabaseRepo) Query(ctx context.Context, table string, filter map[strin
 
 	log.Printf("Successfully queried %s (%d records) in %.3fs", table, len(records), time.Since(start).Seconds())
 	return records, nil
+}
+
+// AuthenticateUser delegates access-token validation to Supabase Auth rather than
+// trusting client claims or introducing a separate JWT signing configuration.
+func (r *SupabaseRepo) AuthenticateUser(ctx context.Context, accessToken string) (string, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, r.projectURL+"/auth/v1/user", nil)
+	if err != nil {
+		return "", fmt.Errorf("create Supabase user validation request: %w", err)
+	}
+	request.Header.Set("apikey", r.apiKey)
+	request.Header.Set("Authorization", "Bearer "+accessToken)
+	response, err := r.httpClient.Do(request)
+	if err != nil {
+		return "", fmt.Errorf("validate Supabase access token: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		if response.StatusCode == http.StatusBadRequest || response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden {
+			return "", domain.ErrUnauthenticated
+		}
+		return "", fmt.Errorf("Supabase rejected access token with status %d", response.StatusCode)
+	}
+
+	userBody, err := io.ReadAll(io.LimitReader(response.Body, maxSupabaseAuthResponseBytes+1))
+	if err != nil {
+		return "", fmt.Errorf("read Supabase user response: %w", err)
+	}
+	if len(userBody) > maxSupabaseAuthResponseBytes {
+		return "", fmt.Errorf("Supabase user response exceeded size limit")
+	}
+	var user struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(userBody, &user); err != nil {
+		return "", fmt.Errorf("decode Supabase user response: %w", err)
+	}
+	if strings.TrimSpace(user.ID) == "" {
+		return "", fmt.Errorf("Supabase user response omitted id")
+	}
+	return user.ID, nil
+}
+
+func (r *SupabaseRepo) IsCompanyMember(ctx context.Context, userID, companyID string) (bool, error) {
+	memberships, err := r.queryWithFilters(ctx, "company_members", map[string]string{
+		"user_id":    userID,
+		"company_id": companyID,
+	})
+	if err != nil {
+		return false, err
+	}
+	return len(memberships) > 0, nil
+}
+
+func (r *SupabaseRepo) ResolveRepositoryForCompany(ctx context.Context, companyID, repository string) (string, error) {
+	repository = strings.TrimSpace(repository)
+	if repository == "" {
+		return "", fmt.Errorf("repository is required")
+	}
+	filter := map[string]interface{}{"company_id": companyID}
+	if isUUID(repository) {
+		filter["id"] = repository
+	} else {
+		filter["full_name"] = repository
+	}
+	stringFilter := make(map[string]string, len(filter))
+	for key, value := range filter {
+		stringFilter[key] = fmt.Sprint(value)
+	}
+	repositories, err := r.queryWithFilters(ctx, "repositories", stringFilter)
+	if err != nil {
+		return "", err
+	}
+	for _, repo := range repositories {
+		fullName, _ := repo["full_name"].(string)
+		if strings.TrimSpace(fullName) != "" {
+			return fullName, nil
+		}
+	}
+	return "", nil
+}
+
+func (r *SupabaseRepo) queryWithFilters(ctx context.Context, table string, filters map[string]string) ([]map[string]interface{}, error) {
+	if table != "company_members" && table != "repositories" {
+		return nil, fmt.Errorf("invalid authorization lookup table: %s", table)
+	}
+	projectURL, err := url.Parse(r.projectURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse Supabase project URL: %w", err)
+	}
+	projectURL.Path = strings.TrimRight(projectURL.Path, "/") + "/rest/v1/" + table
+	query := projectURL.Query()
+	query.Set("select", "*")
+	for key, value := range filters {
+		query.Set(key, "eq."+value)
+	}
+	projectURL.RawQuery = query.Encode()
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, projectURL.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("create Supabase authorization lookup: %w", err)
+	}
+	request.Header.Set("apikey", r.apiKey)
+	request.Header.Set("Authorization", "Bearer "+r.apiKey)
+	response, err := r.httpClient.Do(request)
+	if err != nil {
+		return nil, fmt.Errorf("query Supabase authorization data: %w", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("Supabase authorization lookup failed with status %d", response.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(response.Body, (1<<20)+1))
+	if err != nil {
+		return nil, fmt.Errorf("read Supabase authorization response: %w", err)
+	}
+	if len(body) > 1<<20 {
+		return nil, fmt.Errorf("Supabase authorization response exceeded size limit")
+	}
+	var rows []map[string]interface{}
+	if err := json.Unmarshal(body, &rows); err != nil {
+		return nil, fmt.Errorf("decode Supabase authorization response: %w", err)
+	}
+	return rows, nil
+}
+
+func isUUID(value string) bool {
+	if len(value) != 36 || value[8] != '-' || value[13] != '-' || value[18] != '-' || value[23] != '-' {
+		return false
+	}
+	for i, r := range value {
+		if i == 8 || i == 13 || i == 18 || i == 23 {
+			continue
+		}
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')) {
+			return false
+		}
+	}
+	return true
 }
 
 // QueryKnowledgeGraphSupabase searches the knowledge graph in Supabase for a given query.
