@@ -119,9 +119,11 @@ async def generate_playbook(payload: dict):
     try:
         role = payload.get("role", "software-engineer")
         employee_name = payload.get("employee_name", "New Engineer")
-        company_id = payload.get("company_id", "default")
-        playbook = generator.generate(role=role, employee_name=payload.get("employee_name", "New Engineer"), company_id=company_id)
+        company_id = require_company_id(payload.get("company_id"), "company_id")
+        playbook = generator.generate(role=role, employee_name=employee_name, company_id=company_id)
         return JSONResponse({"success": True, "role": role, "playbook": playbook, "message": f"Playbook for {role} generated successfully."})
+    except HTTPException:
+        raise
     except Exception as exc:
         logging.exception("Playbook generation failed")
         return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
