@@ -63,8 +63,10 @@ The inventory below is derived from checked-in `schema/*.sql`, migrations, and N
 | `playbooks` | `company_id` | Authenticated members/admins; backend generator | Members read; admins write through direct authenticated access. Python generation uses service role after verified user/company membership. |
 | `ramp_plans` | `company_id` | Authenticated members/admins; backend generator | Members read; admins write; API and store query by explicit company ID. |
 | `ramp_step_progress` | `company_id`, `user_id` | Authenticated member; backend API | Member reads/writes own progress; admins may access company progress; application query filters plan, company, and user. |
-| `events` | No company column in checked-in schema; global ingress audit | Trusted Go/NLP services | RLS enabled, no anon/authenticated policy or grant; service role only. |
-| `contributions`, `pull_requests`, `issues`, `query_logs` | No company column in checked-in schema | Trusted backend/analytics | Legacy unscoped tables; service-only and default-deny for authenticated/anon roles. |
+| `events` | Globally unique delivery ID; Go associates rows with a company, but checked-in base schema has no `company_id` column | Trusted Go/NLP services | Backend-only idempotency and event processing; no authenticated grants/policies. Schema parity is **BLOCKED** until reconciled with the deployed database. |
+| `contributions` | `company_id`, repository, contributor | Trusted Go metrics service | Service-only; the metrics service requires company and repository filters for reads and uses a tenant-specific conflict target. `20261101_contributions_tenant_scope.sql` maps historical rows only when repository ownership is unique; ambiguous/orphaned rows abort. |
+| `pull_requests`, `issues` | No company column in checked-in schema; legacy repository-keyed rows | No active Go/Python query or write caller found; trusted backend only | RLS enabled, no authenticated policy/grant. The generic Go writer no longer accepts these unscoped tables. They must not be used for tenant retrieval until ownership is modeled. |
+| `query_logs` | System-wide anonymized question hash and query telemetry; no company or plaintext question | Python analytics worker | Intentionally global, service-only analytics; this table is not a knowledge retrieval source. |
 | `profiles` | User-owned, not the canonical tenant membership source | Authenticated user and trusted profile flows | Own-profile RLS; company membership and role must come from `company_members`, not profile columns. |
 
 ### Functions and RPCs
@@ -78,6 +80,34 @@ The inventory below is derived from checked-in `schema/*.sql`, migrations, and N
 | `match_documents(vector, float, int, text)` | Authenticated/service role | Requires `filter_company_id`; function rejects null/blank/default and SQL filters raw data by exact company. Runtime pgvector test remains blocked locally. |
 
 RLS is enabled on the listed tenant tables and on the listed service-only tables (which have no authenticated policies). `service_role` explicitly has backend grants and bypasses RLS; application-level tenant filtering remains mandatory for every service-role retrieval path.
+
+### Service-role access-path audit
+
+The configured Python Supabase client is documented as using the service-role key. That credential selection is an environment/deployment assumption, not something established by local tests. The Go repository similarly uses its configured backend key for privileged operations.
+
+| Backend path | Objects and operations | Tenant treatment / audit result |
+|---|---|---|
+| Go webhook ingestion (`CoreIngest`) | Global `events.delivery_id` idempotency lookup; insert event and `raw_data` | Delivery IDs are globally unique by schema and the lookup only returns whether one exists. Company context is included on writes, but `events.company_id` is missing from the checked-in base schema; deployment compatibility is **BLOCKED**. `raw_data` inserts carry company ID. |
+| Go integration resolution | `company_integrations` lookup by provider + external ID or installation ID | Intentional global identity-to-company lookup; uniqueness constraints are expected to bind the integration identity to one company. Returned tenant context is then propagated to jobs. Live uniqueness/configuration is **BLOCKED**. |
+| Go user authorization | `company_members` by exact user + company; `repositories` by exact company + requested repository | Database-level filters are applied before membership/repository authorization. |
+| Go graph search | `raw_data` content search | Requires a real company ID and applies `company_id` in the PostgREST query. No current production caller was found; regression test asserts the actual request filter. |
+| Go contribution metrics | `contributions` query/upsert | Requires and filters `company_id` plus `repo_name`; upsert key includes company. Historical ownership migration is implemented and exercised on disposable PostgreSQL. |
+| Python query/RAG | `entities`, `edges`, `raw_data`; `search_edges_by_entity` and `match_documents` RPCs | Application query builders and SQL RPCs pass exact company IDs. Related entity reads also filter at the database. pgvector RPC runtime remains **BLOCKED** because the disposable database lacks pgvector. |
+| Python Ramp/visualizer/playbooks | `repositories`, `codebase_files`, `codebase_modules`, `entities`, `edges`, `raw_data`, Ramp tables | Company is checked before retrieval; repository-derived records are fetched via company-filtered repository IDs, and direct tenant tables use `company_id`. Per-user Ramp progress also filters by `user_id`. |
+| Python ingestion/codebase workers | `entities`, `edges`, `raw_data`, `repositories`, `codebase_files`, `codebase_modules`; edge lifecycle update | Worker jobs carry company context; writes include the company, reads use company or company-resolved repository IDs. Repository updates now include both row ID and company predicates. Worker ingress is trusted Redis, not an end-user identity boundary. |
+| Embedding backfill | Global company enumeration; per-company `raw_data` fetch and embedding update | Global enumeration is intentional maintenance behavior. Every fetch selects one explicit company, rejects `default`, and updates only IDs selected for that company. |
+| Query analytics | `query_logs` insert | Intentionally system-wide and content-minimized: a question hash and operational metrics only. Not used for answers or tenant retrieval. |
+| Legacy `pull_requests` / `issues` | No active service-role retrieval/write call found | Backend-only by grants, but no company key exists in the checked-in schema. Not eligible for tenant retrieval until modeled and migrated. |
+
+This is a code and disposable-database review, not proof of deployed service-role isolation. In particular, live grants/schema parity, the event table company-column mismatch, and pgvector RPC execution remain **BLOCKED**.
+
+## Rate-limit design prepared — not implemented
+
+- Use Redis-backed atomic fixed-window/token-bucket counters (Lua or equivalent) so limits are shared across API instances. Keys include the dimension and stable identifier; never key only on caller-provided tenant IDs.
+- Initial tuning proposal: queries 20/user/minute and 100/company/minute; baseline sync 2/user/hour and 10/company/hour; provider webhooks use per-integration burst/window controls after signature and tenant resolution, with delivery-id deduplication still authoritative. These are starting caps, not approved production values.
+- Bound expensive concurrency with Redis leases: at most 2 active queries/user, 10/company, and 1 baseline sync/company. Leases need expirations and safe release on cancellation.
+- Limit exhaustion returns HTTP 429 with `Retry-After` plus rate-limit remaining/reset metadata. Redis failure is fail-closed for user queries and baseline syncs (503 with retry metadata), not an unmetered bypass. Signed webhooks return retryable 503 when shared controls are unavailable; do not silently drop events. Provider-specific 429 retry behavior must be validated before rollout.
+- No counters, concurrency leases, middleware, or 429 behavior were implemented in this review.
 
 ## Route and trust-boundary summary
 
