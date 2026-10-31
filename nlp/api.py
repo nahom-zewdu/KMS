@@ -14,9 +14,69 @@ import logging
 import uvicorn
 
 app = FastAPI(title="KMS Onboard API")
-supabase = init_supabase()
-ramp_generator = RampPlanner(supabase)
-generator = PlaybookGenerator(supabase)
+supabase = None
+
+
+def get_supabase_client():
+    """Lazily initialize Supabase so authz helpers can be unit tested without env configuration."""
+    global supabase
+    if supabase is None:
+        supabase = init_supabase()
+    return supabase
+
+
+def normalize_company_id(company_id: str | None) -> str:
+    """Reject blank or shared fallback company identifiers."""
+    normalized = (company_id or "").strip()
+    if not normalized:
+        raise HTTPException(status_code=400, detail="company_id is required")
+    if normalized.lower() == "default":
+        raise HTTPException(status_code=400, detail="company_id cannot be the shared default tenant")
+    return normalized
+
+
+def require_company_membership(user_id: str | None, company_id: str | None, *, require_role: str | None = None) -> dict:
+    """Validate that a user belongs to the requested company and optionally has a required role."""
+    if not user_id:
+        raise HTTPException(status_code=401, detail="X-User-Id header is required")
+
+    effective_company_id = normalize_company_id(company_id)
+    membership = {
+        "company_id": effective_company_id,
+        "user_id": user_id,
+        "role": "member",
+    }
+
+    try:
+        client = get_supabase_client()
+        response = (
+            client.table("company_members")
+            .select("company_id, user_id, role")
+            .eq("user_id", user_id)
+            .eq("company_id", effective_company_id)
+            .execute()
+        )
+        rows = getattr(response, "data", []) or []
+        if not rows:
+            raise HTTPException(status_code=403, detail="User is not a member of this company")
+        membership = rows[0]
+    except HTTPException:
+        raise
+    except Exception as exc:  # pragma: no cover - defensive boundary for invalid DB client state
+        logging.exception("Company membership lookup failed")
+        raise HTTPException(status_code=500, detail="Failed to validate company membership") from exc
+
+    if require_role:
+        role = str((membership.get("role") or "")).lower()
+        allowed_roles = {"admin", "manager"} if require_role == "admin" else {require_role.lower()}
+        if role not in allowed_roles and role != "admin":
+            raise HTTPException(status_code=403, detail=f"User does not have {require_role} access to this company")
+
+    return membership
+
+
+ramp_generator = RampPlanner(get_supabase_client())
+generator = PlaybookGenerator(get_supabase_client())
 
 app.add_middleware(
     CORSMiddleware,
