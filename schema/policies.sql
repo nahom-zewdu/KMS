@@ -98,13 +98,11 @@ ON public.company_integrations
 FOR SELECT
 USING (
   company_id IN (
-    SELECT company_id FROM public.company_members
-    WHERE user_id = auth.uid()
+    SELECT company_id FROM public.company_members WHERE user_id = auth.uid()
   )
 );
 
--- Admins can insert/update/delete
-CREATE POLICY "Admins manage integrations"
+CREATE POLICY "Admins can manage integrations"
 ON public.company_integrations
 FOR ALL
 USING (
@@ -169,9 +167,11 @@ USING (
     WHERE user_id = auth.uid() AND role = 'admin'
   )
 )
-with check (
-  company_id in (
-    select company_id from public.company_members
-    where user_id = auth.uid()
+WITH CHECK (
+  company_id IS NOT NULL
+  AND lower(btrim(company_id)) <> 'default'
+  AND company_id IN (
+    SELECT company_id FROM public.company_members
+    WHERE user_id = auth.uid() AND role = 'admin'
   )
 );
