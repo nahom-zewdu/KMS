@@ -218,7 +218,12 @@ async def generate_playbook(
 
 
 @app.get("/github/sync-baseline")
-async def sync_baseline(repo: str, company_id: str | None = None):
+async def sync_baseline(
+    repo: str,
+    company_id: str | None = None,
+    user_id: str | None = Header(default=None, alias="X-User-Id"),
+    company_header: str | None = Header(default=None, alias="X-Company-Id"),
+):
     """Sync the baseline for a specific repository."""
     try:
         effective_company_id = require_company_id(company_id, "company_id")
