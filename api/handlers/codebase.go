@@ -11,10 +11,11 @@ import (
 
 type CodebaseHandler struct {
 	codebaseService domain.CodebaseService
+	storage         domain.StoragePort
 }
 
-func NewCodebaseHandler(s domain.CodebaseService) *CodebaseHandler {
-	return &CodebaseHandler{codebaseService: s}
+func NewCodebaseHandler(s domain.CodebaseService, storage domain.StoragePort) *CodebaseHandler {
+	return &CodebaseHandler{codebaseService: s, storage: storage}
 }
 
 func (h *CodebaseHandler) SyncBaseline(c *gin.Context) {
@@ -23,16 +24,30 @@ func (h *CodebaseHandler) SyncBaseline(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "repo query param required"})
 		return
 	}
+	companyID := c.Query("company_id")
+	if !authorizeCompany(c, h.storage, companyID) {
+		return
+	}
 
-	err := h.codebaseService.SyncRepository(c.Request.Context(), repo)
+	repoFullName, err := h.storage.ResolveRepositoryForCompany(c.Request.Context(), normalizeCompanyID(companyID), repo)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Unable to verify repository access"})
+		return
+	}
+	if repoFullName == "" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Repository is not accessible to this company"})
+		return
+	}
+
+	err = h.codebaseService.SyncRepository(c.Request.Context(), normalizeCompanyID(companyID), repoFullName)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to queue baseline sync"})
 		return
 	}
 
 	c.JSON(http.StatusAccepted, gin.H{
 		"status":  "queued",
-		"repo":    repo,
+		"repo":    repoFullName,
 		"message": "Baseline sync has been queued",
 	})
 }
