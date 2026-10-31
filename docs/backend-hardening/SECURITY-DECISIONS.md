@@ -53,10 +53,36 @@ Redis streams and worker consumers are internal trust boundaries.
 
 This pattern is stronger than a direct daemon thread, but it still requires explicit worker validation and tenant enforcement in any user-triggered route that reaches the same code path.
 
-## Decision 5: do not claim production hardening before validation
+## Decision 5: user identity must come from a verified token, never from a client header
+
+The project’s earlier API patterns trusted `X-User-Id` as a user identity. That is not valid authentication.
+
+### Evidence
+
+- `nlp/api.py` previously read `X-User-Id` and used it as a trusted identity signal.
+- The frontend called the Python API using `X-User-Id` derived from the authenticated user context rather than a verified bearer token.
+
+### Consequence
+
+All company-scoped Python routes now require a verified `Authorization: Bearer <jwt>` token. Legacy `X-User-Id` headers are rejected. A direct API caller without a valid token cannot satisfy the identity boundary.
+
+## Decision 6: staff can only manage memberships through admin-controlled flows
+
+Membership and role changes must be limited to authorized administrators, not to arbitrary users updating their own rows.
+
+### Evidence
+
+- `schema/policies.sql` used policies that allowed `auth.uid() = user_id` inserts and updates for `company_members`.
+- This allowed self-service membership and role promotion in the same tenant row.
+
+### Consequence
+
+Membership creation, role changes, and deletions are restricted to administrators/managers for the target company. Self-insertion and self-promotion are explicitly rejected.
+
+## Decision 7: do not claim production hardening before validation
 
 The project's own guidance explicitly warns against claiming guarantees without evidence.
 
 ### Consequence
 
-The current batch stops at architecture review and documentation. We do not claim that RLS, authorization, or rate limiting is complete until those checks are actually implemented and validated.
+The corrective review now records the relevant negative tests, deployment secret requirements, and remaining live-environment verification tasks. We do not claim final production hardening until the live Supabase policy set is applied and reviewed in context.
