@@ -64,7 +64,10 @@ func resolveGitHubTenant(ctx context.Context, storage domain.StoragePort, instal
 
 func isResolvedCompany(companyID string) bool {
 	companyID = normalizeCompanyID(companyID)
-	return companyID != "" && companyID != "default"
+	if companyID == "" {
+		return false
+	}
+	return !strings.EqualFold(companyID, "default")
 }
 
 func isUnresolvedCompany(companyID string) bool {
