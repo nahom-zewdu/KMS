@@ -403,3 +403,64 @@ Rate limiting remains **not started**. This corrective work closes the Go user-r
 - **BLOCKED — migration/schema parity:** repository ownership and delivery uniqueness rely on checked-in schema. Live table constraints/grants were not verified.
 - The new synchronous webhook processing may increase response latency; monitor provider retry timing and adjust only with measured evidence. If asynchronous handling is later restored, use a durable queue and never retain Gin request state.
 - Rate limiting remains **not started**. Do not begin until the Go ingress corrective review is accepted and production dependencies/assumptions are resolved.
+
+## Post-ingress review — service-role isolation, Slack reliability, rate-limit design — 2026-11-01
+
+Rate limiting implementation was **not started**. No live Supabase project was contacted and no live migration was applied.
+
+### Status
+
+- Service-role access paths: **IMPLEMENTED**, local application/query-filter checks **PARTIALLY VERIFIED**, deployed isolation **BLOCKED**.
+- Slack query subscription ordering and cleanup: **IMPLEMENTED and VERIFIED** by focused tests and Go race tests.
+- Contributions tenant ownership: **IMPLEMENTED** in base schema and an upgrade migration; migration/idempotency behavior **VERIFIED** against disposable PostgreSQL 16. Live data compatibility is **BLOCKED**.
+- Rate-limit design: **IMPLEMENTED as documentation only**, not code; proposed numbers are starting values and are not product-approved.
+- Production security: not claimed. Live Supabase schema/grants/key role and pgvector RPC runtime remain unverified.
+
+### Corrective work
+
+- Audited Go and Python Supabase table/RPC call sites, including authorization lookup, ingestion, query/retrieval, vector and graph RPCs, Ramp evidence/storage, playbooks, visualizer, baseline/incremental codebase workers, edge lifecycle updates, analytics, and embedding backfill.
+- Tightened Go `QueryKnowledgeGraphSupabase` to require a real company ID and apply it as a PostgREST query filter. Go contribution metrics now require company context; queries include both company and repository, writes include company, and conflict resolution is tenant-keyed. Generic Go contribution queries without both tenant and repository filters fail closed.
+- Restricted generic Go `Query` to the two active callers (`events` idempotency and tenant-scoped `contributions`), and removed `pull_requests` / `issues` from its generic insert allowlist because no active callers exist and those legacy tables have no tenant key. This does not remove a current application flow; those tables stay backend-only until modeled.
+- Added `20261101_contributions_tenant_scope.sql`. It maps legacy rows only if repository ownership uniquely resolves, validates company/repository consistency, adds a company foreign key, replaces the global contributor/repository uniqueness constraint with a company-scoped one, and aborts transactionally on unresolved, ambiguous, or default-tenant data. It does not delete data.
+- Scoped repository updates in baseline and incremental codebase workers with both the selected row ID and `company_id`.
+- Changed Slack mention query handling to subscribe and receive the Redis subscription acknowledgement before publishing the query job. The child timeout context is canceled on all exits; a closed result channel returns an error rather than an empty success. Redis closes an incomplete subscription if the initial subscribe acknowledgement fails.
+- Prepared a shared Redis rate-limit/concurrency design with per-user and per-company query controls, baseline-sync limits, integration-scoped webhook controls, retry metadata, and fail-closed Redis outage behavior. No rate-limit behavior was implemented.
+
+### Files changed
+
+- Go: `api/domain/domain.go`, `api/repository/supabase.go`, `api/repository/redis_stream.go`, `api/services/metrics.go`, `api/services/slack_bot.go`.
+- Go tests: `api/handlers/security_test.go`, `api/handlers/tenant_test.go`, `api/repository/supabase_auth_test.go`, `api/services/core_test.go`, `api/services/metrics_test.go`, `api/services/slack_bot_test.go`.
+- Python: `nlp/codebase/analyzer.py`, `nlp/codebase/baseline.py`; added `nlp/tests/test_repository_updates_are_scoped.py`.
+- SQL: `schema/schemas.sql`, added `schema/migrations/20261101_contributions_tenant_scope.sql`, and updated `schema/tests/tenant_rls.sql`.
+- Documentation: `docs/backend-hardening/PROGRESS.md`, `ARCHITECTURE.md`, `SECURITY-DECISIONS.md`, `TEST-MATRIX.md`.
+
+### Tests and exact results
+
+1. `cd api && go test -count=1 ./...`
+   - Passed: `api`, `handlers`, `repository`, and `services`; `domain` has no tests.
+2. `cd api && go test -race -count=1 ./...`
+   - Passed for all Go packages, including the Slack immediate/delayed response, publish failure, closed worker result channel, cancellation, timeout, and cleanup tests.
+3. `cd api && go vet ./...`
+   - Passed with no diagnostics.
+4. `cd nlp && PYTHONPATH=. pytest tests/test_authz.py tests/test_ramp_v2.py tests/test_evidence_composition.py tests/test_query_engine_context.py tests/test_relationships.py tests/test_repository_updates_are_scoped.py -q`
+   - Passed: 45 tests; 2 dependency deprecation warnings.
+5. `cd nlp && PYTHONPATH=. pytest tests/test_authz.py tests/test_ramp_v2.py tests/test_evidence_composition.py tests/test_query_engine_context.py tests/test_relationships.py tests/test_failure_semantics.py tests/test_repository_updates_are_scoped.py -q`
+   - Collection failed because `sentence_transformers` is missing for `tests/test_failure_semantics.py`. That unrelated package was not installed; the applicable focused suite above passed without this module.
+6. `PGPASSWORD=kms-local-review psql -h 127.0.0.1 -p 55432 -U postgres -d postgres -v ON_ERROR_STOP=1 -f schema/tests/tenant_rls.sql`
+   - Passed on a disposable PostgreSQL 16 container. The tenant migrations, access policies, graph RPC, and contributions migration were applied twice; the historical contribution mapped to exactly one company-owned repository. Container was stopped after the test.
+7. `git diff --check`
+   - Passed.
+
+### Isolation inventory and remaining risks
+
+- `company_integrations` is an intentional global lookup by provider plus external integration identity so signed webhooks can resolve a company; live uniqueness and mappings were not inspected.
+- Event delivery idempotency uses the globally unique delivery ID and reveals only whether a matching event exists. Company context is included on Go event writes, but `schema/schemas.sql` does not declare `events.company_id`; reconcile checked-in schema against the deployed schema before rollout.
+- `query_logs` contains system-wide query hashes and operational metrics only; it is not used as answer/retrieval context. `pull_requests` and `issues` have no active retrieval/write caller and remain backend-only legacy tables without company ownership.
+- `match_documents` was reviewed and has an explicit company predicate, but pgvector was unavailable in the disposable database; runtime cross-tenant RPC verification remains **BLOCKED**.
+- Live Supabase service-role bypass/grants, actual service-role key configuration, deployed schema, data mapping, and production query behavior are **BLOCKED**. Local tests do not establish production isolation.
+- Redis failure behavior, provider retry semantics, shared multi-instance enforcement, and final limit values are still design assumptions pending approval; no rate limiter exists.
+- The focused Python suite passed, but the wider test set including failure-semantics tests could not collect due the missing `sentence_transformers` dependency.
+
+### Next recommended batch
+
+Keep rate limiting **BLOCKED / NOT STARTED**. First reconcile the `events.company_id` schema mismatch, validate live schema/grants/key configuration with an operator-approved read-only inventory, and run `match_documents` against a disposable PostgreSQL instance with pgvector. Only then can service-role isolation be considered for VERIFIED status; no production security claim is made here.
