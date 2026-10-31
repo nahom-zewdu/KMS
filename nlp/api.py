@@ -167,6 +167,8 @@ async def update_step_progress(
         return JSONResponse({"success": False, "error": str(exc)}, status_code=code)
     except KeyError as exc:
         return JSONResponse({"success": False, "error": str(exc)}, status_code=404)
+    except HTTPException:
+        raise
     except Exception as exc:
         logging.exception("Ramp step progress update failed")
         return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
