@@ -7,10 +7,10 @@ This file is the source of truth for the hardening program and survives Copilot 
 | Batch | Objective | Status | Notes |
 |---|---|---:|---|
 | Batch 0 | Baseline and architecture verification | IMPLEMENTED | Architecture reviewed and documented; no production security changes made in this batch. |
-| Batch 1 | Tenant isolation and database security | VERIFIED | Tenant validation tightened in core access paths; migration guardrails added for company-scoped data; Go tenant tests pass. |
-| Batch 2 | Authentication and authorization | VERIFIED | Explicit company-membership validation added to tenant-scoped API routes; authz tests pass. |
+| Batch 1 | Tenant isolation and database security | IMPLEMENTED | Tenant guards and RLS policies are implemented and pass disposable PostgreSQL tests; live Supabase inventory/data preflight is BLOCKED. |
+| Batch 2 | Authentication and authorization | IMPLEMENTED | JWT identity and membership boundaries are implemented and locally tested; production signer configuration and invitation-flow verification remain BLOCKED. |
 | Batch 3 | GitHub integration security | VERIFIED | OAuth state binding, callback validation, and replay protection are hardened; focused tests pass. |
-| Batch 4 | Go API protection and rate limiting | PLANNED | Pending route trust-boundary review and rate-limit design. |
+| Batch 4 | Go API protection and rate limiting | BLOCKED | Explicitly deferred until corrective review blockers are resolved or accepted; do not begin rate limiting. |
 | Batch 5 | Go HTTP server hardening | PLANNED | Pending server timeout and shutdown review. |
 | Batch 6 | Redis Streams and worker reliability | PLANNED | Pending durable worker review and failure handling work. |
 | Batch 7 | Observability | PLANNED | Pending structured logging and telemetry instrumentation. |
@@ -130,9 +130,9 @@ Enforce tenant validation at the service boundary and add explicit database guar
 - The repository still contains schema defaults that assume `default` is an acceptable fallback, so a live database reset or migration must be reviewed before applying this to production data.
 - Full end-to-end tenant and RLS coverage remains to be validated against the actual Supabase project configuration.
 
-### Status
+### Historical status
 
-VERIFIED
+VERIFIED when Batch 1 was first completed; superseded by the corrective review below.
 
 ### Recommended next batch
 
@@ -177,9 +177,9 @@ Centralize tenant-scoped authorization checks for the public Python API so only 
 - This batch validates the explicit company-membership boundary at the Python API layer; it does not replace a full authentication review across the frontend and Go ingress.
 - The live Supabase project still needs a full RLS and policy review before more tables are exposed directly.
 
-### Status
+### Historical status
 
-VERIFIED
+VERIFIED when Batch 2 was first completed; superseded by the corrective review below.
 
 ### Recommended next batch
 
@@ -236,6 +236,8 @@ VERIFIED
 
 ## Corrective review: identity boundary, membership policy, and tenant isolation
 
+This section preserves the earlier corrective-review record. Its status and implementation summaries are historical and are superseded by the final corrective review follow-up below.
+
 ### Trigger
 
 The project’s security review identified three unresolved issues in the completed tenant/authz work:
@@ -290,6 +292,57 @@ The project’s security review identified three unresolved issues in the comple
 
 Batches 1 and 2: VERIFIED after corrective review and regression tests.
 
-### Recommended next batch
+### Historical recommended next batch
 
-Batch 4 — Go API protection and rate limiting.
+Batch 4 — Go API protection and rate limiting. This recommendation was superseded by the corrective follow-up below; Batch 4 remains blocked.
+
+## Corrective review follow-up — 2026-10-31
+
+This section supersedes the earlier corrective-review status above. The earlier Batch 1/2 `VERIFIED` labels were too broad because they did not include database policy execution, verified JWT claims, or complete tenant retrieval checks.
+
+### Current status
+
+- Batch 1: **IMPLEMENTED**. Guardrails and RLS policies are **VERIFIED** against a disposable PostgreSQL 16 database; live Supabase inventory and production data preflight are **BLOCKED**.
+- Batch 2: **IMPLEMENTED**. JWT and membership behavior are **VERIFIED** by focused Python tests and disposable PostgreSQL policy tests. Production signing-key compatibility and invitation-flow verification are **BLOCKED**.
+- `ACCEPTED`: no unresolved security risk is marked accepted.
+- Batch 4: **BLOCKED**. Do not start rate limiting until blockers below are resolved or explicitly accepted.
+
+### Inventory and isolation policy
+
+The checked-in schema declares no views or materialized views. The current table and function inventory is documented in `docs/backend-hardening/ARCHITECTURE.md`. In summary:
+
+- Authenticated members read only their company rows in companies, memberships, repositories, codebase files/modules (through their parent repository), entity/edge graph, raw knowledge, playbooks, Ramp plans, and own Ramp progress.
+- Company admins manage company repository metadata, playbooks, Ramp plans, and membership roles. Managers may add member-role memberships, but cannot change roles.
+- `company_integrations` and unscoped legacy/audit tables (`events`, `contributions`, `pull_requests`, `issues`, `query_logs`) are service-only; authenticated and anon grants are revoked.
+- Workers and backend services use `service_role`, which bypasses RLS. Their reads and updates must therefore include explicit company filters; checked-in query/retrieval, Ramp, codebase, baseline, and backfill paths now carry those filters.
+- `match_documents` and `search_edges_by_entity` require a real company filter. The graph RPC and its removal of the historical global overload were exercised in PostgreSQL. The vector RPC was not executable locally because the test database did not have pgvector.
+- Membership policies call `public.is_company_member`, a fixed-search-path `SECURITY DEFINER` predicate, to avoid recursive RLS evaluation. Company and initial owner membership creation is one transactional authenticated RPC.
+
+### Migration safety and existing data
+
+- Guardrail and policy migrations are idempotent and were each run twice in the disposable database.
+- Migrations do not delete or silently remap rows. Existing `default`, blank, orphaned, or cross-company graph data causes an explicit error and transaction rollback.
+- The checked-in base schema previously omitted `raw_data.company_id`; the migration adds the column, then fails if any historical raw-data row is unmapped. Production operators must review and explicitly map existing data before retrying.
+- No migration was applied to live Supabase.
+
+### Tests and actual results
+
+1. `cd /home/nahom/Projects/personal/KMS/nlp && PYTHONPATH=. pytest tests/test_authz.py tests/test_ramp_v2.py tests/test_evidence_composition.py tests/test_query_engine_context.py -q`
+   - Passed: `35 passed`; third-party deprecation warnings only.
+2. `cd /home/nahom/Projects/personal/KMS && psql 'postgresql://postgres@127.0.0.1:55432/postgres' -f schema/tests/tenant_rls.sql`
+   - Passed on disposable PostgreSQL 16 with a mock `auth.uid()` implementation. Tested RLS visibility, membership policy recursion, owner creation, self-insertion/self-promotion, unauthorized cross-company role change, tenant reads/writes, graph RPC filtering, and service-role access.
+3. Migration fail-safe probe with an existing `companies.id = 'default'`.
+   - Expected failure observed; the default row remained and transaction changes were rolled back.
+
+### Blockers and deployment assumptions
+
+- **BLOCKED — live Supabase:** live objects, grants, existing policy inventory, and tenant data were not queried or modified.
+- **BLOCKED — JWT signing compatibility:** Python currently permits HS256 only. Before deployment, confirm Supabase issues HS256 tokens and configure `SUPABASE_JWT_SECRET`, matching issuer, and audience. Asymmetric/JWKS signing is not implemented.
+- **BLOCKED — raw-data tenant mapping:** if existing rows lack a verified company mapping, an operator-reviewed backfill is required before the guardrail migration can pass.
+- **BLOCKED — pgvector test:** `match_documents` was not executed in the disposable database because pgvector was unavailable. The SQL and application filters are present but this RPC remains unverified at runtime.
+- **BLOCKED — invitation lifecycle:** the repository has no persisted invitation table or complete invite-acceptance flow; the existing invite endpoint remains a placeholder. Database policies restrict direct membership additions and role changes, but the end-to-end invite token lifecycle is not verified.
+- The `service_role` bypass is intentional; service code must preserve the explicit company filters described above. Unknown live objects are outside the checked-in inventory and must be reconciled before rollout.
+
+### Next batch
+
+Batch 4 — **BLOCKED**. Do not begin rate limiting until the deployment/data/signing/invitation blockers are resolved or explicitly accepted.
