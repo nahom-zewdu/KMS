@@ -10,8 +10,8 @@ This file is the source of truth for the hardening program and survives Copilot 
 | Batch 1 | Tenant isolation and database security | IMPLEMENTED | Tenant guards and RLS policies are implemented and pass disposable PostgreSQL tests; live Supabase inventory/data preflight is BLOCKED. |
 | Batch 2 | Authentication and authorization | IMPLEMENTED | JWT identity and membership boundaries are implemented and locally tested; production signer configuration and invitation-flow verification remain BLOCKED. |
 | Batch 3 | GitHub integration security | VERIFIED | OAuth state binding, callback validation, and replay protection are hardened; focused tests pass. |
-| Batch 4 | Go API protection and rate limiting | BLOCKED | Explicitly deferred until corrective review blockers are resolved or accepted; do not begin rate limiting. |
-| Batch 5 | Go HTTP server hardening | PLANNED | Pending server timeout and shutdown review. |
+| Batch 4 | Go API protection and rate limiting | BLOCKED | Go authentication/webhook controls are implemented and tested by the corrective review; rate limiting remains explicitly not started. |
+| Batch 5 | Go HTTP server hardening | VERIFIED | Explicit server timeouts, header bound, graceful shutdown, and Redis close handling are implemented and tested; live deployment remains unverified. |
 | Batch 6 | Redis Streams and worker reliability | PLANNED | Pending durable worker review and failure handling work. |
 | Batch 7 | Observability | PLANNED | Pending structured logging and telemetry instrumentation. |
 | Batch 8 | Database lifecycle and data integrity | PLANNED | Pending migration and retention controls review. |
@@ -346,3 +346,60 @@ The checked-in schema declares no views or materialized views. The current table
 ### Next batch
 
 Batch 4 — **BLOCKED**. Do not begin rate limiting until the deployment/data/signing/invitation blockers are resolved or explicitly accepted.
+
+## Corrective review — Go ingress boundary — 2026-11-01
+
+Rate limiting remains **not started**. This corrective work closes the Go user-route authentication and tenant authorization gaps, hardens webhook processing, and implements the HTTP server lifecycle controls; it does not mark the overall rate-limiting batch complete.
+
+### Current status
+
+- Go user-triggered route protection: **IMPLEMENTED**, focused tests **VERIFIED**.
+- Webhook bounds/signature/timestamp and synchronous handler lifecycle: **IMPLEMENTED**, focused tests **VERIFIED**.
+- HTTP server limits and bounded graceful shutdown: **IMPLEMENTED**, focused tests **VERIFIED**.
+- Rate limiting: **BLOCKED / NOT STARTED**.
+- Production security: not claimed. Supabase/Auth availability, deployed route exposure, webhook delivery behavior, and production runtime settings were not exercised.
+- No live Supabase project was contacted or changed.
+
+### Routes and controls
+
+- `GET /health`: public health check.
+- `POST /slack/events` and trailing-slash alias: Slack-signed webhook; limited body; timestamp must be within five minutes in either direction; signature uses constant-time comparison.
+- `POST /github` and trailing-slash alias: GitHub HMAC-signed webhook; limited body; delivery ID must parse as UUID; existing event delivery ID uniqueness and idempotency check prevent repeat processing.
+- `POST /query`: requires Supabase-verified bearer token and exact `company_members` match before subscribing/publishing; rejects missing/default company; carries the authorized company ID in both job and payload.
+- `GET /github/sync-baseline`: requires the same token/membership check; resolves repository by exact repository ID or full name scoped by the authorized company; publishes only the canonical repository full name and company context.
+- No other internal HTTP service routes are registered. Redis streams are internal worker boundaries, not public routes.
+
+### Files changed
+
+- Go API: `api/domain/domain.go`, `api/domain/github.go`, `api/domain/slack.go`, `api/handlers/auth.go`, `api/handlers/codebase.go`, `api/handlers/github.go`, `api/handlers/query.go`, `api/handlers/routes.go`, `api/handlers/slack.go`, `api/handlers/webhook_body.go`, `api/main.go`, `api/repository/supabase.go`, `api/services/codebase.go`, `api/services/slack_bot.go`, `api/services/slack_verifier.go`.
+- Go tests: `api/handlers/security_test.go`, `api/handlers/tenant_test.go`, `api/main_test.go`, `api/repository/supabase_auth_test.go`, `api/services/codebase_test.go`, `api/services/core_test.go`, `api/services/slack_verifier_test.go`.
+- Frontend proxy: `kms-frontend/app/api/query/route.ts` now forwards the authenticated Supabase session token to Go and fails closed if it is absent.
+- Documentation: this file plus `ARCHITECTURE.md`, `SECURITY-DECISIONS.md`, and `TEST-MATRIX.md`.
+
+### Security behavior and limitations
+
+- Go validates bearer access tokens through Supabase Auth’s `/auth/v1/user`; user identity does not come from a caller-supplied ID or locally decoded unverified claims. Membership and repository checks use exact Supabase filters.
+- Auth service/network errors fail closed with 503; invalid/expired tokens return 401; missing membership and cross-company repository access are rejected.
+- Webhooks now process synchronously and respond only after processing returns. Slack AuthTest/API operations and Redis/query work receive request-bounded contexts; Slack event handling can wait up to 60 seconds for mentions and 30 seconds for ordinary messages. Failures are reported with 5xx to allow provider retry. This changes acknowledgement latency versus the prior fire-and-forget goroutines.
+- GitHub duplicates are acknowledged after the existing delivery-ID check finds the stored row. The schema declares `events.delivery_id` unique; no live schema was inspected.
+- HTTP server configuration: ReadHeaderTimeout 5s, ReadTimeout 30s, WriteTimeout 90s, IdleTimeout 120s, MaxHeaderBytes 1 MiB, graceful shutdown bounded to 15s. Redis is closed during process cleanup.
+- External Supabase Auth availability is now required for protected Go requests. No offline JWT verification fallback was added.
+
+### Commands executed and actual results
+
+1. `gofmt -w api && cd api && go test ./... && go test -race ./...`
+   - Passed: main, handlers, repository, and services packages; domain has no tests. Race detector passed for all packages.
+2. `cd api && go vet ./...`
+   - Passed with no diagnostics.
+3. `cd /home/nahom/Projects/personal/kms-frontend/kms-frontend && npx tsc --noEmit --pretty false`
+   - Passed with exit code 0.
+4. `git diff --check && git -C /home/nahom/Projects/personal/kms-frontend/kms-frontend diff --check`
+   - Passed.
+
+### Remaining risks and recommended next work
+
+- **BLOCKED — production verification:** no deployed Go API or live Supabase/Auth configuration was queried. Confirm API exposure, service key validity for `/auth/v1/user`, and production timeout behavior before claiming production security.
+- **BLOCKED — end-to-end webhook verification:** tests use signed local requests and strict fakes; no real Slack/GitHub delivery or retry lifecycle was exercised.
+- **BLOCKED — migration/schema parity:** repository ownership and delivery uniqueness rely on checked-in schema. Live table constraints/grants were not verified.
+- The new synchronous webhook processing may increase response latency; monitor provider retry timing and adjust only with measured evidence. If asynchronous handling is later restored, use a durable queue and never retain Gin request state.
+- Rate limiting remains **not started**. Do not begin until the Go ingress corrective review is accepted and production dependencies/assumptions are resolved.
