@@ -44,7 +44,7 @@ ON public.company_members
 FOR UPDATE
 USING (auth.uid() = user_id);
 
-CREATE POLICY "Delete own memberships"
+CREATE POLICY "Admins can remove members"
 ON public.company_members
 FOR DELETE
 USING (auth.uid() = user_id);
