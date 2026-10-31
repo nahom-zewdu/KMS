@@ -464,3 +464,47 @@ Rate limiting implementation was **not started**. No live Supabase project was c
 ### Next recommended batch
 
 Keep rate limiting **BLOCKED / NOT STARTED**. First reconcile the `events.company_id` schema mismatch, validate live schema/grants/key configuration with an operator-approved read-only inventory, and run `match_documents` against a disposable PostgreSQL instance with pgvector. Only then can service-role isolation be considered for VERIFIED status; no production security claim is made here.
+
+## Ingestion and tenant-context corrective work — 2026-10-31
+
+Rate limiting remains **BLOCKED / NOT STARTED**. No live Supabase project was contacted, queried, or changed.
+
+### Changes implemented
+
+- `events` is explicitly tenant-associated in the checked-in base schema. Fresh schemas require a non-blank, non-default `company_id` referencing `companies`.
+- Added `schema/migrations/20261101_events_company_scope.sql`. It maps historical events only through linked `raw_data` with exactly one non-default company, rejects unmapped, orphaned, conflicting, or duplicate delivery-ID data, adds/validates constraints idempotently, and preserves globally unique delivery IDs. It neither deletes rows nor guesses ownership. Operators must explicitly map existing events before retrying if the migration fails.
+- `CoreIngest` now derives its Redis publish timeout from the incoming context, preserving the 10-second maximum. Cancellation errors remain inspectable by callers.
+- Slack callback ingestion now uses the provider envelope `event_id` as the global delivery ID and rejects missing IDs; message timestamps remain event timestamps, not delivery identity.
+- Slack playbook generation receives the company resolved from the verified Slack integration mapping. Go sends the company ID and a short-lived internal HS256 token bound to that company. The Python internal route independently validates issuer, audience, required expiration/issued-at claims, signing algorithm, service role, and exact company claim before invoking the tenant-filtered generator. It is not accepted by user-facing routes.
+
+### Files changed
+
+- Go: `api/domain/domain.go`, `api/handlers/slack.go`, `api/services/core.go`, `api/services/slack_bot.go`, `api/services/playbook.go`.
+- Go tests: `api/handlers/security_test.go`, `api/services/core_test.go`, `api/services/playbook_test.go`.
+- Python: `nlp/api.py`, `nlp/tests/test_authz.py`.
+- SQL: `schema/schemas.sql`, `schema/migrations/20261101_events_company_scope.sql`, `schema/tests/tenant_rls.sql`, `schema/tests/events_tenant_migration_unmapped.sql`.
+- Documentation: `docs/backend-hardening/PROGRESS.md`, `SECURITY-DECISIONS.md`, `TEST-MATRIX.md`.
+
+### Verification commands and actual results
+
+1. `cd api && go test -count=1 ./...`
+   - **VERIFIED** — passed for `api`, `handlers`, `repository`, and `services`; `domain` has no tests.
+2. `cd api && go test -race -count=1 ./...`
+   - **VERIFIED** — passed for all Go packages, including CoreIngest parent cancellation/deadline propagation, Slack event-ID idempotency, and company propagation to the signed playbook call.
+3. `cd api && go vet ./...`
+   - **VERIFIED** — passed with no diagnostics.
+4. `cd nlp && PYTHONPATH=. pytest tests/test_authz.py -q`
+   - **VERIFIED** — 22 passed; 2 third-party deprecation warnings.
+5. `cd nlp && PYTHONPATH=. pytest tests/test_authz.py tests/test_ramp_v2.py tests/test_evidence_composition.py tests/test_query_engine_context.py -q`
+   - **VERIFIED** — 40 passed; 2 third-party deprecation warnings.
+6. `pg_isready -h 127.0.0.1 -p 55432; psql 'postgresql://postgres@127.0.0.1:55432/postgres' -v ON_ERROR_STOP=1 -f schema/tests/tenant_rls.sql`
+   - **BLOCKED** — `pg_isready` reported no response and `psql` failed with connection refused. The repeatability, backfill, and rollback SQL cases in `schema/tests/tenant_rls.sql` and `schema/tests/events_tenant_migration_unmapped.sql` have not been executed in this session.
+
+### Remaining risks and status
+
+- The new events migration and its disposable PostgreSQL assertions are **IMPLEMENTED**, but database behavior is **BLOCKED** pending an available disposable PostgreSQL environment. Do not mark the migration **VERIFIED** from Go/Python tests.
+- No historical event ownership was inferred from provider identity or timestamps. Only a single matching company on linked `raw_data` qualifies; otherwise explicit operator mapping is required.
+- Production schema parity, historical data quality, migration lock/maintenance window, live grants, and service-token secret/issuer/audience configuration remain **BLOCKED** and require operator review.
+- **BLOCKED — ingestion recovery contract:** if request cancellation happens after the event/raw-data inserts but before Redis publish, those rows remain stored without a queued job; a duplicate delivery currently short-circuits rather than republishing. This change intentionally makes publishing request-bound, not detached. A durable outbox/reconciliation contract is not implemented and must be designed before claiming reliable recovery from this failure window.
+- Go, Python, and migration changes have not been applied to live Supabase. No production security claim is made.
+- Rate limiting has not started.
