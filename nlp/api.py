@@ -208,17 +208,19 @@ async def update_step_progress(
     plan_id: str,
     step_id: str,
     payload: dict,
+    authorization: str | None = Header(default=None, alias="Authorization"),
+    legacy_user_id: str | None = Header(default=None, alias="X-User-Id"),
     company_id: str | None = Header(default=None, alias="X-Company-Id"),
-    user_id: str = Header(..., alias="X-User-Id"),
 ):
     """Update one user's Ramp step progress."""
     effective_company_id = require_company_id(company_id, "X-Company-Id")
     try:
-        require_company_membership(user_id, effective_company_id)
+        identity = require_authenticated_identity(authorization, legacy_user_id=legacy_user_id)
+        require_company_membership(identity["user_id"], effective_company_id)
         status = str((payload or {}).get("status") or "").strip().lower()
         if not status:
             raise HTTPException(status_code=400, detail="status is required")
-        progress = ramp_generator.update_step_progress(plan_id, step_id, effective_company_id, user_id, status)
+        progress = ramp_generator.update_step_progress(plan_id, step_id, effective_company_id, identity["user_id"], status)
         return JSONResponse({"success": True, "progress": progress})
     except ValueError as exc:
         code = 400 if "status" in str(exc).lower() else 404
