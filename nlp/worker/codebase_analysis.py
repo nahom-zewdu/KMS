@@ -10,6 +10,7 @@ import asyncio
 
 from codebase.analyzer import CodebaseAnalyzer
 from utils.supabase import init_supabase
+from utils.db_helpers import ensure_event_tenant
 
 logger = logging.getLogger("codebase_analysis")
 
@@ -37,7 +38,7 @@ class CodebaseAnalysisHandler:
             Exception: If analysis fails (will prevent ACK in consumer)
         """
         record_id = job.get("record_id")
-        company_id = job.get("company_id")
+        company_id = (job.get("company_id") or "").strip()
         payload = job.get("payload", {})
         
         if not company_id or company_id.strip().lower() == "default":
@@ -45,6 +46,8 @@ class CodebaseAnalysisHandler:
         
         if not record_id:
             raise ValueError("record_id is required for codebase analysis")
+
+        ensure_event_tenant(supabase, record_id, company_id)
         
         logger.info(f"Starting codebase analysis | record={record_id} | company={company_id}")
         
