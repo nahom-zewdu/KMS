@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+	"github.com/nahom-zewdu/kMS/api/domain"
 	"github.com/nahom-zewdu/kMS/api/handlers"
 	"github.com/nahom-zewdu/kMS/api/repository"
 	"github.com/nahom-zewdu/kMS/api/services"
@@ -78,6 +79,11 @@ func run() error {
 	}()
 	log.Printf("Successfully connected to Redis at %s", redisAddr)
 	redisStream := repository.NewRedisStream(redisClient)
+	outboxRepository, ok := supabaseRepo.(domain.IngestionOutboxRepository)
+	if !ok {
+		return fmt.Errorf("Supabase repository does not support transactional ingestion outbox")
+	}
+	outboxDispatcher := services.NewIngestionOutboxDispatcher(outboxRepository, redisStream)
 
 	// Initialize services
 	coreIngestService := services.NewCoreIngest(supabaseRepo, redisStream)
@@ -97,8 +103,18 @@ func run() error {
 	}
 	shutdownContext, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stopSignals()
+	dispatcherContext, cancelDispatcher := context.WithCancel(shutdownContext)
+	defer cancelDispatcher()
+	dispatcherDone := make(chan struct{})
+	go func() {
+		defer close(dispatcherDone)
+		outboxDispatcher.Run(dispatcherContext)
+	}()
 	log.Printf("kms backend server is listening on port %s", port)
-	return serveHTTP(server, listener, shutdownContext)
+	serverErr := serveHTTP(server, listener, shutdownContext)
+	cancelDispatcher()
+	<-dispatcherDone
+	return serverErr
 }
 
 func serveHTTP(server *http.Server, listener net.Listener, shutdownContext context.Context) error {
