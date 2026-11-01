@@ -12,7 +12,7 @@ This file is the source of truth for the hardening program and survives Copilot 
 | Batch 3 | GitHub integration security | VERIFIED | OAuth state binding, callback validation, and replay protection are hardened; focused tests pass. |
 | Batch 4 | Go API protection and rate limiting | BLOCKED | Go authentication/webhook controls are implemented and tested by the corrective review; rate limiting remains explicitly not started. |
 | Batch 5 | Go HTTP server hardening | VERIFIED | Explicit server timeouts, header bound, graceful shutdown, and Redis close handling are implemented and tested; live deployment remains unverified. |
-| Batch 6 | Redis Streams and worker reliability | PLANNED | Pending durable worker review and failure handling work. |
+| Batch 6 | Redis Streams and worker reliability | IMPLEMENTED / VERIFICATION BLOCKED | Transactional outbox and lease-based worker recovery are implemented; focused tests pass. Disposable PostgreSQL migration execution and three unrelated full-suite failures remain unresolved. |
 | Batch 7 | Observability | PLANNED | Pending structured logging and telemetry instrumentation. |
 | Batch 8 | Database lifecycle and data integrity | PLANNED | Pending migration and retention controls review. |
 | Batch 9 | Python NLP service hardening | PLANNED | Pending tenant-scoped retrieval and API validation review. |
@@ -505,6 +505,67 @@ Rate limiting remains **BLOCKED / NOT STARTED**. No live Supabase project was co
 - The new events migration and its disposable PostgreSQL assertions are **IMPLEMENTED**, but database behavior is **BLOCKED** pending an available disposable PostgreSQL environment. Do not mark the migration **VERIFIED** from Go/Python tests.
 - No historical event ownership was inferred from provider identity or timestamps. Only a single matching company on linked `raw_data` qualifies; otherwise explicit operator mapping is required.
 - Production schema parity, historical data quality, migration lock/maintenance window, live grants, and service-token secret/issuer/audience configuration remain **BLOCKED** and require operator review.
-- **BLOCKED — ingestion recovery contract:** if request cancellation happens after the event/raw-data inserts but before Redis publish, those rows remain stored without a queued job; a duplicate delivery currently short-circuits rather than republishing. This change intentionally makes publishing request-bound, not detached. A durable outbox/reconciliation contract is not implemented and must be designed before claiming reliable recovery from this failure window.
+- **Historical as of Batch 5:** request cancellation after event/raw-data inserts could leave rows without a Redis job, and duplicate delivery did not republish. Batch 6 supersedes this behavior with transactional outbox persistence; database verification is still blocked below.
 - Go, Python, and migration changes have not been applied to live Supabase. No production security claim is made.
 - Rate limiting has not started.
+
+## Batch 6 — Redis Streams and worker reliability
+
+The outbox and worker changes below are **IMPLEMENTED**. Focused Go and Python tests are **VERIFIED**. PostgreSQL migration/RPC behavior is **BLOCKED** because no disposable database responded at `127.0.0.1:55432`. No migration was applied to live Supabase, and rate limiting was not started.
+
+### Lifecycle and failure handling
+
+1. Slack/GitHub ingress validates the provider request and resolves the company before `CoreIngest`.
+2. `persist_ingestion_with_outbox` stores the tenant-owned event, raw-data row, and outbox job in one PostgreSQL transaction. Global `events.delivery_id` uniqueness is retained. A duplicate with the same company returns the existing outbox entry; a delivery ID owned by a different company fails closed.
+3. The Go dispatcher claims eligible outbox rows with `FOR UPDATE SKIP LOCKED` and an expiring DB lease. It publishes to the source Redis stream, then marks the row published. Redis and PostgreSQL are not atomic: dispatcher failure after Redis acceptance and before the DB mark intentionally yields an at-least-once duplicate.
+4. Python creates missing consumer groups at `0-0`, reads via `XREADGROUP`, and holds a per-message Redis lease with a heartbeat. Recovery scans `XPENDING`, checks the active lease, applies delivery-count-based capped backoff, and only then claims with `XCLAIM`.
+5. Ingestion validates a real company ID and verifies the event's delivery/company pair before database work. Entity and edge IDs are tenant-derived and deterministic; raw-data retries update only a matching `(record_id, company_id)` row; the processed marker filters on both delivery and company. A GitHub push publishes its codebase-analysis job before marking the source event processed.
+6. Only the consumer acknowledges successful handler completion. Handler failures remain pending up to five deliveries, then are atomically copied to a deduplicated dead-letter stream before `XACK`. The worker no longer deletes source stream entries.
+
+### Files changed
+
+- Go: `api/domain/outbox.go`, `api/repository/outbox.go`, `api/services/core.go`, `api/services/outbox_dispatcher.go`, `api/main.go`.
+- Go tests: `api/services/core_test.go`, `api/services/outbox_dispatcher_test.go`.
+- SQL: `schema/migrations/20261101_ingestion_outbox.sql`, `schema/schemas.sql`, `schema/tests/tenant_rls.sql`.
+- Python: `nlp/worker/consumer.py`, `nlp/worker/ingestion.py`, `nlp/worker/query.py`, `nlp/worker/baseline.py`, `nlp/worker/codebase_analysis.py`, `nlp/utils/db_helpers.py`.
+- Python tests: `nlp/tests/test_consumer_recovery.py`, `nlp/tests/test_ingestion_reliability.py`, `nlp/tests/test_failure_semantics.py`, added `nlp/tests/test_worker_tenant_safety.py`.
+- Documentation: `PROGRESS.md`, `ARCHITECTURE.md`, `SECURITY-DECISIONS.md`, `TEST-MATRIX.md`.
+
+### Exact commands and actual results
+
+1. `cd api && go test ./...`
+   - **VERIFIED — passed** for `api`, `handlers`, `repository`, and `services`; `domain` has no tests.
+2. `cd api && go test -race ./... && go vet ./...`
+   - **VERIFIED — passed**; race tests passed for all Go packages and `go vet` emitted no diagnostics.
+3. `cd nlp && .venv/bin/python -m pytest -q tests/test_consumer_recovery.py tests/test_ingestion_reliability.py tests/test_failure_semantics.py tests/test_worker_tenant_safety.py`
+   - **VERIFIED — passed**: 40 passed, 2 third-party deprecation warnings, 4 subtests passed.
+4. `cd nlp && .venv/bin/python -m compileall -q worker utils tests && git diff --check`
+   - **VERIFIED — passed** after final edits.
+5. `cd nlp && PYTHONPATH=.:.. .venv/bin/python -m pytest -q tests`
+   - **NOT FULLY VERIFIED — 101 passed, 3 failed, 2 warnings, 4 subtests passed**. Failures are `test_query_transport_boundary_is_preserved` and two `test_llm_infer_*` cases; they concern the existing Ramp projection and LLM fallback expectations, not Batch 6 files. Full-suite status remains incomplete.
+6. `pg_isready -h 127.0.0.1 -p 55432`
+   - **BLOCKED — no response**. `psql` is installed, but no PostgreSQL server was available. `schema/tests/tenant_rls.sql`, including outbox transaction, retry exhaustion, migration repeatability, and rollback assertions, has not been run.
+7. `git diff --check`
+   - **VERIFIED — passed** after final edits.
+
+### Remaining risks and deployment prerequisites
+
+- **Database verification BLOCKED:** run `schema/tests/tenant_rls.sql` against a newly created disposable PostgreSQL/Supabase-compatible database before considering the migration verified. It includes migration reapplication, duplicate delivery, claim/publish, and retry-exhaustion checks. Do not apply it to production.
+- Deploying the new Go ingestion path requires the outbox migration and RPCs to exist first; otherwise ingestion fails rather than falling back to non-transactional writes.
+- The database outbox has a 12-claim terminal `dead_letter` state; Python stream processing has a five-delivery limit and a Redis dead-letter stream. Operators need alerting and a replay procedure for both destinations; this batch does not add a replay UI or operator command.
+- Existing Redis consumer groups retain their cursor; creating a group at `0-0` only affects new groups. Before deployment, inspect the existing group `last-delivered-id` and pending entries and plan a controlled replay if any backlog was skipped by prior `$` group creation.
+- Lease heartbeat reduces unsafe reclamation but is not a fencing token. A worker paused beyond lease expiry can resume concurrently with a replacement; tenant-scoped deterministic upserts mitigate duplicate effects but cannot guarantee exactly-once execution.
+- Incremental codebase-analysis jobs are published directly by the ingestion worker rather than by a second database outbox. A retry can enqueue duplicates; analysis writes are designed to be idempotent, but the path lacks a separate durable DB enqueue record.
+- Existing entity rows produced by the former global `(type,name)` deterministic ID may already have had company ownership overwritten. The new IDs are tenant-specific and do not rewrite or assign ownership to legacy rows; historical contamination requires a separately reviewed data audit.
+- Shutdown stops new reads and waits for an active handler to return; it does not forcibly cancel an in-flight NLP/database call. Handler execution duration and orchestrator termination grace remain deployment assumptions.
+- No production database, Redis, or live Supabase behavior was exercised. The broad Python suite has three outstanding failures and is not considered fully verified.
+
+### Status
+
+**IMPLEMENTED** — code, migration, SQL harness assertions, and regression tests are present.
+
+**VERIFIED** — Go tests/race/vet and focused Python tests as listed above.
+
+**BLOCKED** — PostgreSQL migration/RPC execution, full Python suite, and all live deployment behavior.
+
+Rate limiting remains **NOT STARTED**.
