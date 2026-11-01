@@ -133,4 +133,32 @@ Unit and local HTTP tests do not establish production security. Supabase service
 
 The migration has not been applied to a live or disposable database in this run; schema/database behavior must not be reported as verified. Rate limiting remains **BLOCKED / NOT STARTED**.
 
-CoreIngest cancellation verification covers propagation to Redis, not durable recovery after the database inserts. A cancellation in that interval can leave stored rows without a queued job; duplicate delivery currently does not republish. Durable outbox/reconciliation behavior remains **BLOCKED**.
+Historical through Batch 5, CoreIngest cancellation verification covered propagation to Redis but not recovery after DB persistence. Batch 6 adds the outbox path; its PostgreSQL transaction and RPC behavior remain **BLOCKED** until the disposable SQL harness runs.
+
+## Batch 6 — Redis Streams and worker reliability
+
+| Area | Exact command | Result | Coverage and limits |
+|---|---|---|---|
+| Go API tests | `cd api && go test ./...` | **VERIFIED — passed** | All Go packages with tests passed. Includes outbox persistence/service integration and dispatcher failure-injection tests. |
+| Go race detector and static analysis | `cd api && go test -race ./... && go vet ./...` | **VERIFIED — passed** | All Go packages passed under race detection; `go vet` emitted no diagnostics. |
+| Focused Python worker tests | `cd nlp && .venv/bin/python -m pytest -q tests/test_consumer_recovery.py tests/test_ingestion_reliability.py tests/test_failure_semantics.py tests/test_worker_tenant_safety.py` | **VERIFIED — 40 passed, 2 warnings, 4 subtests passed** | Covers leases, recovery, retry/backoff, DLQ ordering and dedupe, tenant rejection, event ownership, tenant-scoped raw-data writes, handler failure, and company-derived entity IDs. |
+| Python compilation and diff hygiene | `cd nlp && .venv/bin/python -m compileall -q worker utils tests && git diff --check` | **VERIFIED — passed** after final edits | Compilation and whitespace validation pass. |
+| Full Python suite | `cd nlp && PYTHONPATH=.:.. .venv/bin/python -m pytest -q tests` | **NOT FULLY VERIFIED — 101 passed, 3 failed, 2 warnings, 4 subtests passed** | Failures: `test_query_transport_boundary_is_preserved` and two `test_llm_infer_*` cases. They concern the existing Ramp projection and LLM fallback expectations, not Batch 6 changes. |
+| PostgreSQL migration and RPC harness | `pg_isready -h 127.0.0.1 -p 55432` | **BLOCKED — no response** | `psql` is installed, but no disposable PostgreSQL server is running. The migration, idempotency, transactional rollback, retry exhaustion, `SKIP LOCKED`, and grants/RLS assertions have not been executed. |
+| Live Supabase migration or data check | Not run | **BLOCKED by explicit scope** | No live Supabase project was contacted or changed. |
+
+### Failure-injection matrix
+
+| Failure / boundary | Test evidence | Status |
+|---|---|---|
+| DB persistence succeeds while Redis is unavailable | `api/services/outbox_dispatcher_test.go` retains pending outbox work | **VERIFIED in Go fake**; database transaction behavior **BLOCKED** |
+| Redis publish succeeds but DB mark fails | Dispatcher test confirms the same delivery can be published again | **VERIFIED in Go fake** |
+| Duplicate webhook delivery | Core/outbox tests and SQL harness uniqueness assertions | Go service behavior **VERIFIED in fake**; SQL behavior **BLOCKED** |
+| Worker crashes before acknowledgement / after side effect | Consumer retry test confirms repeat handler call without duplicate idempotent effect | **VERIFIED in fake** |
+| Pending recovery and active long-running lease | Recovery tests ensure active lease prevents XCLAIM even for an old PEL entry | **VERIFIED in fake**; real Redis integration **BLOCKED** |
+| Retry exhaustion and dead-letter routing | Consumer test asserts DLQ entry precedes ACK and repeated dead-letter attempt deduplicates; SQL harness tests outbox terminal state | Consumer behavior **VERIFIED in fake**; SQL terminal state **BLOCKED** |
+| Tenant mismatch / default tenant | Consumer, handler, event-owner and raw-data query-builder tests | **VERIFIED in Python fakes**; production DB policies **BLOCKED** |
+| Graceful worker shutdown | Stop signal test checks consumer stop state; loop uses bounded Redis blocking read | **PARTIALLY VERIFIED**; active handler cancellation and process termination are not bounded |
+| SQL transaction, constraints, RPC security, real Redis semantics | Disposable integration services unavailable | **BLOCKED** |
+
+Tests use query-builder doubles that apply every `.eq()` predicate rather than ignoring filters. These tests establish application behavior only; they do not prove RLS, RPC execution, PostgreSQL locking semantics, Redis Lua behavior, or live service-role isolation.
