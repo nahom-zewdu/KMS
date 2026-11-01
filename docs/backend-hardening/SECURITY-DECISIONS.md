@@ -184,4 +184,24 @@ Slack tenant resolution in Go is the authority for the company context. The Go p
 
 This avoids treating network location or a caller-provided company ID as authentication. Deployment still requires matching `INTERNAL_SERVICE_SECRET`, `INTERNAL_SERVICE_ISSUER`, and `INTERNAL_SERVICE_AUDIENCE` values in Go and Python. Their live configuration and the deployed API network boundary were not verified.
 
-CoreIngest Redis publishing inherits the request context with a ten-second upper bound. Cancellation is part of the synchronous ingest contract; publishing is not detached after caller cancellation. There is a known recovery gap: cancellation after the database inserts but before Redis publish leaves persisted rows without a job, and a duplicate delivery currently skips rather than republishes. Durable outbox/reconciliation behavior is not implemented and must be addressed before claiming reliable recovery. Slack callback delivery identity is the provider `event_id`, not the message timestamp; missing IDs are rejected, and the database keeps a global unique delivery key.
+CoreIngest previously published with the incoming request context and a ten-second upper bound. As of Batch 5, cancellation between DB persistence and Redis publication could leave rows without a job; that historical gap is superseded by Decision 19's transactional outbox. Slack callback delivery identity is the provider `event_id`, not the message timestamp; missing IDs are rejected, and the database keeps a global unique delivery key.
+
+## Decision 19: use a transactional outbox for webhook ingestion
+
+Persist `events`, `raw_data`, and `ingestion_outbox` in one PostgreSQL transaction through `persist_ingestion_with_outbox`. The outbox retains the globally unique provider delivery ID, tenant company ID, event reference, full worker payload, bounded retry metadata, and a terminal dead-letter state. The migration rejects invalid/missing event ownership and relies on the earlier events-company migration; it neither guesses historical ownership nor deletes data.
+
+The Go dispatcher claims with `FOR UPDATE SKIP LOCKED` and an expiring publisher lease, publishes to Redis, and only then marks the row published. Because Redis and PostgreSQL are not transactionally coupled, a crash between those operations can publish a duplicate. The chosen contract is **at-least-once**. Duplicate effects must be idempotent; this implementation uses tenant-derived deterministic entity/edge IDs and company-scoped raw-data updates.
+
+The outbox dispatcher retries with capped backoff and moves rows to DB `dead_letter` after 12 claims. Python retries pending stream jobs up to five deliveries with capped delivery-count-based delay, then uses a Lua script to deduplicate the dead-letter write before acknowledging the source. The two dead-letter locations require operator monitoring and replay procedures; neither automated replay nor alerting is included.
+
+## Decision 20: recover Redis pending work with leases, not idle time alone
+
+New groups are created at `0-0`; existing groups preserve their cursor and are never silently rewound. A per-message Redis lease is acquired before processing and renewed by a heartbeat. Recovery checks `XPENDING`, requires the configured idle/backoff threshold, acquires the same lease key, and only then reclaims with `XCLAIM`. This reduces concurrent work but is not a fencing token: a paused process can resume after lease expiry, so idempotency remains mandatory.
+
+The worker alone owns `XACK`; handlers do not acknowledge or delete stream entries. A successful handler is acknowledged after its DB work and any required follow-up enqueue succeeds. Ingestion validates the real company and exact event/company pair. Raw-data update, event completion, repository lookup/update, and graph writes are tenant-scoped. GitHub incremental analysis validates event ownership again. Derived analysis queue publication is not itself an outbox transaction; a retry may publish duplicates.
+
+### Verification boundary
+
+Go API tests, race tests, and `go vet` pass. Focused worker tests pass (40 passed) for lease-aware recovery, retry budget/backoff, DLQ deduplication, tenant rejection, event-company matching, raw-data ownership, and deterministic entity IDs. The full Python suite has 101 passes and three failures in pre-existing Ramp transport and LLM fallback expectations. PostgreSQL execution of the migration and SQL harness is **BLOCKED** because no disposable server responded at `127.0.0.1:55432`. No live database was contacted or changed; no database guarantee is marked VERIFIED.
+
+Deployment must confirm the migrations and RPC grants on a disposable database, inspect existing Redis group cursors, and establish outbox/DLQ alerting and replay procedures before claiming operational recovery. Rate limiting remains **NOT STARTED**.
