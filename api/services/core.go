@@ -1,8 +1,7 @@
 // services/core.go
-// Package services implements the CoreIngestService for shared ingestion logic across Slack and GitHub.
-// It stores raw event payloads in Supabase (events table), summarized content (raw_data), and publishes
-// to Redis streams for Python processing. It ensures idempotency using delivery_id, handles edge cases
-// (large payloads, duplicates), and maintains compatibility with existing Slack features.
+// Package services implements shared Slack and GitHub ingestion logic.
+// Event data and jobs are persisted atomically; a separate dispatcher publishes
+// the outbox to Redis at least once.
 
 package services
 
@@ -20,8 +19,7 @@ import (
 
 // CoreIngest implements the CoreIngestService interface for shared ingestion logic.
 type CoreIngest struct {
-	storage domain.StoragePort // Supabase storage
-	redis   domain.RedisStream // Redis stream publisher
+	storage domain.StoragePort
 }
 
 // NewCoreIngest creates a new CoreIngest service with the provided storage and Redis dependencies.
@@ -33,15 +31,13 @@ type CoreIngest struct {
 // Returns:
 //
 //	CoreIngestService implementation.
-func NewCoreIngest(storage domain.StoragePort, redis domain.RedisStream) domain.CoreIngestService {
+func NewCoreIngest(storage domain.StoragePort, _ domain.RedisStream) domain.CoreIngestService {
 	return &CoreIngest{
 		storage: storage,
-		redis:   redis,
 	}
 }
 
-// Ingest stores an event in Supabase (events, raw_data) and publishes to a Redis stream.
-// It validates the source, ensures idempotency using delivery_id, and handles large payloads.
+// Ingest transactionally stores the event, raw data, and an outbox record.
 // Args:
 //
 //	ctx: Context for cancellation and timeouts.
@@ -95,17 +91,6 @@ func (c *CoreIngest) Ingest(ctx context.Context, req domain.IngestRequest) error
 		return fmt.Errorf("failed to marshal payload: %v", err)
 	}
 
-	// Check for duplicate delivery (idempotency)
-	existing, err := c.storage.Query(ctx, "events", map[string]interface{}{"delivery_id": req.RecordID})
-	if err != nil {
-		log.Printf("RecordID: %s - Failed to check duplicate delivery in %.3fs: %v", req.RecordID, time.Since(start).Seconds(), err)
-		return fmt.Errorf("failed to check duplicate delivery: %v", err)
-	}
-	if len(existing) > 0 {
-		log.Printf("RecordID: %s - Duplicate delivery detected, skipping ingestion", req.RecordID)
-		return nil
-	}
-
 	companyID := req.CompanyID
 	companyID = strings.TrimSpace(companyID)
 	if companyID == "" || strings.EqualFold(companyID, "default") {
@@ -113,27 +98,20 @@ func (c *CoreIngest) Ingest(ctx context.Context, req domain.IngestRequest) error
 		return fmt.Errorf("company_id must resolve to a real company")
 	}
 
-	// Store raw payload in events table
 	eventID := uuid.New().String()
-	err = c.storage.Insert(ctx, "events", map[string]interface{}{
+	event := map[string]interface{}{
 		"id":          eventID,
 		"source":      req.Source,
 		"event_type":  req.EventType,
-		"payload":     string(payloadBytes),
+		"payload":     json.RawMessage(payloadBytes),
 		"delivery_id": req.RecordID,
 		"company_id":  companyID,
 		"processed":   false,
 		"truncated":   truncated,
 		"created_at":  req.CreatedAt.Format(time.RFC3339),
-	})
-	if err != nil {
-		log.Printf("RecordID: %s - Failed to insert into events in %.3fs: %v", req.RecordID, time.Since(start).Seconds(), err)
-		return fmt.Errorf("failed to insert into events: %v", err)
 	}
-	log.Printf("RecordID: %s - Stored %s event (%s) in events table in %.3fs", req.RecordID, req.Source, req.EventType, time.Since(start).Seconds())
 
-	// Store summarized content in raw_data
-	err = c.storage.Insert(ctx, "raw_data", map[string]interface{}{
+	rawData := map[string]interface{}{
 		"id":         uuid.New().String(),
 		"source":     req.Source,
 		"content":    content,
@@ -141,20 +119,13 @@ func (c *CoreIngest) Ingest(ctx context.Context, req domain.IngestRequest) error
 		"event_id":   eventID,
 		"company_id": companyID,
 		"created_at": req.CreatedAt.Format(time.RFC3339),
-	})
-	if err != nil {
-		log.Printf("RecordID: %s - Failed to store %s raw_data in %.3fs: %v", req.RecordID, req.Source, time.Since(start).Seconds(), err)
-		return fmt.Errorf("failed to store %s raw_data: %v", req.Source, err)
 	}
-	log.Printf("RecordID: %s - Stored %s raw_data in %.3fs", req.RecordID, req.Source, time.Since(start).Seconds())
 
-	// Create a separate context with timeout for publishing
-	publishCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-
-	// Publish to Redis stream
-	streamName := req.Source + "_jobs"
-	err = c.redis.Publish(publishCtx, streamName, domain.JobPayload{
+	outbox, ok := c.storage.(domain.IngestionOutboxRepository)
+	if !ok {
+		return fmt.Errorf("storage does not support transactional ingestion outbox")
+	}
+	err = outbox.PersistIngestion(ctx, event, rawData, domain.JobPayload{
 		ID:        "*",
 		RecordID:  req.RecordID,
 		Source:    req.Source,
@@ -165,10 +136,10 @@ func (c *CoreIngest) Ingest(ctx context.Context, req domain.IngestRequest) error
 		CreatedAt: req.CreatedAt.Format(time.RFC3339),
 	})
 	if err != nil {
-		log.Printf("RecordID: %s - Failed to publish to %s in %.3fs: %v", req.RecordID, streamName, time.Since(start).Seconds(), err)
-		return fmt.Errorf("failed to publish to %s: %w", streamName, err)
+		log.Printf("RecordID: %s - Failed to persist ingestion and outbox atomically in %.3fs: %v", req.RecordID, time.Since(start).Seconds(), err)
+		return fmt.Errorf("failed to persist ingestion and outbox: %w", err)
 	}
-	log.Printf("RecordID: %s - Published to %s in %.3fs", req.RecordID, streamName, time.Since(start).Seconds())
+	log.Printf("RecordID: %s - Persisted event, raw data, and outbox in %.3fs", req.RecordID, time.Since(start).Seconds())
 
 	return nil
 }
