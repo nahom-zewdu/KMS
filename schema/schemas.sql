@@ -293,6 +293,37 @@ BEGIN
 END;
 $$;
 
+ALTER TABLE public.events
+  ADD CONSTRAINT events_id_company_id_key UNIQUE (id, company_id);
+ALTER TABLE public.events
+  ADD CONSTRAINT events_id_company_delivery_key UNIQUE (id, company_id, delivery_id);
+
+CREATE TABLE public.ingestion_outbox (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_id UUID NOT NULL,
+  company_id TEXT NOT NULL,
+  delivery_id TEXT NOT NULL UNIQUE,
+  job_payload JSONB NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'publishing', 'published', 'dead_letter')),
+  attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+  available_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  locked_by TEXT,
+  locked_until TIMESTAMPTZ,
+  last_error TEXT CHECK (last_error IS NULL OR length(last_error) <= 1000),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  published_at TIMESTAMPTZ,
+  CONSTRAINT ingestion_outbox_event_fkey
+    FOREIGN KEY (event_id, company_id, delivery_id)
+    REFERENCES public.events (id, company_id, delivery_id),
+  CONSTRAINT ingestion_outbox_lock_state_check
+    CHECK ((status = 'publishing') = (locked_by IS NOT NULL AND locked_until IS NOT NULL))
+);
+CREATE INDEX ingestion_outbox_dispatch_idx
+  ON public.ingestion_outbox (available_at, created_at)
+  WHERE status IN ('pending', 'publishing');
+
 -- Update profiles
 ALTER TABLE public.profiles 
 ADD COLUMN IF NOT EXISTS company_id TEXT REFERENCES public.companies(id),
