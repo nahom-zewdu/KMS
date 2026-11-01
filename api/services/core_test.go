@@ -11,36 +11,43 @@ import (
 )
 
 type idempotencyStorage struct {
-	events   []map[string]interface{}
-	inserts  int
-	onInsert func(string)
+	events  []map[string]interface{}
+	rawData []map[string]interface{}
+	outbox  []domain.JobPayload
+	fail    error
 }
 
-func (s *idempotencyStorage) Insert(_ context.Context, table string, data map[string]interface{}) error {
-	s.inserts++
-	if s.onInsert != nil {
-		s.onInsert(table)
+func (s *idempotencyStorage) PersistIngestion(ctx context.Context, event, rawData map[string]interface{}, job domain.JobPayload) error {
+	if err := ctx.Err(); err != nil {
+		return err
 	}
-	if table == "events" {
-		s.events = append(s.events, data)
+	if s.fail != nil {
+		return s.fail
 	}
-	return nil
-}
-func (s *idempotencyStorage) Query(_ context.Context, table string, filter map[string]interface{}) ([]map[string]interface{}, error) {
-	if table != "events" {
-		return nil, nil
-	}
-	deliveryID, ok := filter["delivery_id"]
-	if !ok {
-		return nil, nil
-	}
-	var matched []map[string]interface{}
-	for _, event := range s.events {
-		if event["delivery_id"] == deliveryID {
-			matched = append(matched, event)
+	for _, existing := range s.events {
+		if existing["delivery_id"] == event["delivery_id"] {
+			return nil
 		}
 	}
-	return matched, nil
+	s.events = append(s.events, event)
+	s.rawData = append(s.rawData, rawData)
+	s.outbox = append(s.outbox, job)
+	return nil
+}
+func (*idempotencyStorage) ClaimIngestionOutbox(context.Context, string, int) ([]domain.IngestionOutboxRecord, error) {
+	return nil, nil
+}
+func (*idempotencyStorage) MarkIngestionOutboxPublished(context.Context, string, string) error {
+	return nil
+}
+func (*idempotencyStorage) FailIngestionOutbox(context.Context, string, string, string) error {
+	return nil
+}
+func (*idempotencyStorage) Insert(context.Context, string, map[string]interface{}) error {
+	return errors.New("individual persistence is not transactional")
+}
+func (*idempotencyStorage) Query(context.Context, string, map[string]interface{}) ([]map[string]interface{}, error) {
+	return nil, errors.New("unsupported query")
 }
 func (*idempotencyStorage) QueryKnowledgeGraphSupabase(context.Context, string, string) (string, error) {
 	return "", nil
@@ -80,7 +87,7 @@ func (*recordingRedis) Subscribe(context.Context, string) (<-chan string, error)
 	return nil, nil
 }
 
-func TestDuplicateGitHubDeliveryIsNotReprocessed(t *testing.T) {
+func TestDuplicateGitHubDeliveryPersistsOneOutboxJob(t *testing.T) {
 	storage := &idempotencyStorage{}
 	redis := &recordingRedis{}
 	core := NewCoreIngest(storage, redis)
@@ -107,68 +114,46 @@ func TestDuplicateGitHubDeliveryIsNotReprocessed(t *testing.T) {
 	if storage.events[0]["company_id"] != "company-a" {
 		t.Fatalf("stored event company_id = %v, want company-a", storage.events[0]["company_id"])
 	}
-	if redis.published != 1 {
-		t.Fatalf("published job count = %d, want 1", redis.published)
+	if len(storage.outbox) != 1 {
+		t.Fatalf("outbox job count = %d, want 1", len(storage.outbox))
 	}
 	if _, err := json.Marshal(storage.events[0]); err != nil {
 		t.Fatalf("stored event is not serializable: %v", err)
 	}
 }
 
-func TestCoreIngestPublishHonorsParentCancellation(t *testing.T) {
+func TestCoreIngestPersistenceHonorsParentCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	storage := &idempotencyStorage{
-		onInsert: func(table string) {
-			if table == "raw_data" {
-				cancel()
-			}
-		},
-	}
-	redis := &recordingRedis{}
-	core := NewCoreIngest(storage, redis)
+	cancel()
+	storage := &idempotencyStorage{}
+	core := NewCoreIngest(storage, nil)
 
 	err := core.Ingest(ctx, validIngestRequest())
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Ingest() error = %v, want context.Canceled", err)
 	}
-	if redis.publishCtx == nil {
-		t.Fatal("Redis publish was not attempted")
-	}
-	if !errors.Is(redis.publishCtx.Err(), context.Canceled) {
-		t.Fatalf("Redis publish context error = %v, want context.Canceled", redis.publishCtx.Err())
+	if len(storage.events) != 0 || len(storage.rawData) != 0 || len(storage.outbox) != 0 {
+		t.Fatalf("cancelled transaction persisted partial data: events=%d raw=%d outbox=%d",
+			len(storage.events), len(storage.rawData), len(storage.outbox))
 	}
 }
 
-func TestCoreIngestPublishInheritsParentDeadlineAndTenSecondBound(t *testing.T) {
+func TestCoreIngestPersistsEventRawDataAndOutboxTogether(t *testing.T) {
 	parentDeadline := time.Now().Add(2 * time.Second)
 	ctx, cancel := context.WithDeadline(context.Background(), parentDeadline)
 	defer cancel()
-	redis := &recordingRedis{}
-	core := NewCoreIngest(&idempotencyStorage{}, redis)
+	storage := &idempotencyStorage{}
+	core := NewCoreIngest(storage, nil)
 
 	if err := core.Ingest(ctx, validIngestRequest()); err != nil {
 		t.Fatalf("Ingest() error = %v", err)
 	}
-	gotDeadline, ok := redis.publishCtx.Deadline()
-	if !ok {
-		t.Fatal("Redis publish context has no deadline")
+	if len(storage.events) != 1 || len(storage.rawData) != 1 || len(storage.outbox) != 1 {
+		t.Fatalf("persisted events=%d raw=%d outbox=%d, want one of each",
+			len(storage.events), len(storage.rawData), len(storage.outbox))
 	}
-	if !gotDeadline.Equal(parentDeadline) {
-		t.Fatalf("publish deadline = %v, want inherited parent deadline %v", gotDeadline, parentDeadline)
-	}
-
-	redis = &recordingRedis{}
-	core = NewCoreIngest(&idempotencyStorage{}, redis)
-	if err := core.Ingest(context.Background(), validIngestRequest()); err != nil {
-		t.Fatalf("Ingest() without parent deadline error = %v", err)
-	}
-	gotDeadline, ok = redis.publishCtx.Deadline()
-	if !ok {
-		t.Fatal("Redis publish context has no deadline")
-	}
-	remaining := time.Until(gotDeadline)
-	if remaining <= 0 || remaining > 10*time.Second {
-		t.Fatalf("publish deadline remaining = %v, want >0 and <=10s", remaining)
+	if storage.outbox[0].CompanyID != "company-a" || storage.outbox[0].RecordID != "delivery-2" {
+		t.Fatalf("outbox tenant/delivery identity = %+v", storage.outbox[0])
 	}
 }
 
