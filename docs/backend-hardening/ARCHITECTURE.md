@@ -182,3 +182,54 @@ The live environment must set the identity secret, issuer, and audience before t
 ## Conclusion
 
 The checked-in code now has a tested user identity boundary and tenant policy design. Disposable PostgreSQL policy verification passed, but live Supabase inventory/data compatibility and pgvector RPC execution remain blocked. RLS does not constrain `service_role`; service-role query filters remain part of the security boundary.
+
+## Batch 6 — Ingestion outbox and worker recovery
+
+### Ingress-to-worker lifecycle
+
+```text
+Slack/GitHub webhook
+  -> provider verification and company resolution
+  -> CoreIngest
+  -> PostgreSQL transaction:
+       events + raw_data + ingestion_outbox
+  -> Go outbox dispatcher (leased SKIP LOCKED claims)
+  -> Redis source stream (XADD)
+  -> Python consumer group (XREADGROUP)
+  -> per-message lease + heartbeat
+  -> tenant validation + idempotent DB writes
+  -> optional codebase_analysis_jobs XADD for GitHub push
+  -> XACK after all handler work succeeds
+```
+
+Provider event payloads, summaries, and work records are tenant-owned. `events.delivery_id` remains globally unique for cross-provider duplicate detection. The persisted outbox has a composite foreign key to `(events.id, company_id, delivery_id)`, its own globally unique delivery ID, bounded error text, claim count, and terminal state. `persist_ingestion_with_outbox` rejects tenant or delivery mismatches and commits all three DB records atomically.
+
+The Go dispatcher claims up to five jobs with a 180-second lease, which bounds sequential per-record Redis and PostgREST operations. It publishes to Redis with a 10-second context bound and marks published only after `XADD` succeeds. DB and Redis cannot share one transaction. If the process crashes after `XADD` but before the DB status update, the lease expires and the same job is published again. That is explicitly **at-least-once**, not exactly-once. Failed dispatches use capped exponential delay and become DB `dead_letter` after 12 claims.
+
+Python starts newly created groups at `0-0` to avoid skipping existing entries. Existing groups are not rewound. `XREADGROUP` work enters the pending-entry list; a Redis `SET NX PX` lease is renewed by a heartbeat while the handler runs. Recovery inspects `XPENDING`, requires the delivery-dependent idle backoff to elapse, checks/acquires the lease, and then `XCLAIM`s. The idle threshold alone is not authorization to reclaim active work.
+
+The consumer validates a non-empty, non-`default` tenant and record ID before dispatching to a handler. Ingestion verifies that the exact event delivery belongs to that company. Entities and edges use tenant-derived deterministic IDs; raw-data updates and processed markers include company predicates. The codebase-analysis handler independently checks the source event's company. Query/Ramp retrieval passes company context to its query engine; codebase baseline and incremental jobs use company-scoped repository queries and writes.
+
+Successful handlers are acknowledged once by the consumer. Query handlers no longer acknowledge or delete stream entries. Failed deliveries remain pending and retry with capped exponential idle backoff; after five deliveries the consumer atomically writes a deduplicated dead-letter entry before acknowledging the source. It does not `XDEL` source entries.
+
+### Failure windows and guarantees
+
+| Failure point | Recovery behavior | Guarantee / limitation |
+|---|---|---|
+| Before DB transaction commits | Transaction rolls back; provider may retry | No outbox job is visible before commit |
+| DB transaction commits, Redis is unavailable | Outbox remains retryable; API ingestion can still succeed | Durable DB-to-Redis recovery after commit |
+| Redis accepts job, dispatcher crashes before DB mark | Outbox lease expires and republishes | At-least-once; consumer side effects must be idempotent |
+| Worker crashes before DB side effects | Entry remains pending; lease eventually expires and recovery claims it | Bounded retry, then DLQ |
+| Worker crashes after side effects but before `XACK` | Handler repeats; deterministic IDs and scoped upserts suppress duplicate records | At-least-once, not exactly-once |
+| Worker loses Redis lease and then resumes | Consumer refuses to acknowledge after observed lease loss; a replacement may already be processing | Lease is not a fencing token; external side effects must remain idempotent |
+| GitHub push's follow-up analysis `XADD` fails | Source ingestion event is not marked processed and retries | DB writes may repeat; follow-up stream has no independent DB outbox |
+| DLQ `XADD` succeeds but source `XACK` fails | Deduplication marker prevents immediate duplicate DLQ entry | Marker retention is 90 days; operator replay is not automated |
+
+### Deployment prerequisites and constraints
+
+- Apply and verify `schema/migrations/20261101_ingestion_outbox.sql` before deploying Go code that calls the outbox RPCs. The migration rejects invalid existing event ownership and does not infer or delete historical records.
+- Run `schema/tests/tenant_rls.sql` only against a disposable PostgreSQL/Supabase-compatible database. In this session no server was available; no migration or live project was touched.
+- Inspect existing Redis consumer-group cursors and pending entries before deployment. `0-0` changes only newly created groups; existing groups keep their current cursor and can retain unconsumed historical entries.
+- Monitor both the PostgreSQL outbox terminal state and each `<source>_dead_letter` stream. This batch does not add DLQ replay tools, automatic operator paging, or service dashboards.
+- An active handler is allowed to finish before the consumer exits; shutdown does not forcibly cancel an unbounded NLP or database call. Runtime termination grace must exceed the longest accepted handler duration.
+- A prior global entity ID scheme may have caused cross-company ownership collisions. Tenant-specific IDs prevent new collisions but do not repair or assign ownership to legacy entity rows.
