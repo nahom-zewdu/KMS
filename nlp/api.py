@@ -31,6 +31,15 @@ def get_supabase_client():
         supabase = init_supabase()
     return supabase
 
+@lru_cache(maxsize=8)
+def get_supabase_jwks_client(jwks_url: str) -> PyJWKClient:
+    """Create a cached JWKS client for Supabase signing keys."""
+    return PyJWKClient(
+        jwks_url,
+        cache_jwk_set=True,
+        lifespan=300,
+    )
+
 
 def verify_bearer_token(token: str | None) -> dict[str, Any]:
     """Verify a Supabase ES256 user token using the project's public JWKS."""
