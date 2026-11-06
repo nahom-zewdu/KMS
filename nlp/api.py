@@ -7,6 +7,9 @@ from typing import Any
 
 import jwt
 import uvicorn
+from functools import lru_cache
+from jwt import PyJWKClient
+from jwt.exceptions import PyJWKClientConnectionError
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -29,43 +32,65 @@ def get_supabase_client():
     return supabase
 
 
-def verify_bearer_token(token: str | None, *, secret_env: str) -> dict[str, Any]:
-    """Verify a Supabase user token and return claims scoped to the authenticated audience."""
+def verify_bearer_token(token: str | None) -> dict[str, Any]:
+    """Verify a Supabase ES256 user token using the project's public JWKS."""
     if not token:
         raise HTTPException(status_code=401, detail="Bearer token is required")
 
-    secret = os.getenv(secret_env)
-    if not secret:
-        raise HTTPException(status_code=503, detail=f"{secret_env} is not configured")
-    if len(secret.encode("utf-8")) < 32:
-        raise HTTPException(status_code=503, detail=f"{secret_env} must be at least 32 bytes")
+    supabase_url = os.getenv("SUPABASE_URL")
+    if not supabase_url:
+        raise HTTPException(status_code=503, detail="SUPABASE_URL is not configured")
 
     issuer = os.getenv("SUPABASE_JWT_ISSUER")
     if not issuer:
-        supabase_url = os.getenv("SUPABASE_URL")
-        issuer = f"{supabase_url.rstrip('/')}/auth/v1" if supabase_url else None
-    if not issuer:
-        raise HTTPException(status_code=503, detail="SUPABASE_JWT_ISSUER or SUPABASE_URL is required")
+        issuer = f"{supabase_url.rstrip('/')}/auth/v1"
 
     audience = os.getenv("SUPABASE_JWT_AUDIENCE", "authenticated")
 
+    jwks_url = os.getenv("SUPABASE_JWKS_URL")
+    if not jwks_url:
+        jwks_url = f"{supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
+
     try:
+        signing_key = get_supabase_jwks_client(
+            jwks_url
+        ).get_signing_key_from_jwt(token)
+
         claims = jwt.decode(
             token,
-            secret,
-            algorithms=["HS256"],
+            signing_key.key,
+            algorithms=["ES256"],
             issuer=issuer,
             audience=audience,
-            options={"require": ["exp", "iat", "iss", "aud", "sub", "role"]},
+            options={
+                "require": ["exp", "iat", "iss", "aud", "sub", "role"],
+            },
         )
+
+    except PyJWKClientConnectionError as exc:
+        logging.exception("Could not retrieve Supabase signing keys")
+        raise HTTPException(
+            status_code=503,
+            detail="Unable to retrieve Supabase signing keys",
+        ) from exc
+
     except jwt.PyJWTError as exc:
-        raise HTTPException(status_code=401, detail="Invalid or expired bearer token") from exc
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired bearer token",
+        ) from exc
 
     if str(claims.get("role", "")).lower() != "authenticated":
-        raise HTTPException(status_code=401, detail="Bearer token is not a user token")
+        raise HTTPException(
+            status_code=401,
+            detail="Bearer token is not a user token",
+        )
 
-    return {"user_id": str(claims["sub"]), "claims": claims, "source": "supabase_user"}
-
+    return {
+        "user_id": str(claims["sub"]),
+        "claims": claims,
+        "source": "supabase_user",
+    }
 
 def verify_internal_service_token(token: str | None) -> dict[str, Any]:
     """Validate a service token independently; this identity is not accepted by user routes."""
