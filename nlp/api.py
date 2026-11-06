@@ -170,7 +170,7 @@ def require_authenticated_identity(
     if scheme.lower() != "bearer" or not token:
         raise HTTPException(status_code=401, detail="Authorization header must use Bearer token format")
 
-    return verify_bearer_token(token, secret_env="SUPABASE_JWT_SECRET")
+    return verify_bearer_token(token=token)
 
 
 def normalize_company_id(company_id: str | None) -> str:
