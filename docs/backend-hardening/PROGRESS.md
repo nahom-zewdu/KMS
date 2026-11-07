@@ -569,3 +569,87 @@ The outbox and worker changes below are **IMPLEMENTED**. Focused Go and Python t
 **BLOCKED** — PostgreSQL migration/RPC execution, full Python suite, and all live deployment behavior.
 
 Rate limiting remains **NOT STARTED**.
+
+## Ramp Plans API 401 — ES256/JWKS corrective investigation
+
+### Request-path finding
+
+The reported `ramp plan request failed: 401` comes from the Next.js dashboard
+Ramp page's direct request to the Python NLP API's `GET /ramp-plans` endpoint;
+the Go API is not in this request path. The page obtains `accessToken` from
+`getUserContext()` and conditionally sends it as the `Authorization: Bearer`
+credential to the NLP URL. That value is the Supabase session access token,
+not an internal service token, and the page does not proxy it through Go.
+Because the value is nullable and no request capture was available, the
+specific failed request's header presence and contents are **BLOCKED**.
+
+The Python route returns 401 when authentication is missing or Supabase token
+verification rejects the request. Company membership failure is a separate
+403. The Python verifier in the current branch already uses Supabase JWKS and
+ES256; it is not the former HS256-only implementation described in older
+documentation. The verifier requires and validates `exp`, `iat`, `iss`, `aud`,
+`sub`, and `role`, restricts the algorithm to ES256, checks issuer/audience,
+and requires `role=authenticated`. `X-User-Id` is not accepted as identity.
+Internal service JWTs use a separate HS256 verifier and are not user
+credentials.
+
+### Changes made
+
+- `nlp/api.py`: loads `nlp/.env` by an explicit path at module startup, applies
+  bounded JWKS retrieval, validates verifier configuration, and logs
+  authentication rejection reasons without logging token material. Missing
+  or malformed verifier configuration and JWKS connectivity failures return
+  503 rather than being misreported as invalid user credentials.
+- `nlp/tests/test_authz.py`: replaces stale HS256 user-token assumptions with
+  offline ES256 tests using generated keys and a mocked JWKS client. Coverage
+  includes missing/malformed credentials, invalid signature, expiration,
+  issuer/audience and required-claim failures, JWKS configuration/connection
+  failures, separate internal service authentication, and Ramp membership
+  authorization.
+- `.env.example`, `nlp/README.md`: document runtime variable names, server-only
+  credential separation, explicit `.env` loading, and the development/test
+  commands. No secret values are included.
+- `ARCHITECTURE.md`, `SECURITY-DECISIONS.md`, `TEST-MATRIX.md`: reconcile
+  stale HS256-only claims with the implemented ES256/JWKS verifier and record
+  the remaining runtime verification limit.
+
+### Verification
+
+1. `cd nlp && .venv/bin/python -m pytest -q tests/test_authz.py tests/test_ramp_v2.py`
+   - **VERIFIED — 40 passed, 1 third-party deprecation warning**.
+   - Tests use generated ES256 keys and a fake JWKS client; no external
+     authentication network request is made.
+2. `cd nlp && .venv/bin/python -m compileall -q api.py tests/test_authz.py`
+   - **VERIFIED — passed**.
+3. `git diff --check`
+   - **VERIFIED — passed**.
+
+### Runtime and deployment status
+
+The local Supabase project URL matches the project ID supplied for this
+incident. The user-reported active signing algorithm is ES256, which the
+current implementation and offline tests support. The live JWKS response,
+runtime process environment, and token from the failed request were not
+retrieved or inspected, and the request was not retried against a deployed
+service. Consequently the code change and offline behavior are **IMPLEMENTED
+and VERIFIED**, but resolution of the specific 401 remains **BLOCKED**, not
+claimed fixed.
+
+The Python service loads `nlp/.env` explicitly; `uv run` is not required for
+environment loading. Run locally from `nlp/` with
+`.venv/bin/python -m uvicorn api:app --host 127.0.0.1 --port 8000 --reload`.
+Relevant variable names are `SUPABASE_URL`, `SUPABASE_KEY`,
+`SUPABASE_JWT_ISSUER`, `SUPABASE_JWT_AUDIENCE`, `SUPABASE_JWKS_URL`,
+`INTERNAL_SERVICE_SECRET`, `INTERNAL_SERVICE_ISSUER`, and
+`INTERNAL_SERVICE_AUDIENCE`. Do not use or expose the Supabase service-role
+key as a user token.
+
+The separate Next.js `/api/ramp-plans` route was also identified as a path
+that does not forward Authorization; no caller was found for it during this
+investigation. It does not match the observed dashboard page's direct request,
+but should not be used by user-token callers without fixing its forwarding
+contract.
+
+No live Supabase project was contacted or changed. The actual request token
+and deployed environment remain the next diagnostic prerequisites. No rate
+limiting work was started.
