@@ -4,15 +4,19 @@ KMS Onboard API HTTP endpoints for playbook generation.
 import logging
 import os
 from typing import Any
+from urllib.parse import urlsplit
 
 import jwt
 import uvicorn
 from functools import lru_cache
 from jwt import PyJWKClient
-from jwt.exceptions import PyJWKClientConnectionError
+from jwt.exceptions import PyJWKClientConnectionError, PyJWKClientError
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from dotenv import load_dotenv
+
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 from codebase.baseline import CodebaseBaselineSync
 from playbooks.generator import PlaybookGenerator
@@ -22,6 +26,7 @@ from visualizer.service import VisualizerService
 
 app = FastAPI(title="KMS Onboard API")
 supabase = None
+logger = logging.getLogger("kms.auth")
 
 
 def get_supabase_client():
@@ -36,29 +41,82 @@ def get_supabase_jwks_client(jwks_url: str) -> PyJWKClient:
     """Create a cached JWKS client for Supabase signing keys."""
     return PyJWKClient(
         jwks_url,
+        timeout=5,
         cache_jwk_set=True,
         lifespan=300,
     )
 
 
+def _log_auth_failure(reason: str) -> None:
+    logger.info(
+        "Authentication rejected: reason=%s",
+        reason,
+        extra={"auth_event": "rejected", "auth_failure_reason": reason},
+    )
+
+
+def _valid_http_url(value: str) -> bool:
+    parsed = urlsplit(value)
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+
+def _jwt_failure_reason(exc: jwt.PyJWTError) -> str:
+    if isinstance(exc, jwt.ExpiredSignatureError):
+        return "expired"
+    if isinstance(exc, jwt.InvalidIssuerError):
+        return "wrong_issuer"
+    if isinstance(exc, jwt.InvalidAudienceError):
+        return "wrong_audience"
+    if isinstance(exc, jwt.InvalidSignatureError):
+        return "invalid_signature"
+    if isinstance(exc, jwt.MissingRequiredClaimError):
+        return "missing_claim"
+    if isinstance(exc, jwt.InvalidAlgorithmError):
+        return "invalid_algorithm"
+    return "invalid_token"
+
+
 def verify_bearer_token(token: str | None) -> dict[str, Any]:
     """Verify a Supabase ES256 user token using the project's public JWKS."""
     if not token:
+        _log_auth_failure("missing_token")
         raise HTTPException(status_code=401, detail="Bearer token is required")
 
     supabase_url = os.getenv("SUPABASE_URL")
     if not supabase_url:
+        logger.error(
+            "Supabase JWT verification is not configured",
+            extra={"auth_event": "configuration_error", "auth_failure_reason": "missing_supabase_url"},
+        )
         raise HTTPException(status_code=503, detail="SUPABASE_URL is not configured")
+    if not _valid_http_url(supabase_url):
+        logger.error(
+            "Supabase JWT verification is not configured",
+            extra={"auth_event": "configuration_error", "auth_failure_reason": "invalid_supabase_url"},
+        )
+        raise HTTPException(status_code=503, detail="SUPABASE_URL is invalid")
 
     issuer = os.getenv("SUPABASE_JWT_ISSUER")
     if not issuer:
         issuer = f"{supabase_url.rstrip('/')}/auth/v1"
 
     audience = os.getenv("SUPABASE_JWT_AUDIENCE", "authenticated")
+    if not audience.strip():
+        logger.error(
+            "Supabase JWT verification is not configured",
+            extra={"auth_event": "configuration_error", "auth_failure_reason": "empty_audience"},
+        )
+        raise HTTPException(status_code=503, detail="SUPABASE_JWT_AUDIENCE is invalid")
 
     jwks_url = os.getenv("SUPABASE_JWKS_URL")
     if not jwks_url:
         jwks_url = f"{supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
+    if not _valid_http_url(jwks_url):
+        logger.error(
+            "Supabase JWT verification is not configured",
+            extra={"auth_event": "configuration_error", "auth_failure_reason": "invalid_jwks_url"},
+        )
+        raise HTTPException(status_code=503, detail="SUPABASE_JWKS_URL is invalid")
 
     try:
         signing_key = get_supabase_jwks_client(
@@ -77,23 +135,38 @@ def verify_bearer_token(token: str | None) -> dict[str, Any]:
         )
 
     except PyJWKClientConnectionError as exc:
-        logging.exception("Could not retrieve Supabase signing keys")
+        logger.error(
+            "Could not retrieve Supabase signing keys: reason=jwks_unavailable",
+            extra={"auth_event": "verification_unavailable", "auth_failure_reason": "jwks_unavailable"},
+        )
         raise HTTPException(
             status_code=503,
             detail="Unable to retrieve Supabase signing keys",
         ) from exc
 
+    except PyJWKClientError as exc:
+        _log_auth_failure("signing_key_not_found")
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired bearer token",
+        ) from exc
+
     except jwt.PyJWTError as exc:
+        _log_auth_failure(_jwt_failure_reason(exc))
         raise HTTPException(
             status_code=401,
             detail="Invalid or expired bearer token",
         ) from exc
 
     if str(claims.get("role", "")).lower() != "authenticated":
+        _log_auth_failure("wrong_role")
         raise HTTPException(
             status_code=401,
             detail="Bearer token is not a user token",
         )
+    if not str(claims.get("sub") or "").strip():
+        _log_auth_failure("missing_subject")
+        raise HTTPException(status_code=401, detail="Invalid or expired bearer token")
 
     return {
         "user_id": str(claims["sub"]),
@@ -104,14 +177,23 @@ def verify_bearer_token(token: str | None) -> dict[str, Any]:
 def verify_internal_service_token(token: str | None) -> dict[str, Any]:
     """Validate a service token independently; this identity is not accepted by user routes."""
     if not token:
+        _log_auth_failure("missing_internal_service_token")
         raise HTTPException(status_code=401, detail="Service bearer token is required")
 
     secret = os.getenv("INTERNAL_SERVICE_SECRET")
     issuer = os.getenv("INTERNAL_SERVICE_ISSUER")
     audience = os.getenv("INTERNAL_SERVICE_AUDIENCE")
     if not secret or not issuer or not audience:
+        logger.error(
+            "Internal service token verification is not configured",
+            extra={"auth_event": "configuration_error", "auth_failure_reason": "incomplete_internal_service_configuration"},
+        )
         raise HTTPException(status_code=503, detail="Internal service token configuration is incomplete")
     if len(secret.encode("utf-8")) < 32:
+        logger.error(
+            "Internal service token verification is not configured",
+            extra={"auth_event": "configuration_error", "auth_failure_reason": "weak_internal_service_secret"},
+        )
         raise HTTPException(status_code=503, detail="INTERNAL_SERVICE_SECRET must be at least 32 bytes")
 
     try:
@@ -124,10 +206,15 @@ def verify_internal_service_token(token: str | None) -> dict[str, Any]:
             options={"require": ["exp", "iat", "iss", "aud", "sub", "role"]},
         )
     except jwt.PyJWTError as exc:
+        _log_auth_failure(f"internal_service_{_jwt_failure_reason(exc)}")
         raise HTTPException(status_code=401, detail="Invalid or expired service token") from exc
 
     if str(claims.get("role", "")).lower() != "service":
+        _log_auth_failure("wrong_internal_service_role")
         raise HTTPException(status_code=401, detail="Token is not an internal service token")
+    if not str(claims.get("sub") or "").strip():
+        _log_auth_failure("missing_internal_service_subject")
+        raise HTTPException(status_code=401, detail="Invalid or expired service token")
     return {"service_id": str(claims["sub"]), "claims": claims, "source": "internal_service"}
 
 
@@ -137,16 +224,20 @@ def require_company_scoped_service_identity(
 ) -> dict[str, Any]:
     """Require an internal token cryptographically bound to the requested company."""
     if not authorization:
+        _log_auth_failure("missing_authorization_header")
         raise HTTPException(status_code=401, detail="Authorization header is required")
     scheme, _, token = authorization.partition(" ")
-    if scheme.lower() != "bearer" or not token:
+    if scheme.lower() != "bearer" or not token or any(char.isspace() for char in token):
+        _log_auth_failure("malformed_authorization_header")
         raise HTTPException(status_code=401, detail="Authorization header must use Bearer format")
 
     identity = verify_internal_service_token(token)
     token_company = str(identity["claims"].get("company_id") or "").strip()
     if not token_company or token_company.lower() == "default":
+        _log_auth_failure("missing_or_invalid_internal_service_company")
         raise HTTPException(status_code=401, detail="Service token is not scoped to a company")
     if token_company != company_id:
+        _log_auth_failure("internal_service_company_mismatch")
         raise HTTPException(status_code=403, detail="Service token does not authorize this company")
     return identity
 
@@ -158,16 +249,25 @@ def require_authenticated_identity(
 ) -> dict[str, Any]:
     """Require a verified Supabase user JWT; service identities cannot impersonate users."""
     if legacy_user_id is not None:
+        _log_auth_failure("legacy_identity_header")
         raise HTTPException(
             status_code=401,
             detail="X-User-Id is not accepted for authentication. Use Authorization: Bearer <jwt>",
         )
 
     if not authorization:
+        _log_auth_failure("missing_authorization_header")
         raise HTTPException(status_code=401, detail="Authorization header is required")
 
     scheme, _, token = authorization.partition(" ")
-    if scheme.lower() != "bearer" or not token:
+    malformed_header = (
+        scheme.lower() != "bearer"
+        or not token
+        or any(char.isspace() for char in token)
+    )
+    if malformed_header:
+        _log_auth_failure("malformed_authorization_header")
+    if malformed_header:
         raise HTTPException(status_code=401, detail="Authorization header must use Bearer token format")
 
     return verify_bearer_token(token=token)
