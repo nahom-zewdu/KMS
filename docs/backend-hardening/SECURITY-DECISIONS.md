@@ -91,14 +91,33 @@ The corrective review now records the relevant negative tests, deployment secret
 
 ### Decision
 
-User-facing Python API routes accept only Supabase user JWTs. Verification is HS256-only and requires `exp`, `iat`, `iss`, `aud`, `sub`, and `role`; issuer and audience are checked, and `role` must be `authenticated`. Legacy `X-User-Id` is rejected. An independently configured service-token validator is not an alternate identity source for user routes.
+User-facing Python API routes accept only Supabase user JWTs. Verification uses
+the configured Supabase JWKS and allows ES256 only; it requires `exp`, `iat`,
+`iss`, `aud`, `sub`, and `role`, checks issuer and audience, and requires
+`role=authenticated`. The default issuer and JWKS URL are derived from
+`SUPABASE_URL`; audience defaults to `authenticated`. Legacy `X-User-Id` is
+rejected. Internal HS256 service tokens use a separate verifier and are never
+accepted as user identities.
 
 ### Deployment assumptions
 
-- Configure `SUPABASE_JWT_SECRET` with at least 32 bytes.
-- Configure `SUPABASE_JWT_ISSUER` or provide `SUPABASE_URL`, from which `/auth/v1` is appended.
+- Provide the correct `SUPABASE_URL`; its `/auth/v1` issuer and JWKS endpoint
+  are used unless `SUPABASE_JWT_ISSUER` or `SUPABASE_JWKS_URL` overrides them.
 - Configure `SUPABASE_JWT_AUDIENCE` if it differs from `authenticated`.
-- The live Supabase signing algorithm has not been verified. Asymmetric/JWKS tokens are unsupported until a separate verifier is implemented.
+- The verifier accepts ES256 only. Offline generated-key tests verify the
+  implementation; the active deployment's JWKS response, deployed process
+  configuration, and the token from the reported request remain unverified.
+- Internal service tokens require `INTERNAL_SERVICE_SECRET` (at least 32
+  bytes), `INTERNAL_SERVICE_ISSUER`, and `INTERNAL_SERVICE_AUDIENCE`. These
+  values are separate from user-token verification and must remain server-side.
+
+### Verification boundary
+
+The local configuration's Supabase project URL matches the project reported
+for this incident. No live token was inspected and no live JWKS request was
+made. Therefore this decision records code compatibility and offline tests,
+not proof that the observed request was sent with a valid token or that the
+running deployment has the expected environment.
 
 ## Decision 9: membership authorization is non-recursive and admin-controlled
 
