@@ -177,7 +177,20 @@ The database policy set now treats `company_members` as an admin-controlled memb
 
 ### Production assumptions and deployment dependency
 
-The live environment must set the identity secret, issuer, and audience before the Python API is exposed beyond trusted infrastructure. This implementation supports HS256 only; the deployed Supabase signing algorithm is an unresolved assumption. The guardrail migration aborts rather than assigning unmapped historical data. No live Supabase changes were made.
+The Python API loads `nlp/.env` explicitly when present; `uv run` is not relied
+on to load environment files. User routes validate Supabase access tokens with
+ES256 keys from the configured project's JWKS, checking issuer, audience,
+expiration, issued-at time, subject, and authenticated role. The internal
+service-token path is separate and uses HS256 with its own issuer, audience,
+and secret. `SUPABASE_KEY` is a server-side database credential, not a user
+token.
+
+Offline generated-key tests verify ES256 acceptance and invalid-token
+rejection. The local project URL matches the project reported for the Ramp
+incident, but the live JWKS response, deployed process environment, and token
+from the specific failed request were not captured; runtime diagnosis remains
+BLOCKED. The guardrail migration aborts rather than assigning unmapped
+historical data. No live Supabase changes were made.
 
 ## Conclusion
 
