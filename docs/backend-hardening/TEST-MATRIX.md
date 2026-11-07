@@ -22,11 +22,12 @@ These are historical attempts; the focused Python command below is the later suc
 | Area | Test / command | Result | Coverage and limits |
 |---|---|---|---|
 | User JWT and API authorization | `cd /home/nahom/Projects/personal/KMS/nlp && PYTHONPATH=. pytest tests/test_authz.py tests/test_ramp_v2.py tests/test_evidence_composition.py tests/test_query_engine_context.py -q` | **VERIFIED — 35 passed** | Forged identity header rejection, token expiry/issuer/audience/algorithm/role checks, wrong-company membership, service-token misuse, and tenant-filter-aware application fakes. Third-party deprecation warnings only. |
+| Current ES256/JWKS auth and Ramp regression | `cd nlp && .venv/bin/python -m pytest -q tests/test_authz.py tests/test_ramp_v2.py` | **VERIFIED — 40 passed, 1 third-party deprecation warning** | Offline generated ES256 keys and a mocked JWKS client; validates safe diagnostics for malformed user headers and internal-token misuse; does not contact Supabase or establish the token/environment used by the reported request. |
 | PostgreSQL tenant policy harness | `cd /home/nahom/Projects/personal/KMS && psql 'postgresql://postgres@127.0.0.1:55432/postgres' -f schema/tests/tenant_rls.sql` | **VERIFIED — passed** on disposable PostgreSQL 16 | Applies both migrations twice. Exercises RLS tenant visibility and writes, non-recursive membership lookup, self-insertion/self-promotion rejection, unauthorized role change, company creation with owner, graph RPC filtering, and service-role access. Uses a minimal `auth.uid()` compatibility stub; this is not a live Supabase test. |
 | Migration fail-closed behavior | Disposable-database probe with an existing `companies.id = 'default'` | **VERIFIED — expected failure and rollback** | Migration aborted, original row remained, and schema/data changes in the failed transaction were rolled back. This probe was performed manually; it is not represented as a named automated test. |
 | pgvector document RPC | Runtime execution of `match_documents` | **BLOCKED** | The disposable PostgreSQL image did not include pgvector. SQL requires explicit company filtering, but runtime RPC behavior is unverified. |
 | Live Supabase catalog/policies/data | No live query or migration was performed | **BLOCKED** | Need operator-reviewed inventory, existing-data mapping, grants/policy reconciliation, and deployment validation. |
-| Production JWT signer | Live Supabase signing configuration not inspected | **BLOCKED** | Python verifier currently supports HS256 only. Confirm issuer, audience, and algorithm before exposure; asymmetric/JWKS support is not implemented. |
+| Production JWT signer and reported request | Live JWKS and request token not inspected | **BLOCKED** | The Python verifier supports ES256/JWKS and has offline coverage. The active runtime's signing key, environment, and actual request token have not been verified. |
 | Invitation lifecycle | No end-to-end invitation integration test exists | **BLOCKED** | Persisted invitation storage and invite acceptance are not implemented; direct unauthorized membership additions are denied by policy tests. |
 
 ## Negative test coverage
@@ -34,7 +35,7 @@ These are historical attempts; the focused Python command below is the later suc
 | Requirement | Evidence | Status |
 |---|---|---|
 | Forged `X-User-Id` / unauthenticated direct API call | Python authz tests | **VERIFIED** |
-| Missing, expired, wrong-issuer, wrong-audience, wrong-algorithm, or wrong-role user token | Python authz tests | **VERIFIED** |
+| Missing, malformed, invalid-signature, expired, wrong-issuer, wrong-audience, wrong-algorithm, or wrong-role user token | Python authz tests | **VERIFIED** |
 | Service-token misuse as user identity | Python authz tests | **VERIFIED** |
 | User/company mismatch | Python membership check tests with filter-aware fakes | **VERIFIED** |
 | Membership self-insertion and self-promotion | Disposable PostgreSQL policy harness | **VERIFIED** |
