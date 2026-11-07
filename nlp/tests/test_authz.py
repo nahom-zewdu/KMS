@@ -1,21 +1,28 @@
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+from typing import Any
+import logging
 
 import jwt
 import pytest
+from cryptography.hazmat.primitives.asymmetric import ec
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
+from jwt.exceptions import PyJWKClientConnectionError
 
 import api
 
-USER_SECRET = "user-token-test-secret-at-least-32-bytes"
 SERVICE_SECRET = "service-token-test-secret-at-least-32-bytes"
 USER_ISSUER = "https://kms-test.supabase.co/auth/v1"
+USER_URL = "https://kms-test.supabase.co"
 USER_AUDIENCE = "authenticated"
+USER_PRIVATE_KEY = ec.generate_private_key(ec.SECP256R1())
+OTHER_PRIVATE_KEY = ec.generate_private_key(ec.SECP256R1())
 
 
-def make_token(
-    secret=USER_SECRET,
+def make_user_token(
     *,
+    private_key=USER_PRIVATE_KEY,
     issuer=USER_ISSUER,
     audience=USER_AUDIENCE,
     role="authenticated",
@@ -23,24 +30,58 @@ def make_token(
     include_exp=True,
     include_iat=True,
     include_audience=True,
-    company_id=None,
-    algorithm="HS256",
+    subject="user-123",
 ):
     now = datetime.now(timezone.utc)
-    claims = {
-        "sub": "user-123",
-        "iss": issuer,
-        "role": role,
-    }
+    claims = {"sub": subject, "iss": issuer, "role": role}
     if include_iat:
         claims["iat"] = int(now.timestamp())
     if include_audience:
         claims["aud"] = audience
     if include_exp:
         claims["exp"] = int((expires_at or now + timedelta(minutes=5)).timestamp())
+    return jwt.encode(
+        claims,
+        private_key,
+        algorithm="ES256",
+        headers={"kid": "test-key"},
+    )
+
+
+def make_service_token(
+    *,
+    secret=SERVICE_SECRET,
+    issuer="kms-internal",
+    audience="kms-nlp",
+    role="service",
+    subject="kms-api",
+    company_id=None,
+):
+    now = datetime.now(timezone.utc)
+    claims = {
+        "sub": subject,
+        "iss": issuer,
+        "aud": audience,
+        "iat": int(now.timestamp()),
+        "exp": int((now + timedelta(minutes=5)).timestamp()),
+        "role": role,
+    }
     if company_id is not None:
         claims["company_id"] = company_id
-    return jwt.encode(claims, secret, algorithm=algorithm)
+    return jwt.encode(claims, secret, algorithm="HS256")
+
+
+class FakeJWKClient:
+    def __init__(self, public_key=None, error=None):
+        self.public_key = public_key or USER_PRIVATE_KEY.public_key()
+        self.error = error
+        self.tokens = []
+
+    def get_signing_key_from_jwt(self, token):
+        self.tokens.append(token)
+        if self.error:
+            raise self.error
+        return SimpleNamespace(key=self.public_key)
 
 
 class FakeResponse:
@@ -49,9 +90,9 @@ class FakeResponse:
 
 
 class FakeTable:
-    def __init__(self, rows):
+    def __init__(self, rows: list[dict[str, Any]]):
         self.rows = list(rows)
-        self.filters = {}
+        self.filters: dict[str, Any] = {}
 
     def select(self, *args, **kwargs):
         return self
@@ -76,93 +117,187 @@ class FakeSupabase:
         return FakeTable(self.rows)
 
 
-def test_require_authenticated_identity_accepts_verified_token(monkeypatch):
-    monkeypatch.setenv("SUPABASE_JWT_SECRET", USER_SECRET)
+def configure_user_jwks(monkeypatch, *, public_key=None, error=None):
+    monkeypatch.setenv("SUPABASE_URL", USER_URL)
     monkeypatch.setenv("SUPABASE_JWT_ISSUER", USER_ISSUER)
-    token = make_token()
+    monkeypatch.setenv("SUPABASE_JWT_AUDIENCE", USER_AUDIENCE)
+    monkeypatch.delenv("SUPABASE_JWKS_URL", raising=False)
+    client = FakeJWKClient(public_key=public_key, error=error)
+    requested_urls = []
+
+    def get_client(url):
+        requested_urls.append(url)
+        return client
+
+    monkeypatch.setattr(api, "get_supabase_jwks_client", get_client)
+    return client, requested_urls
+
+
+def test_missing_authorization_header_is_rejected():
+    with pytest.raises(HTTPException) as exc:
+        api.require_authenticated_identity()
+    assert exc.value.status_code == 401
+
+
+@pytest.mark.parametrize("authorization", ["Basic abc", "Bearer", "Bearer a b", ""])
+def test_malformed_bearer_header_is_rejected(authorization, caplog):
+    caplog.set_level(logging.INFO, logger="kms.auth")
+    with pytest.raises(HTTPException) as exc:
+        api.require_authenticated_identity(authorization)
+    assert exc.value.status_code == 401
+    expected_reason = (
+        "missing_authorization_header"
+        if not authorization
+        else "malformed_authorization_header"
+    )
+    assert expected_reason in caplog.text
+
+
+def test_valid_es256_supabase_token_uses_default_project_jwks(monkeypatch):
+    client, requested_urls = configure_user_jwks(monkeypatch)
+    token = make_user_token()
+
     identity = api.require_authenticated_identity(f"Bearer {token}")
+
     assert identity["user_id"] == "user-123"
     assert identity["source"] == "supabase_user"
+    assert client.tokens == [token]
+    assert requested_urls == [f"{USER_URL}/auth/v1/.well-known/jwks.json"]
 
 
-def test_require_authenticated_identity_rejects_forged_user_header(monkeypatch):
+def test_invalid_es256_signature_is_rejected(monkeypatch, caplog):
+    caplog.set_level(logging.INFO, logger="kms.auth")
+    configure_user_jwks(monkeypatch)
+    token = make_user_token(private_key=OTHER_PRIVATE_KEY)
+
     with pytest.raises(HTTPException) as exc:
-        api.require_authenticated_identity(None, legacy_user_id="forged-user")
+        api.require_authenticated_identity(f"Bearer {token}")
+
     assert exc.value.status_code == 401
+    assert "invalid_signature" in caplog.text
+    assert token not in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("token", "failure_reason"),
+    [
+        (
+            make_user_token(expires_at=datetime.now(timezone.utc) - timedelta(minutes=1)),
+            "expired",
+        ),
+        (make_user_token(issuer="https://attacker.invalid/auth/v1"), "wrong_issuer"),
+        (make_user_token(audience="service_role"), "wrong_audience"),
+    ],
+)
+def test_expired_wrong_issuer_and_wrong_audience_tokens_are_rejected(
+    monkeypatch, caplog, token, failure_reason
+):
+    caplog.set_level(logging.INFO, logger="kms.auth")
+    configure_user_jwks(monkeypatch)
+
+    with pytest.raises(HTTPException) as exc:
+        api.require_authenticated_identity(f"Bearer {token}")
+
+    assert exc.value.status_code == 401
+    assert failure_reason in caplog.text
 
 
 @pytest.mark.parametrize(
     "token",
     [
-        make_token(expires_at=datetime.now(timezone.utc) - timedelta(minutes=1)),
-        make_token(include_exp=False),
-        make_token(include_iat=False),
-        make_token(include_audience=False),
-        make_token(issuer="https://attacker.invalid/auth/v1"),
-        make_token(audience="service_role"),
-        make_token(role="service"),
+        make_user_token(include_exp=False),
+        make_user_token(include_iat=False),
+        make_user_token(include_audience=False),
+        make_user_token(role="service"),
+        make_user_token(subject=""),
     ],
 )
-def test_require_authenticated_identity_rejects_expired_or_wrong_scope_tokens(monkeypatch, token):
-    monkeypatch.setenv("SUPABASE_JWT_SECRET", USER_SECRET)
-    monkeypatch.setenv("SUPABASE_JWT_ISSUER", USER_ISSUER)
+def test_required_user_claims_are_enforced(monkeypatch, token):
+    configure_user_jwks(monkeypatch)
+
     with pytest.raises(HTTPException) as exc:
         api.require_authenticated_identity(f"Bearer {token}")
+
     assert exc.value.status_code == 401
 
 
-def test_require_authenticated_identity_rejects_wrong_signing_algorithm(monkeypatch):
-    monkeypatch.setenv("SUPABASE_JWT_SECRET", USER_SECRET)
-    monkeypatch.setenv("SUPABASE_JWT_ISSUER", USER_ISSUER)
-    token = make_token(secret="a" * 64, algorithm="HS384")
+def test_missing_supabase_url_fails_as_configuration_error(monkeypatch):
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+
     with pytest.raises(HTTPException) as exc:
-        api.require_authenticated_identity(f"Bearer {token}")
-    assert exc.value.status_code == 401
+        api.verify_bearer_token("not-a-real-token")
+
+    assert exc.value.status_code == 503
 
 
-def test_user_route_rejects_a_valid_internal_service_token(monkeypatch):
-    monkeypatch.setenv("SUPABASE_JWT_SECRET", USER_SECRET)
-    monkeypatch.setenv("SUPABASE_JWT_ISSUER", USER_ISSUER)
+def test_invalid_jwks_url_fails_as_configuration_error(monkeypatch):
+    monkeypatch.setenv("SUPABASE_URL", USER_URL)
+    monkeypatch.setenv("SUPABASE_JWKS_URL", "not-a-url")
+
+    with pytest.raises(HTTPException) as exc:
+        api.verify_bearer_token("not-a-real-token")
+
+    assert exc.value.status_code == 503
+
+
+def test_jwks_connection_failure_is_unavailable_not_unauthorized(monkeypatch, caplog):
+    caplog.set_level(logging.INFO, logger="kms.auth")
+    configure_user_jwks(
+        monkeypatch,
+        error=PyJWKClientConnectionError("test connection failure"),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        api.verify_bearer_token("test-token")
+
+    assert exc.value.status_code == 503
+    assert "jwks_unavailable" in caplog.text
+    assert "test-token" not in caplog.text
+
+
+def test_internal_service_token_is_separate_from_user_auth(monkeypatch):
     monkeypatch.setenv("INTERNAL_SERVICE_SECRET", SERVICE_SECRET)
     monkeypatch.setenv("INTERNAL_SERVICE_ISSUER", "kms-internal")
     monkeypatch.setenv("INTERNAL_SERVICE_AUDIENCE", "kms-nlp")
-    service_token = make_token(
-        SERVICE_SECRET,
-        issuer="kms-internal",
-        audience="kms-nlp",
-        role="service",
-    )
-    service_identity = api.verify_internal_service_token(service_token)
-    assert service_identity["source"] == "internal_service"
+    configure_user_jwks(monkeypatch)
+    service_token = make_service_token()
 
+    assert api.verify_internal_service_token(service_token)["source"] == "internal_service"
     response = TestClient(api.app).get(
-        "/ramp-plans?company_id=company-123",
+        "/ramp-plans?company_id=company-a",
         headers={"Authorization": f"Bearer {service_token}"},
     )
     assert response.status_code == 401
 
 
-def test_api_route_rejects_forged_identity_header(monkeypatch):
-    response = TestClient(api.app).get(
-        "/ramp-plans?company_id=company-123",
-        headers={"X-User-Id": "user-123"},
-    )
-    assert response.status_code == 401
-
-
-def test_service_token_rejects_wrong_audience(monkeypatch):
+def test_internal_service_token_rejects_wrong_audience(monkeypatch, caplog):
+    caplog.set_level(logging.INFO, logger="kms.auth")
     monkeypatch.setenv("INTERNAL_SERVICE_SECRET", SERVICE_SECRET)
     monkeypatch.setenv("INTERNAL_SERVICE_ISSUER", "kms-internal")
     monkeypatch.setenv("INTERNAL_SERVICE_AUDIENCE", "kms-nlp")
-    token = make_token(
-        SERVICE_SECRET,
-        issuer="kms-internal",
-        audience="other-service",
-        role="service",
-    )
+    token = make_service_token(audience="other-service")
+
     with pytest.raises(HTTPException) as exc:
         api.verify_internal_service_token(token)
+
     assert exc.value.status_code == 401
+    assert "internal_service_wrong_audience" in caplog.text
+    assert token not in caplog.text
+
+
+def test_internal_service_token_requires_nonempty_subject(monkeypatch, caplog):
+    caplog.set_level(logging.INFO, logger="kms.auth")
+    monkeypatch.setenv("INTERNAL_SERVICE_SECRET", SERVICE_SECRET)
+    monkeypatch.setenv("INTERNAL_SERVICE_ISSUER", "kms-internal")
+    monkeypatch.setenv("INTERNAL_SERVICE_AUDIENCE", "kms-nlp")
+    token = make_service_token(subject=" ")
+
+    with pytest.raises(HTTPException) as exc:
+        api.verify_internal_service_token(token)
+
+    assert exc.value.status_code == 401
+    assert "missing_internal_service_subject" in caplog.text
+    assert token not in caplog.text
 
 
 def test_internal_playbook_requires_company_scoped_service_token(monkeypatch):
@@ -177,13 +312,7 @@ def test_internal_playbook_requires_company_scoped_service_token(monkeypatch):
             return {"company_id": company_id}
 
     monkeypatch.setattr(api, "generator", FakeGenerator())
-    token = make_token(
-        SERVICE_SECRET,
-        issuer="kms-internal",
-        audience="kms-nlp",
-        role="service",
-        company_id="company-a",
-    )
+    token = make_service_token(company_id="company-a")
     client = TestClient(api.app)
 
     response = client.post(
@@ -207,46 +336,61 @@ def test_internal_playbook_requires_company_scoped_service_token(monkeypatch):
     assert generated["company_id"] == "company-a"
 
 
-def test_internal_playbook_rejects_missing_or_default_company(monkeypatch):
-    monkeypatch.setenv("INTERNAL_SERVICE_SECRET", SERVICE_SECRET)
-    monkeypatch.setenv("INTERNAL_SERVICE_ISSUER", "kms-internal")
-    monkeypatch.setenv("INTERNAL_SERVICE_AUDIENCE", "kms-nlp")
-    token = make_token(
-        SERVICE_SECRET,
-        issuer="kms-internal",
-        audience="kms-nlp",
-        role="service",
-        company_id="company-a",
+def test_ramp_plan_requires_company_membership(monkeypatch):
+    configure_user_jwks(monkeypatch)
+    monkeypatch.setattr(
+        api,
+        "supabase",
+        FakeSupabase([{"company_id": "company-a", "user_id": "user-123", "role": "member"}]),
     )
-    client = TestClient(api.app)
-    for company_id in (None, "default"):
-        response = client.post(
-            "/internal/playbooks/generate",
-            json={"role": "backend-engineer", "company_id": company_id},
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        assert response.status_code == 400
+    calls = []
 
+    class FakeRampPlanner:
+        def get_active(self, company_id, role, user_id):
+            calls.append((company_id, role, user_id))
+            return {"company_id": company_id, "role": role}
 
-def test_internal_playbook_rejects_unsigned_and_user_tokens(monkeypatch):
-    monkeypatch.setenv("INTERNAL_SERVICE_SECRET", SERVICE_SECRET)
-    monkeypatch.setenv("INTERNAL_SERVICE_ISSUER", "kms-internal")
-    monkeypatch.setenv("INTERNAL_SERVICE_AUDIENCE", "kms-nlp")
-    client = TestClient(api.app)
-
-    missing_token = client.post(
-        "/internal/playbooks/generate",
-        json={"role": "backend-engineer", "company_id": "company-a"},
+    monkeypatch.setattr(api, "ramp_generator", FakeRampPlanner())
+    token = make_user_token()
+    response = TestClient(api.app).get(
+        "/ramp-plans?company_id=company-a&role=backend-engineer",
+        headers={"Authorization": f"Bearer {token}"},
     )
-    assert missing_token.status_code == 401
 
-    user_token = make_token(company_id="company-a")
-    rejected_user = client.post(
-        "/internal/playbooks/generate",
-        json={"role": "backend-engineer", "company_id": "company-a"},
-        headers={"Authorization": f"Bearer {user_token}"},
+    assert response.status_code == 200
+    assert calls == [("company-a", "backend-engineer", "user-123")]
+
+
+def test_ramp_plan_rejects_nonmember_company(monkeypatch):
+    configure_user_jwks(monkeypatch)
+    monkeypatch.setattr(
+        api,
+        "supabase",
+        FakeSupabase([{"company_id": "company-b", "user_id": "user-123", "role": "member"}]),
     )
-    assert rejected_user.status_code == 401
+    calls = []
+
+    class FakeRampPlanner:
+        def get_active(self, company_id, role, user_id):
+            calls.append((company_id, role, user_id))
+            return {"company_id": company_id}
+
+    monkeypatch.setattr(api, "ramp_generator", FakeRampPlanner())
+    response = TestClient(api.app).get(
+        "/ramp-plans?company_id=company-a&role=backend-engineer",
+        headers={"Authorization": f"Bearer {make_user_token()}"},
+    )
+
+    assert response.status_code == 403
+    assert calls == []
+
+
+def test_api_route_rejects_forged_identity_header():
+    response = TestClient(api.app).get(
+        "/ramp-plans?company_id=company-a",
+        headers={"X-User-Id": "user-123"},
+    )
+    assert response.status_code == 401
 
 
 def test_require_company_membership_rejects_default(monkeypatch):
@@ -264,10 +408,10 @@ def test_require_company_membership_requires_user_id(monkeypatch):
 
 
 def test_require_company_membership_rejects_cross_tenant_lookup(monkeypatch):
-    fake_rows = [{"company_id": "company-456", "user_id": "user-1", "role": "member"}]
+    fake_rows = [{"company_id": "company-b", "user_id": "user-1", "role": "member"}]
     monkeypatch.setattr(api, "supabase", FakeSupabase(fake_rows))
     with pytest.raises(HTTPException) as exc:
-        api.require_company_membership("user-1", "company-123")
+        api.require_company_membership("user-1", "company-a")
     assert exc.value.status_code == 403
 
 
