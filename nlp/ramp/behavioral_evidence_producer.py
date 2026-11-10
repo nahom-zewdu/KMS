@@ -198,41 +198,46 @@ class GoBehavioralEvidenceProducer:
         repository_id: str,
         source_revision: str,
         evidence_type: str,
-        *identity_and_detail: object,
+        subject: str,
+        target: str,
+        source_file: str,
+        line: int,
+        detail: str,
+        provenance: tuple[SourceProvenance, ...],
+        *,
         observation: str = "direct",
     ) -> BehavioralEvidenceRecord:
         """Build a stable record ID and provenance-preserving typed record."""
-        # Accepted layouts are kept private to this producer to avoid public
-        # constructors that can accidentally omit provenance.
-        if evidence_type == "ROUTE_HANDLES":
-            source_file, line, object_ref, detail, provenance = identity_and_detail
-            subject = str(source_file)
-            target = str(object_ref)
-        else:
-            subject, target, source_file, line, detail, provenance = identity_and_detail
-        provenance = tuple(
+        normalized_provenance = tuple(
             SourceProvenance(
-                repository_id=p.repository_id,
-                source_revision=p.source_revision,
-                extractor_id=p.extractor_id,
-                extractor_version=p.extractor_version,
-                source_file=p.source_file,
-                line=p.line,
+                repository_id=item.repository_id,
+                source_revision=item.source_revision,
+                extractor_id=item.extractor_id,
+                extractor_version=item.extractor_version,
+                source_file=item.source_file,
+                line=item.line,
                 observation=observation,
-                limitations=p.limitations,
+                limitations=item.limitations,
             )
-            for p in provenance
+            for item in provenance
         )
         identity = "|".join(
-            [repository_id, source_revision, evidence_type, str(subject), str(target),
-             str(source_file), str(line)]
+            [
+                repository_id,
+                source_revision,
+                evidence_type,
+                subject,
+                target,
+                source_file,
+                str(line),
+            ]
         )
         ref = "behavior:" + hashlib.sha256(identity.encode("utf-8")).hexdigest()[:24]
         return BehavioralEvidenceRecord(
             ref=ref,
             evidence_type=evidence_type,
-            subject=str(subject),
-            object=str(target),
-            detail=str(detail),
-            provenance=provenance,
+            subject=subject,
+            object=target,
+            detail=detail,
+            provenance=normalized_provenance,
         )
