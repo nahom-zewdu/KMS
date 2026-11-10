@@ -1,6 +1,9 @@
 from unittest.mock import Mock
 
+import pytest
+
 from ramp.candidates import RampCandidateEngine
+from ramp.evidence import RampEvidenceRetrievalError
 from ramp.generator_v2 import RampPlanner
 from ramp.models import Evidence, ImplementationSurface
 from ramp.workflows import WorkflowDiscoverer
@@ -159,6 +162,101 @@ def test_planner_does_not_fabricate_workflow_without_relationship_evidence():
     assert all(step["evidence"] for step in plan["steps"])
     assert all(step["machine"]["eligible"] for step in plan["steps"])
     planner.store.save_plan.assert_called_once()
+
+
+class ExistingPlanStore:
+    def __init__(self, plan):
+        self.active_plan = plan
+        self.saved_plans = []
+
+    def save_plan(self, plan):
+        self.saved_plans.append(plan)
+        self.active_plan = plan
+
+    def get_active(self, *_args, **_kwargs):
+        return self.active_plan
+
+
+def planner_with_evidence(surfaces):
+    planner = RampPlanner(Mock())
+    planner.evidence.implementation_surfaces = Mock(return_value=surfaces)
+    planner.evidence.module_records = Mock(return_value=[])
+    planner.evidence.ownership = Mock(return_value=[])
+    planner.evidence.github_history = Mock(return_value=[])
+    planner.evidence.implementation_relationships = Mock(return_value=[])
+    return planner
+
+
+def existing_plan():
+    return {
+        "company_id": "company-1",
+        "role": "backend-engineer",
+        "steps": [{"id": "previous-valid-step"}],
+        "is_active": True,
+    }
+
+
+def test_empty_required_evidence_aborts_and_preserves_existing_plan():
+    previous = existing_plan()
+    planner = planner_with_evidence([])
+    planner.store = ExistingPlanStore(previous)
+
+    with pytest.raises(ValueError, match="no eligible candidates"):
+        planner.generate("backend-engineer", "company-1")
+
+    assert planner.store.get_active("company-1", "backend-engineer") == previous
+    assert planner.store.saved_plans == []
+
+
+def test_required_evidence_failure_aborts_and_preserves_existing_plan():
+    previous = existing_plan()
+    planner = planner_with_evidence([])
+    planner.evidence.implementation_surfaces.side_effect = RampEvidenceRetrievalError(
+        "codebase_files", "list implementation surfaces", "RuntimeError"
+    )
+    planner.store = ExistingPlanStore(previous)
+
+    with pytest.raises(RampEvidenceRetrievalError) as exc_info:
+        planner.generate("backend-engineer", "company-1")
+    assert exc_info.value.source == "codebase_files"
+
+    assert planner.store.get_active("company-1", "backend-engineer") == previous
+    assert planner.store.saved_plans == []
+
+
+def test_optional_evidence_failures_are_logged_and_generation_continues(caplog):
+    planner = planner_with_evidence([surface("api/server.go")])
+    optional_sources = {
+        "module_records": ("codebase_modules", "list module records"),
+        "ownership": ("edges", "list ownership relationships"),
+        "github_history": ("raw_data", "list GitHub history"),
+        "implementation_relationships": ("entities", "list file entities"),
+    }
+    for method, (source, operation) in optional_sources.items():
+        getattr(planner.evidence, method).side_effect = RampEvidenceRetrievalError(
+            source, operation, "RuntimeError"
+        )
+    planner.store.save_plan = Mock()
+
+    with caplog.at_level("WARNING"):
+        plan = planner.generate("backend-engineer", "company-1")
+
+    assert plan["steps"]
+    planner.store.save_plan.assert_called_once_with(plan)
+    assert {record.ramp_evidence_source for record in caplog.records} == set(optional_sources)
+
+
+def test_no_eligible_candidates_never_replaces_existing_plan():
+    previous = existing_plan()
+    planner = planner_with_evidence([surface("api/server.go")])
+    planner.engine.select = Mock(return_value=[])
+    planner.store = ExistingPlanStore(previous)
+
+    with pytest.raises(ValueError, match="no eligible candidates"):
+        planner.generate("backend-engineer", "company-1")
+
+    assert planner.store.get_active("company-1", "backend-engineer") == previous
+    assert planner.store.saved_plans == []
 
 
 def test_large_component_is_decomposed_into_bounded_paths():
