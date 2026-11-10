@@ -128,8 +128,13 @@ class GoBehavioralEvidenceProducer:
                 limitations=self.LIMITATIONS,
             )
             record = self._record(
-                repository_id, source_revision, "ROUTE_HANDLES",
-                route.route_file, route.line, route.handler_symbol,
+                repository_id,
+                source_revision,
+                "ROUTE_HANDLES",
+                f"{route.method} {route.path}",
+                route.handler_symbol,
+                route.route_file,
+                route.line,
                 f"{route.method} {route.path} is registered to {route.handler_symbol}",
                 (provenance,),
             )
