@@ -100,11 +100,6 @@ class GoBehavioralEvidenceProducer:
         normalized.sort(key=lambda item: item["path"])
 
         routes = self._routes.extract(normalized)
-        route_by_key = {
-            (item.method, item.path, item.handler_symbol, item.route_file, item.line): item
-            for item in routes
-        }
-
         calls_by_handler: dict[tuple[str, str], list] = {}
         for route in routes:
             key = (route.handler_symbol, route.handler_file)
@@ -119,7 +114,7 @@ class GoBehavioralEvidenceProducer:
 
         records: list[BehavioralEvidenceRecord] = []
         route_records: dict[tuple[str, str, str, str, int], BehavioralEvidenceRecord] = {}
-        call_records: dict[tuple[str, str, str, int], BehavioralEvidenceRecord] = {}
+        call_records: dict[tuple[str, str, str, str, int], BehavioralEvidenceRecord] = {}
 
         for route in routes:
             provenance = SourceProvenance(
@@ -168,7 +163,7 @@ class GoBehavioralEvidenceProducer:
                 (provenance,),
             )
             records.append(record)
-            call_records[(call.handler_symbol, call.handler_file, call.receiver_field, call.line)] = record
+            call_records[(call.handler_symbol, call.handler_file, call.receiver_field, call.method, call.line)] = record
 
         composed = self._composer.compose(routes, list(all_calls.values()))
         for item in composed:
@@ -176,7 +171,7 @@ class GoBehavioralEvidenceProducer:
                 (item.method, item.path, item.handler_symbol, item.route_file, item.route_line)
             ]
             call_record = call_records[
-                (item.handler_symbol, item.call_file, item.receiver_field, item.call_line)
+                (item.handler_symbol, item.call_file, item.receiver_field, item.operation, item.call_line)
             ]
             records.append(
                 self._record(
