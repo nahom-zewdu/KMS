@@ -12,6 +12,14 @@ from supabase import Client
 STATUSES = {"not_started", "in_progress", "completed"}
 
 
+class RampPlanPersistenceError(RuntimeError):
+    """A Ramp plan could not be persisted; database details are intentionally omitted."""
+
+    def __init__(self, error_type: str):
+        self.error_type = error_type
+        super().__init__("Ramp plan persistence failed")
+
+
 class RampStore:
     """Persist and retrieve Ramp data without embedding product reasoning."""
 
@@ -19,7 +27,8 @@ class RampStore:
         self.supabase = supabase
 
     def save_plan(self, plan: Dict[str, Any]) -> None:
-        """Upsert one active company/role plan."""
+        """Atomically upsert one complete active company/role plan."""
+        self._validate_plan(plan)
         self._require_company_id(plan.get("company_id"))
         record = {
             "company_id": plan["company_id"],
@@ -30,7 +39,30 @@ class RampStore:
             "is_active": bool(plan.get("is_active", True)),
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
-        self.supabase.table("ramp_plans").upsert(record, on_conflict="company_id,role").execute()
+        try:
+            self.supabase.table("ramp_plans").upsert(
+                record, on_conflict="company_id,role"
+            ).execute()
+        except Exception as exc:
+            raise RampPlanPersistenceError(type(exc).__name__) from None
+
+    @classmethod
+    def _validate_plan(cls, plan: Dict[str, Any]) -> None:
+        """Reject incomplete plans before the single-row upsert can replace an active plan."""
+        if not isinstance(plan, dict) or not str(plan.get("role") or "").strip():
+            raise ValueError("A Ramp plan role is required")
+        steps = plan.get("steps")
+        if not isinstance(steps, list) or not steps:
+            raise ValueError("An active Ramp plan must contain at least one step")
+        required_fields = ("id", "title", "do", "done_when")
+        for index, step in enumerate(steps, start=1):
+            if not isinstance(step, dict) or any(not step.get(field) for field in required_fields):
+                raise ValueError(f"Ramp plan step {index} is incomplete")
+            if not isinstance(step.get("evidence"), list) or not step["evidence"]:
+                raise ValueError(f"Ramp plan step {index} has no evidence")
+            machine = step.get("machine")
+            if not isinstance(machine, dict) or machine.get("eligible") is not True:
+                raise ValueError(f"Ramp plan step {index} is not eligible")
 
     def get_active(self, company_id: str, role: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Return the active plan in the shape expected by the Ramp API."""
