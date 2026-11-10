@@ -6,11 +6,23 @@ Ramp candidates consume the normalized evidence produced here.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List
 
 from supabase import Client
 
 from .models import Evidence, ImplementationSurface
+
+
+class RampEvidenceRetrievalError(RuntimeError):
+    """A database read failed while collecting evidence for Ramp generation."""
+
+    def __init__(self, source: str, operation: str, error_type: str):
+        self.source = source
+        self.operation = operation
+        self.error_type = error_type
+        super().__init__(
+            f"Ramp evidence retrieval failed: source={source}, operation={operation}"
+        )
 
 
 class RampEvidenceStore:
@@ -21,13 +33,14 @@ class RampEvidenceStore:
 
     def implementation_surfaces(self, company_id: str) -> List[ImplementationSurface]:
         """Return indexed files for a company as normalized implementation surfaces."""
-        if not company_id:
+        self._require_company_id(company_id)
+        repository_ids = self._repository_ids(company_id)
+        if not repository_ids:
             return []
-        try:
-            repository_ids = self._repository_ids(company_id)
-            if not repository_ids:
-                return []
-            response = (
+        response = self._retrieve(
+            "codebase_files",
+            "list implementation surfaces",
+            lambda: (
                 self.supabase.table("codebase_files")
                 .select(
                     "id, repository_id, file_path, module_path, language, file_name, "
@@ -36,9 +49,8 @@ class RampEvidenceStore:
                 .in_("repository_id", repository_ids)
                 .limit(5000)
                 .execute()
-            )
-        except Exception:
-            return []
+            ),
+        )
 
         result: List[ImplementationSurface] = []
         for row in getattr(response, "data", []) or []:
@@ -62,13 +74,14 @@ class RampEvidenceStore:
 
     def module_records(self, company_id: str) -> List[Dict[str, Any]]:
         """Return company-scoped module records without interpreting their meaning."""
-        if not company_id:
+        self._require_company_id(company_id)
+        repository_ids = self._repository_ids(company_id)
+        if not repository_ids:
             return []
-        try:
-            repository_ids = self._repository_ids(company_id)
-            if not repository_ids:
-                return []
-            response = (
+        response = self._retrieve(
+            "codebase_modules",
+            "list module records",
+            lambda: (
                 self.supabase.table("codebase_modules")
                 .select(
                     "id, repository_id, module_path, module_name, inferred_type, "
@@ -77,36 +90,39 @@ class RampEvidenceStore:
                 .in_("repository_id", repository_ids)
                 .limit(1000)
                 .execute()
-            )
-            return [row for row in (getattr(response, "data", []) or []) if isinstance(row, dict)]
-        except Exception:
-            return []
+            ),
+        )
+        return [row for row in (getattr(response, "data", []) or []) if isinstance(row, dict)]
 
     def _repository_ids(self, company_id: str) -> List[str]:
-        response = (
-            self.supabase.table("repositories")
-            .select("id")
-            .eq("company_id", company_id)
-            .execute()
+        response = self._retrieve(
+            "repositories",
+            "list company repositories",
+            lambda: (
+                self.supabase.table("repositories")
+                .select("id")
+                .eq("company_id", company_id)
+                .execute()
+            ),
         )
         return [row["id"] for row in (getattr(response, "data", []) or []) if row.get("id")]
 
     def ownership(self, company_id: str) -> List[Dict[str, Any]]:
         """Return ownership edges available in the existing knowledge graph."""
-        if not company_id:
-            return []
-        try:
-            response = (
+        self._require_company_id(company_id)
+        response = self._retrieve(
+            "edges",
+            "list ownership relationships",
+            lambda: (
                 self.supabase.table("edges")
                 .select("source_id, target_id, type, metadata, confidence")
                 .eq("company_id", company_id)
                 .eq("type", "OWNS")
                 .limit(5000)
                 .execute()
-            )
-            return [row for row in (getattr(response, "data", []) or []) if isinstance(row, dict)]
-        except Exception:
-            return []
+            ),
+        )
+        return [row for row in (getattr(response, "data", []) or []) if isinstance(row, dict)]
 
     def implementation_relationships(self, company_id: str) -> List[Evidence]:
         """Return graph relationships whose endpoints resolve to FILE entities.
@@ -114,26 +130,30 @@ class RampEvidenceStore:
         PART_OF and OWNS are intentionally excluded: they establish containment
         or ownership, not behavioral control/data flow between implementation surfaces.
         """
-        if not company_id:
-            return []
-        try:
-            entities = (
+        self._require_company_id(company_id)
+        entities = self._retrieve(
+            "entities",
+            "list file entities",
+            lambda: (
                 self.supabase.table("entities")
                 .select("id, metadata")
                 .eq("company_id", company_id)
                 .eq("type", "FILE")
                 .limit(10000)
                 .execute()
-            )
-            edges = (
+            ),
+        )
+        edges = self._retrieve(
+            "edges",
+            "list implementation relationships",
+            lambda: (
                 self.supabase.table("edges")
                 .select("id, source_id, target_id, type, confidence")
                 .eq("company_id", company_id)
                 .limit(20000)
                 .execute()
-            )
-        except Exception:
-            return []
+            ),
+        )
 
         file_paths: Dict[str, str] = {}
         for row in getattr(entities, "data", []) or []:
@@ -177,10 +197,11 @@ class RampEvidenceStore:
 
     def github_history(self, company_id: str) -> List[Dict[str, Any]]:
         """Return recent GitHub-derived raw knowledge for corroboration."""
-        if not company_id:
-            return []
-        try:
-            response = (
+        self._require_company_id(company_id)
+        response = self._retrieve(
+            "raw_data",
+            "list GitHub history",
+            lambda: (
                 self.supabase.table("raw_data")
                 .select("record_id, event_id, source, content, created_at")
                 .eq("company_id", company_id)
@@ -188,10 +209,25 @@ class RampEvidenceStore:
                 .order("created_at", desc=True)
                 .limit(200)
                 .execute()
-            )
-            return [row for row in (getattr(response, "data", []) or []) if isinstance(row, dict)]
-        except Exception:
-            return []
+            ),
+        )
+        return [row for row in (getattr(response, "data", []) or []) if isinstance(row, dict)]
+
+    @staticmethod
+    def _require_company_id(company_id: str) -> None:
+        if not company_id or not company_id.strip() or company_id.strip().lower() == "default":
+            raise ValueError("A real company_id is required for Ramp evidence")
+
+    @staticmethod
+    def _retrieve(source: str, operation: str, request: Callable[[], Any]) -> Any:
+        try:
+            return request()
+        except Exception as exc:
+            raise RampEvidenceRetrievalError(
+                source=source,
+                operation=operation,
+                error_type=type(exc).__name__,
+            ) from None
 
     def evidence_for_surface(self, surface: ImplementationSurface) -> Evidence:
         """Convert one indexed implementation surface into a traceable evidence item."""
