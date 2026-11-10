@@ -7,17 +7,21 @@ planner can evolve independently of the API and frontend.
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from supabase import Client
 
 from .candidates import RampCandidateEngine
-from .evidence import RampEvidenceStore
+from .evidence import RampEvidenceRetrievalError, RampEvidenceStore
 from .models import Evidence, ImplementationSurface, RampCandidate
 from .store import RampStore
 from .workflows import WorkflowDiscoverer
+
+
+logger = logging.getLogger(__name__)
 
 
 class RampPlanner:
@@ -42,16 +46,31 @@ class RampPlanner:
             raise ValueError("A real company_id is required for Ramp generation")
         role_key = self._normalize_role(role)
         surfaces = self.evidence.implementation_surfaces(company_id)
-        modules = self.evidence.module_records(company_id)
-        ownership = self.evidence.ownership(company_id)
-        history = self.evidence.github_history(company_id)
+        modules = self._optional_evidence(
+            "module_records", lambda: self.evidence.module_records(company_id)
+        )
+        ownership = self._optional_evidence(
+            "ownership", lambda: self.evidence.ownership(company_id)
+        )
+        history = self._optional_evidence(
+            "github_history", lambda: self.evidence.github_history(company_id)
+        )
         evidence = [self.evidence.evidence_for_surface(surface) for surface in surfaces]
-        evidence.extend(self.evidence.implementation_relationships(company_id))
+        evidence.extend(
+            self._optional_evidence(
+                "implementation_relationships",
+                lambda: self.evidence.implementation_relationships(company_id),
+            )
+        )
 
         candidates = self._build_candidates(
             role_key, company_id, surfaces, modules, evidence, ownership, history
         )
         selected = self.engine.select(candidates)
+        if not selected:
+            raise ValueError(
+                "Ramp generation produced no eligible candidates; the existing plan was left unchanged"
+            )
         steps = [
             self._serialize(candidate, role_key, company_id, index + 1)
             for index, candidate in enumerate(selected)
@@ -84,6 +103,21 @@ class RampPlanner:
         }
         self.store.save_plan(plan)
         return plan
+
+    @staticmethod
+    def _optional_evidence(source: str, retrieve: Callable[[], List[Any]]) -> List[Any]:
+        try:
+            return retrieve()
+        except RampEvidenceRetrievalError as exc:
+            logger.warning(
+                "Optional Ramp evidence unavailable; continuing without it",
+                extra={
+                    "ramp_evidence_source": source,
+                    "ramp_evidence_operation": exc.operation,
+                    "ramp_evidence_error_type": exc.error_type,
+                },
+            )
+            return []
 
     def get_active(self, company_id: str, role: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Return the active plan through the persistence boundary."""
