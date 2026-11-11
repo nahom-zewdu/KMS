@@ -62,6 +62,8 @@ class RampPlanner:
                 lambda: self.evidence.implementation_relationships(company_id),
             )
         )
+        surfaces_by_path = {surface.path: surface for surface in surfaces}
+        evidence_by_ref = {item.ref: item for item in evidence}
 
         candidates = self._build_candidates(
             role_key, company_id, surfaces, modules, evidence, ownership, history
@@ -72,7 +74,9 @@ class RampPlanner:
                 "Ramp generation produced no eligible candidates; the existing plan was left unchanged"
             )
         steps = [
-            self._serialize(candidate, role_key, company_id, index + 1)
+            self._serialize(
+                candidate, role_key, company_id, index + 1, surfaces_by_path, evidence_by_ref
+            )
             for index, candidate in enumerate(selected)
         ]
 
@@ -247,13 +251,63 @@ class RampPlanner:
             return candidate
         return RampCandidate(**{**candidate.__dict__, "prerequisites": [prerequisite]})
 
-    def _serialize(self, candidate: RampCandidate, role: str, company_id: str, order: int) -> Dict[str, Any]:
-        """Serialize an evidence-backed candidate into the existing frontend step shape."""
+    def _serialize(
+        self,
+        candidate: RampCandidate,
+        role: str,
+        company_id: str,
+        order: int,
+        surfaces_by_path: Dict[str, ImplementationSurface],
+        evidence_by_ref: Dict[str, Evidence],
+    ) -> Dict[str, Any]:
+        """Serialize candidates with source paths and repository identity intact."""
         step_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"ramp-v2:{company_id}:{role}:{candidate.candidate_id}"))
-        evidence = [
-            {"kind": "direct", "source": "codebase_files", "label": ref, "detail": "Company-scoped indexed implementation surface.", "path": ref}
-            for ref in candidate.evidence_refs
+        evidence = []
+        for ref in candidate.evidence_refs:
+            item = evidence_by_ref.get(ref)
+            if item and item.kind == "implementation_relation":
+                source_path = str(item.metadata.get("source_ref") or "")
+                target_path = str(item.metadata.get("target_ref") or "")
+                source_surface = surfaces_by_path.get(source_path)
+                target_surface = surfaces_by_path.get(target_path)
+                evidence.append({
+                    "kind": item.strength,
+                    "source": item.source,
+                    "label": item.detail,
+                    "detail": item.detail,
+                    "record_id": ref.removeprefix("edge:"),
+                    "file_path": source_path or None,
+                    "related_file_path": target_path or None,
+                    "repository_full_name": (source_surface.metadata.get("repository_full_name") if source_surface else None),
+                })
+                continue
+            surface = surfaces_by_path.get(ref)
+            if surface:
+                evidence.append({
+                    "kind": "direct",
+                    "source": "codebase_files",
+                    "label": ref,
+                    "detail": "Company-scoped indexed implementation surface.",
+                    "file_path": ref,
+                    "module_path": surface.module_path,
+                    "record_id": surface.ref,
+                    "repository_full_name": surface.metadata.get("repository_full_name"),
+                })
+        implementation_surfaces = [
+            surfaces_by_path[path] for path in candidate.implementation_refs if path in surfaces_by_path
         ]
+        repository_names = {
+            str(surface.metadata.get("repository_full_name"))
+            for surface in implementation_surfaces
+            if surface.metadata.get("repository_full_name")
+        }
+        repository_name = next(iter(repository_names)) if len(repository_names) == 1 else None
+        repository_branches = {
+            str(surface.metadata.get("repository_default_branch"))
+            for surface in implementation_surfaces
+            if surface.metadata.get("repository_default_branch")
+        }
+        repository_branch = next(iter(repository_branches)) if len(repository_branches) == 1 else "HEAD"
         return {
             "id": step_id,
             "order": order,
@@ -267,11 +321,29 @@ class RampPlanner:
             "target": {
                 "type": candidate.candidate_type,
                 "path": candidate.candidate_id,
-                "repo": None,
-                "files": [{"path": ref, "type": "file"} for ref in candidate.implementation_refs],
+                "repo": repository_name,
+                "default_branch": repository_branch,
+                "files": [
+                    {
+                        "path": ref,
+                        "type": "file",
+                        "repository_id": surfaces_by_path[ref].repository_id,
+                        "github_url": (
+                            f"https://github.com/{repository_name}/blob/{repository_branch}/"
+                            + "/".join(__import__("urllib.parse", fromlist=["quote"]).quote(part, safe="") for part in ref.split("/"))
+                        ) if repository_name and ref in surfaces_by_path else None,
+                    }
+                    for ref in candidate.implementation_refs
+                ],
             },
             "summary": {"what": candidate.objective, "how": candidate.concrete_action, "where": ", ".join(candidate.implementation_refs)},
-            "resources": [{"type": "file", "path": ref} for ref in candidate.evidence_refs],
+            "resources": [
+                {"type": "file", "path": ref, "url": (
+                    f"https://github.com/{repository_name}/blob/{repository_branch}/"
+                    + "/".join(__import__("urllib.parse", fromlist=["quote"]).quote(part, safe="") for part in ref.split("/"))
+                ) if repository_name and ref in surfaces_by_path else None}
+                for ref in candidate.implementation_refs
+            ],
             "checklist": [
                 {"id": "inspect", "label": "Inspect the referenced implementation surfaces", "done": False},
                 {"id": "trace", "label": "Verify the relevant boundary or workflow in source", "done": False},
