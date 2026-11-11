@@ -25,6 +25,9 @@ class Query:
     def order(self, *_args, **_kwargs):
         return self
 
+    def range(self, *_args, **_kwargs):
+        return self
+
     def execute(self):
         if self.error:
             raise self.error
