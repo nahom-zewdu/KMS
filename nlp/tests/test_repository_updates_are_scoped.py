@@ -20,7 +20,8 @@ class RecordingQuery:
         self.operation = "select"
         return self
 
-    def update(self, *_args, **_kwargs):
+    def update(self, values, *_args, **_kwargs):
+        self.database.updates.append((self.table_name, dict(values)))
         self.operation = "update"
         return self
 
@@ -49,6 +50,7 @@ class RecordingQuery:
 class RecordingSupabase:
     def __init__(self):
         self.calls = []
+        self.updates = []
         self.rpc_calls = []
 
     def table(self, name):
@@ -112,6 +114,13 @@ def test_baseline_repository_update_filters_by_company():
         and ("company_id", "company-a") in filters
         for table, operation, filters in database.calls
     )
+    assert any(
+        table == "repositories"
+        and values.get("baseline_status") == "ready"
+        and values.get("last_synced_at")
+        and values.get("baseline_revision") == "a" * 40
+        for table, values in database.updates
+    )
 
 
 
@@ -142,3 +151,7 @@ def test_failed_directory_traversal_never_runs_destructive_reconciliation():
 
     assert not sync.sync_repository("org/repo", "company-a")
     assert database.rpc_calls == []
+    assert any(
+        table == "repositories" and values.get("baseline_status") == "failed"
+        for table, values in database.updates
+    )
