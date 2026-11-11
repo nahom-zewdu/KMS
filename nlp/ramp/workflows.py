@@ -30,6 +30,7 @@ class WorkflowDiscoverer:
         relations = [
             item for item in evidence
             if item.kind == "implementation_relation"
+            and self._is_qualified_behavioral_relation(item)
             and item.metadata.get("source_ref") in by_path
             and item.metadata.get("target_ref") in by_path
         ]
@@ -226,10 +227,42 @@ class WorkflowDiscoverer:
             components.append(sorted(component))
         return components
 
-    @staticmethod
-    def _behaviorally_connected(relations: Sequence[Evidence]) -> bool:
-        """Require at least one relationship stronger than weak inference."""
-        return any(item.strength in {"direct", "derived"} for item in relations)
+    _BEHAVIORAL_RELATION_TYPES = {
+        "CALLS", "INVOKES", "ROUTE_HANDLES", "HANDLER_INVOKES",
+        "ROUTE_HANDLER_OPERATION",
+    }
+
+    @classmethod
+    def _is_qualified_behavioral_relation(cls, item: Evidence) -> bool:
+        """Accept explicitly typed behavioral observations with source provenance.
+
+        Structural edges such as IMPORTS, OWNS, and PART_OF are excluded before
+        graph traversal. Confidence or a relation label alone is not proof.
+        """
+        metadata = item.metadata if isinstance(item.metadata, dict) else {}
+        relation_type = str(metadata.get("relation_type") or "").upper()
+        provenance = metadata.get("provenance")
+        if relation_type not in cls._BEHAVIORAL_RELATION_TYPES:
+            return False
+        if item.strength not in {"direct", "derived"} or not isinstance(provenance, dict):
+            return False
+        required = (
+            "source_revision", "extractor_id", "extractor_version",
+            "source_file", "line", "observation",
+        )
+        if any(provenance.get(key) in (None, "") for key in required):
+            return False
+        try:
+            if int(provenance["line"]) < 1:
+                return False
+        except (TypeError, ValueError):
+            return False
+        return provenance.get("observation") in {"direct", "derived"}
+
+    @classmethod
+    def _behaviorally_connected(cls, relations: Sequence[Evidence]) -> bool:
+        """Require a qualified behavioral edge; structural links never qualify."""
+        return any(cls._is_qualified_behavioral_relation(item) for item in relations)
 
     @staticmethod
     def _label(surfaces: Sequence[ImplementationSurface]) -> str:
