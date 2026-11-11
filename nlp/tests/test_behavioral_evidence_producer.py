@@ -112,7 +112,7 @@ def test_missing_direct_call_does_not_create_composed_evidence():
         "content": "type GitHubHandler struct {}\nfunc (h *GitHubHandler) HandleGitHubWebhook(c *gin.Context) {}",
     }
     records = GoBehavioralEvidenceProducer().produce(
-        files, repository_id="r", source_revision="sha"
+        files, repository_id="r", source_revision="a" * 40
     )
     assert any(item.evidence_type == "ROUTE_HANDLES" for item in records)
     assert not any(item.evidence_type == "HANDLER_INVOKES" for item in records)
