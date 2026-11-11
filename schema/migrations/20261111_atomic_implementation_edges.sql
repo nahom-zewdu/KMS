@@ -1,5 +1,26 @@
 BEGIN;
 
+-- The original reset schema omitted confidence even though the application
+-- already writes it for graph edges. Make the column explicit before the RPC
+-- references it, preserving existing rows with a neutral default.
+ALTER TABLE public.edges
+  ADD COLUMN IF NOT EXISTS confidence double precision NOT NULL DEFAULT 1.0;
+
+DO $
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.edges'::regclass
+      AND conname = 'edges_confidence_range'
+  ) THEN
+    ALTER TABLE public.edges
+      ADD CONSTRAINT edges_confidence_range
+      CHECK (confidence >= 0 AND confidence <= 1) NOT VALID;
+  END IF;
+END $;
+
+ALTER TABLE public.edges VALIDATE CONSTRAINT edges_confidence_range;
+
 CREATE OR REPLACE FUNCTION public.replace_implementation_edges(
   p_company_id text,
   p_source_ids uuid[],
