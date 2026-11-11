@@ -56,7 +56,7 @@ def test_produces_distinct_typed_route_call_and_composed_evidence():
 
 def test_every_record_preserves_repository_revision_and_source_locations():
     records = GoBehavioralEvidenceProducer().produce(
-        snapshot(), repository_id="repo-123", source_revision="deadbeef"
+        snapshot(), repository_id="repo-123", source_revision="d".repeat(40)
     )
 
     assert records
@@ -76,7 +76,7 @@ def test_every_record_preserves_repository_revision_and_source_locations():
 
 def test_production_is_deterministic_and_input_order_independent():
     producer = GoBehavioralEvidenceProducer()
-    first = producer.produce(snapshot(), repository_id="r", source_revision="sha")
+    first = producer.produce(snapshot(), repository_id="r", source_revision="a" * 40)
     second = producer.produce(list(reversed(snapshot())), repository_id="r", source_revision="sha")
     assert first == second
 
@@ -97,7 +97,7 @@ def test_duplicate_go_paths_are_rejected():
     files = snapshot() + [snapshot()[1]]
     try:
         GoBehavioralEvidenceProducer().produce(
-            files, repository_id="r", source_revision="sha"
+            files, repository_id="r", source_revision="a" * 40
         )
     except ValueError as exc:
         assert "duplicate source path" in str(exc)
