@@ -331,7 +331,7 @@ class RampEvidenceStore:
                 files_by_repo.setdefault(str(row["repository_id"]), set()).add(str(row["file_path"]))
 
         results: List[Dict[str, Any]] = []
-        path_pattern = re.compile(r"(?<![A-Za-z0-9_.-])(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\\.[A-Za-z0-9]+")
+        path_pattern = re.compile(r"(?<![A-Za-z0-9_.-])(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\.[A-Za-z0-9]+")
         for row in getattr(response, "data", []) or []:
             if not isinstance(row, dict) or str(row.get("company_id") or "") != company_id:
                 continue
@@ -358,7 +358,7 @@ class RampEvidenceStore:
             if not label_names.intersection({"good first issue", "good-first-issue", "help wanted", "help-wanted"}):
                 continue
             body = str(issue.get("body") or "")
-            checks = [line.strip() for line in body.splitlines() if re.match(r"^\\s*(?:[-*+]\\s+\\[[ xX]\\]|\\d+[.)]\\s+)", line)]
+            checks = [line.strip() for line in body.splitlines() if re.match(r"^\s*(?:[-*+]\s+\\[[ xX]\\]|\\d+[.)]\s+)", line)]
             if len(checks) < 2:
                 continue
             repo_id = str(repository["id"])
