@@ -90,12 +90,13 @@ def test_baseline_repository_update_filters_by_company():
         language="Python",
         default_branch="main",
         get_commits=lambda: [],
-        get_contents=lambda _path: [],
+        get_branch=lambda _branch: SimpleNamespace(commit=SimpleNamespace(sha="a" * 40)),
+        get_contents=lambda _path, ref=None: [],
     )
     sync = CodebaseBaselineSync.__new__(CodebaseBaselineSync)
     sync.supabase = database
     sync.gh = SimpleNamespace(get_repo=lambda _name: repository)
-    sync.relationship_indexer = SimpleNamespace(index_repository=lambda *_args: 0)
+    sync.relationship_indexer = SimpleNamespace(index_repository=lambda *_args, **_kwargs: 0)
 
     assert sync.sync_repository("org/repo", "company-a")
     _assert_repository_update_is_tenant_scoped(database)
