@@ -6,6 +6,8 @@ Ramp candidates consume the normalized evidence produced here.
 
 from __future__ import annotations
 
+import json
+import re
 from typing import Any, Callable, Dict, List
 
 from supabase import Client
@@ -283,6 +285,103 @@ class RampEvidenceStore:
             ),
         )
         return [row for row in (getattr(response, "data", []) or []) if isinstance(row, dict)]
+
+    def contribution_issues(self, company_id: str) -> List[Dict[str, Any]]:
+        """Return conservative contribution leads from tenant-scoped GitHub issue events.
+
+        Only open, unassigned issues explicitly marked good-first-issue/help-wanted,
+        with multiple acceptance checks and indexed source paths, are returned.
+        This is a candidate feed, not proof that an issue is still open on GitHub.
+        """
+        self._require_company_id(company_id)
+        repositories = self._repository_records(company_id)
+        repo_by_name = {
+            str(row.get("full_name") or "").lower(): row
+            for row in repositories if row.get("id") and row.get("full_name")
+        }
+        if not repo_by_name:
+            return []
+        response = self._retrieve(
+            "events",
+            "list company GitHub issue events",
+            lambda: (
+                self.supabase.table("events")
+                .select("delivery_id, company_id, event_type, payload, created_at")
+                .eq("company_id", company_id)
+                .eq("source", "github")
+                .eq("event_type", "issues")
+                .limit(1000)
+                .execute()
+            ),
+        )
+        files_response = self._retrieve(
+            "codebase_files",
+            "list files for contribution issue matching",
+            lambda: (
+                self.supabase.table("codebase_files")
+                .select("repository_id, file_path")
+                .in_("repository_id", [str(row["id"]) for row in repo_by_name.values()])
+                .limit(10000)
+                .execute()
+            ),
+        )
+        files_by_repo: Dict[str, set[str]] = {}
+        for row in getattr(files_response, "data", []) or []:
+            if isinstance(row, dict) and row.get("repository_id") and row.get("file_path"):
+                files_by_repo.setdefault(str(row["repository_id"]), set()).add(str(row["file_path"]))
+
+        results: List[Dict[str, Any]] = []
+        path_pattern = re.compile(r"(?<![A-Za-z0-9_.-])(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\\.[A-Za-z0-9]+")
+        for row in getattr(response, "data", []) or []:
+            if not isinstance(row, dict) or str(row.get("company_id") or "") != company_id:
+                continue
+            payload = row.get("payload")
+            if isinstance(payload, str):
+                try:
+                    payload = json.loads(payload)
+                except (TypeError, ValueError):
+                    continue
+            if not isinstance(payload, dict):
+                continue
+            repo_name = str(payload.get("repo") or "").lower()
+            repository = repo_by_name.get(repo_name)
+            issue = payload.get("issue")
+            if not repository or not isinstance(issue, dict):
+                continue
+            if str(issue.get("state") or "").lower() != "open" or issue.get("assignee"):
+                continue
+            labels = issue.get("labels") if isinstance(issue.get("labels"), list) else []
+            label_names = {
+                str(label.get("name") if isinstance(label, dict) else label).strip().lower()
+                for label in labels
+            }
+            if not label_names.intersection({"good first issue", "good-first-issue", "help wanted", "help-wanted"}):
+                continue
+            body = str(issue.get("body") or "")
+            checks = [line.strip() for line in body.splitlines() if re.match(r"^\\s*(?:[-*+]\\s+\\[[ xX]\\]|\\d+[.)]\\s+)", line)]
+            if len(checks) < 2:
+                continue
+            repo_id = str(repository["id"])
+            known_paths = files_by_repo.get(repo_id, set())
+            referenced_paths = sorted({match.group(0).rstrip(".,:;)") for match in path_pattern.finditer(body)} & known_paths)
+            if not referenced_paths:
+                continue
+            results.append({
+                "ref": f"github-issue:{row.get('delivery_id')}:{issue.get('number')}",
+                "delivery_id": row.get("delivery_id"),
+                "repository_id": repo_id,
+                "repository_full_name": repository.get("full_name"),
+                "default_branch": repository.get("default_branch") or "HEAD",
+                "number": issue.get("number"),
+                "title": str(issue.get("title") or "").strip(),
+                "body": body,
+                "url": issue.get("html_url"),
+                "labels": sorted(label_names),
+                "acceptance_checks": checks,
+                "file_paths": referenced_paths,
+                "created_at": row.get("created_at"),
+            })
+        return sorted(results, key=lambda item: (str(item.get("repository_full_name")), int(item.get("number") or 0)))
 
     @staticmethod
     def _require_company_id(company_id: str) -> None:
