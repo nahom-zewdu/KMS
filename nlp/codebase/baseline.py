@@ -102,6 +102,7 @@ class CodebaseBaselineSync:
             contents = repo.get_contents("", ref=source_revision)
             files_processed = 0
             module_map: Dict[str, int] = {}
+            live_paths: list[str] = []
 
             while contents:
                 item = contents.pop(0)
@@ -109,8 +110,12 @@ class CodebaseBaselineSync:
                     try:
                         contents.extend(repo.get_contents(item.path, ref=source_revision))
                         module_map[item.path] = module_map.get(item.path, 0) + 1
-                    except GithubException:
-                        continue
+                    except GithubException as exc:
+                        # Never reconcile from a partial tree: a failed directory
+                        # traversal must not be interpreted as deleted files.
+                        raise RuntimeError(
+                            f"Cannot complete repository tree traversal at {item.path}"
+                        ) from exc
                     continue
                 if item.type == "file":
                     self._index_file(
@@ -122,6 +127,18 @@ class CodebaseBaselineSync:
                         last_author=author_map.get(item.path),
                     )
                     files_processed += 1
+                    live_paths.append(item.path)
+
+            # Reconcile stale file rows/entities only after the entire immutable
+            # Git tree has been traversed and every live file indexed successfully.
+            self.supabase.rpc(
+                "reconcile_repository_files",
+                {
+                    "p_repository_id": physical_repo_id,
+                    "p_company_id": company_id,
+                    "p_live_paths": live_paths,
+                },
+            ).execute()
 
             for mod_path, file_count in module_map.items():
                 self._create_module(mod_path, physical_repo_id, file_count, company_id)
