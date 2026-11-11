@@ -148,7 +148,7 @@ class RampEvidenceStore:
             "list implementation relationships",
             lambda: (
                 self.supabase.table("edges")
-                .select("id, source_id, target_id, type, confidence")
+                .select("id, source_id, target_id, type, confidence, company_id, metadata")
                 .eq("company_id", company_id)
                 .limit(20000)
                 .execute()
@@ -171,7 +171,47 @@ class RampEvidenceStore:
             relation_type = str(edge.get("type") or "").upper()
             source_path = file_paths.get(str(edge.get("source_id") or ""))
             target_path = file_paths.get(str(edge.get("target_id") or ""))
-            if relation_type in {"PART_OF", "OWNS"} or not source_path or not target_path:
+            metadata = edge.get("metadata") if isinstance(edge.get("metadata"), dict) else {}
+            provenance_items = metadata.get("provenance")
+            if (
+                relation_type != "ROUTE_HANDLER_OPERATION"
+                or not source_path
+                or not target_path
+                or str(edge.get("company_id") or "") != company_id
+                or not isinstance(provenance_items, list)
+                or len(provenance_items) != 2
+                or metadata.get("repository_id") != str(
+                    next(
+                        (row.get("repository_id") for row in (getattr(entities, "data", []) or [])
+                         if isinstance(row, dict) and str(row.get("id")) == str(edge.get("source_id"))),
+                        "",
+                    )
+                )
+            ):
+                continue
+            provenance = {
+                "repository_id": metadata.get("repository_id"),
+                "source_revision": metadata.get("source_revision"),
+                "extractor_id": metadata.get("extractor_id"),
+                "extractor_version": metadata.get("extractor_version"),
+                "source_file": provenance_items[0].get("source_file"),
+                "line": provenance_items[0].get("line"),
+                "observation": "derived",
+                "call_source_file": provenance_items[1].get("source_file"),
+                "call_line": provenance_items[1].get("line"),
+                "call_observation": provenance_items[1].get("observation"),
+                "limitations": provenance_items[0].get("limitations", []),
+            }
+            if (
+                provenance.get("repository_id") is None
+                or provenance.get("source_revision") is None
+                or provenance.get("extractor_id") is None
+                or provenance.get("extractor_version") is None
+                or provenance.get("source_file") != source_path
+                or provenance.get("call_source_file") != target_path
+                or provenance.get("observation") != "derived"
+                or provenance.get("call_observation") != "direct"
+            ):
                 continue
             try:
                 confidence = float(edge.get("confidence") or 0.0)
@@ -184,12 +224,14 @@ class RampEvidenceStore:
                     source="edges",
                     kind="implementation_relation",
                     strength=strength,
-                    detail=f"{source_path} --{relation_type}--> {target_path}",
+                    detail=str(metadata.get("detail") or f"{source_path} --{relation_type}--> {target_path}"),
+                    repository_id=str(provenance["repository_id"]),
                     metadata={
                         "source_ref": source_path,
                         "target_ref": target_path,
                         "relation_type": relation_type,
                         "confidence": confidence,
+                        "provenance": provenance,
                     },
                 )
             )
