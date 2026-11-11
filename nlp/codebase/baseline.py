@@ -231,7 +231,6 @@ class CodebaseBaselineSync:
                 "last_commit_sha": gh_file.sha,
                 "last_author": last_author,
                 "metadata": {"company_id": company_id},
-                "company_id": company_id,
             },
             on_conflict="repository_id,file_path",
         ).execute()
