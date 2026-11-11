@@ -1,4 +1,4 @@
--- Integration checks for 20261112_reconcile_repository_files.sql.
+-- Integration checks for 20261111_reconcile_repository_files.sql.
 -- Run against a disposable database after applying schema/schemas.sql and
 -- all prerequisite migrations. All fixture data is rolled back.
 
