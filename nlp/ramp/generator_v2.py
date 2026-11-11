@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import logging
 import uuid
-from urllib.parse import quote
 from datetime import datetime, timezone
+from urllib.parse import quote
 from typing import Any, Callable, Dict, List, Optional
 
 from supabase import Client
@@ -339,10 +339,14 @@ class RampPlanner:
             },
             "summary": {"what": candidate.objective, "how": candidate.concrete_action, "where": ", ".join(candidate.implementation_refs)},
             "resources": [
-                {"type": "file", "path": ref, "url": (
-                    f"https://github.com/{repository_name}/blob/{repository_branch}/"
-                    + "/".join(__import__("urllib.parse", fromlist=["quote"]).quote(part, safe="") for part in ref.split("/"))
-                ) if repository_name and ref in surfaces_by_path else None}
+                {
+                    "type": "file",
+                    "path": ref,
+                    "url": (
+                        f"https://github.com/{repository_name}/blob/{repository_branch}/"
+                        + "/".join(quote(part, safe="") for part in ref.split("/"))
+                    ) if repository_name and ref in surfaces_by_path else None,
+                }
                 for ref in candidate.implementation_refs
             ],
             "checklist": [
