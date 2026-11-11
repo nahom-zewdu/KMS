@@ -38,8 +38,14 @@ BEGIN
      OR lower(btrim(p_company_id)) = 'default' THEN
     RAISE EXCEPTION 'a valid company_id is required';
   END IF;
-  IF p_source_ids IS NULL OR cardinality(p_source_ids) = 0 THEN
-    RAISE EXCEPTION 'source file identities are required';
+  IF p_source_ids IS NULL
+     OR cardinality(p_source_ids) = 0
+     OR array_position(p_source_ids, NULL) IS NOT NULL
+     OR cardinality(p_source_ids) <> (
+       SELECT count(DISTINCT requested.source_id)
+       FROM unnest(p_source_ids) AS requested(source_id)
+     ) THEN
+    RAISE EXCEPTION 'source file identities must be non-empty, non-null, and unique';
   END IF;
   IF p_edges IS NULL OR jsonb_typeof(p_edges) <> 'array' THEN
     RAISE EXCEPTION 'edges must be a JSON array';
@@ -59,6 +65,7 @@ BEGIN
     FROM public.entities AS entity
     WHERE entity.id = ANY(p_source_ids)
       AND entity.company_id = p_company_id
+      AND entity.type = 'FILE'
   ) <> (
     SELECT count(DISTINCT source_id)
     FROM unnest(p_source_ids) AS requested(source_id)
@@ -97,6 +104,8 @@ BEGIN
     LEFT JOIN public.entities AS target_entity ON target_entity.id = e.target_id
     WHERE source_entity.company_id IS DISTINCT FROM p_company_id
        OR target_entity.company_id IS DISTINCT FROM p_company_id
+       OR source_entity.type IS DISTINCT FROM 'FILE'
+       OR target_entity.type IS DISTINCT FROM 'FILE'
   ) THEN
     RAISE EXCEPTION 'replacement edge endpoints must belong to the requested company';
   END IF;
