@@ -123,6 +123,39 @@ func extractRichContent(eventType string, payload map[string]interface{}) string
 	return strings.Join(sentences, ". ") + "."
 }
 
+// truncateText bounds webhook metadata retained for downstream indexing.
+func truncateText(value string, maxRunes int) string {
+	runes := []rune(value)
+	if len(runes) <= maxRunes {
+		return value
+	}
+	return string(runes[:maxRunes])
+}
+
+// extractIssueLabels keeps only label names; full webhook objects are unnecessary for Ramp.
+func extractIssueLabels(value interface{}, limit int) []string {
+	items, ok := value.([]interface{})
+	if !ok {
+		return []string{}
+	}
+	labels := make([]string, 0, min(len(items), limit))
+	for _, item := range items {
+		label, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		name, ok := label["name"].(string)
+		if !ok || strings.TrimSpace(name) == "" {
+			continue
+		}
+		labels = append(labels, strings.TrimSpace(name))
+		if len(labels) == limit {
+			break
+		}
+	}
+	return labels
+}
+
 // Helper: safely extract nested string
 func getString(m map[string]interface{}, keys ...string) string {
 	val := interface{}(m)
@@ -257,6 +290,24 @@ func (h *GitHubHandler) HandleGitHubWebhook(c *gin.Context) {
 		"event_type":  eventType,
 		"delivery_id": deliveryID,
 		"ref":         payload["ref"],
+	}
+
+	if eventType == "issues" {
+		if issue, ok := payload["issue"].(map[string]interface{}); ok {
+			issueSnapshot := map[string]interface{}{
+				"number":     issue["number"],
+				"title":      getString(issue, "title"),
+					"body":       truncateText(getString(issue, "body"), 10000),
+					"state":      getString(issue, "state"),
+					"html_url":   getString(issue, "html_url"),
+					"created_at": issue["created_at"],
+					"updated_at": issue["updated_at"],
+					"labels":     extractIssueLabels(issue["labels"], 20),
+					"assignee":   getString(issue, "assignee", "login"),
+			}
+			minimalPayload["action"] = getString(payload, "action")
+			minimalPayload["issue"] = issueSnapshot
+		}
 	}
 
 	if eventType == "push" {
