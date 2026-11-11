@@ -164,6 +164,25 @@ class RampEvidenceStore:
             if path and row.get("id"):
                 file_paths[str(row["id"])] = path
 
+        repository_ids = self._repository_ids(company_id)
+        file_rows = self._retrieve(
+            "codebase_files",
+            "validate behavioral evidence repository membership",
+            lambda: (
+                self.supabase.table("codebase_files")
+                .select("repository_id, file_path")
+                .in_("repository_id", repository_ids)
+                .limit(10000)
+                .execute()
+            ),
+        )
+        path_repository_ids: Dict[str, set[str]] = {}
+        for row in getattr(file_rows, "data", []) or []:
+            if isinstance(row, dict) and row.get("file_path") and row.get("repository_id"):
+                path_repository_ids.setdefault(str(row["file_path"]), set()).add(
+                    str(row["repository_id"])
+                )
+
         result: List[Evidence] = []
         for edge in getattr(edges, "data", []) or []:
             if not isinstance(edge, dict):
@@ -180,13 +199,8 @@ class RampEvidenceStore:
                 or str(edge.get("company_id") or "") != company_id
                 or not isinstance(provenance_items, list)
                 or len(provenance_items) != 2
-                or metadata.get("repository_id") != str(
-                    next(
-                        (row.get("repository_id") for row in (getattr(entities, "data", []) or [])
-                         if isinstance(row, dict) and str(row.get("id")) == str(edge.get("source_id"))),
-                        "",
-                    )
-                )
+                or str(metadata.get("repository_id") or "") not in path_repository_ids.get(source_path, set())
+                or str(metadata.get("repository_id") or "") not in path_repository_ids.get(target_path, set())
             ):
                 continue
             provenance = {
