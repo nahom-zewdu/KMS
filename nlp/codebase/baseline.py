@@ -236,10 +236,12 @@ class CodebaseBaselineSync:
 
         batch = []
         snapshots_written = 0
+        scanned_items = 0
         issues = repo.get_issues(state="all", sort="updated", direction="desc")
         for issue in issues:
-            if snapshots_written >= max_issues:
+            if scanned_items >= max_issues:
                 break
+            scanned_items += 1
             # GitHub's issues endpoint also returns pull requests.
             if getattr(issue, "pull_request", None):
                 continue
@@ -248,7 +250,10 @@ class CodebaseBaselineSync:
             if number is None or updated_at is None:
                 continue
 
-            updated_at = updated_at.astimezone(timezone.utc)
+            if updated_at.tzinfo is None:
+                updated_at = updated_at.replace(tzinfo=timezone.utc)
+            else:
+                updated_at = updated_at.astimezone(timezone.utc)
             updated_at_text = updated_at.isoformat()
             body = str(getattr(issue, "body", None) or "")
             labels = []
@@ -266,8 +271,11 @@ class CodebaseBaselineSync:
                 "body": body[:10000],
                 "state": str(getattr(issue, "state", "") or ""),
                 "html_url": str(getattr(issue, "html_url", "") or ""),
-                "created_at": getattr(issue, "created_at", None).astimezone(timezone.utc).isoformat()
-                if getattr(issue, "created_at", None) else None,
+                "created_at": (
+                    getattr(issue, "created_at").replace(tzinfo=timezone.utc).isoformat()
+                    if getattr(issue, "created_at").tzinfo is None
+                    else getattr(issue, "created_at").astimezone(timezone.utc).isoformat()
+                ) if getattr(issue, "created_at", None) else None,
                 "updated_at": updated_at_text,
                 "labels": labels,
                 "assignee": str(assignee_login) if assignee_login else "",
