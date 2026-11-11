@@ -65,9 +65,10 @@ def _assert_repository_update_is_tenant_scoped(database):
         for table, operation, filters in database.calls
         if table == "repositories" and operation == "update"
     ]
-    assert len(updates) == 1
-    assert ("id", "repo-id") in updates[0]
-    assert ("company_id", "company-a") in updates[0]
+    assert updates
+    assert all(("company_id", "company-a") in filters for filters in updates)
+    assert any(("id", "repo-id") in filters for filters in updates)
+    assert any(("full_name", "org/repo") in filters for filters in updates)
 
 
 def test_incremental_repository_update_filters_by_company():
