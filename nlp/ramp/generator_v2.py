@@ -362,7 +362,7 @@ class RampPlanner:
                     "kind": "direct",
                     "source": "github_issue",
                     "label": issue.get("title"),
-                    "detail": "Tenant-scoped GitHub issue event; status and assignment must be rechecked live.",
+                    "detail": "Issue snapshot from a signed GitHub webhook. Recheck current status and assignment before starting.",
                     "record_id": str(issue.get("number") or ""),
                     "issue_url": issue.get("url"),
                     "issue_number": issue.get("number"),
