@@ -184,7 +184,10 @@ class RampPlanner:
             candidates.append(candidate)
 
         candidates.extend(
-            self._contribution_candidates(role, company_id, contribution_issues, surfaces)
+            self._contribution_candidates(
+                role, company_id, contribution_issues, surfaces,
+                role_surface.candidate_id if role_surface else (orientation.candidate_id if orientation else ""),
+            )
         )
         return candidates
 
@@ -269,6 +272,7 @@ class RampPlanner:
         company_id: str,
         issues: List[Dict[str, Any]],
         surfaces: List[ImplementationSurface],
+        prerequisite: str = "",
     ) -> List[RampCandidate]:
         """Create narrowly gated contribution leads from explicit issue evidence."""
         by_path = {surface.path: surface for surface in surfaces}
@@ -298,7 +302,7 @@ class RampPlanner:
                 objective=f"Evaluate GitHub issue #{issue['number']}: {issue['title']}",
                 implementation_refs=paths,
                 evidence_refs=refs,
-                prerequisites=[],
+                prerequisites=[prerequisite] if prerequisite else [],
                 role_relevance=1.0 if role_relevant else 0.65,
                 prerequisite_value=0.7,
                 evidence_strength=1.0,
@@ -318,7 +322,7 @@ class RampPlanner:
                     "Do not mark the issue complete until the maintainer-approved checks pass."
                 ),
                 contribution_candidate=True,
-                history_strength=0.8,
+                history_strength=0.0,
                 metadata={
                     "issue": issue,
                     "selection_reason": (
