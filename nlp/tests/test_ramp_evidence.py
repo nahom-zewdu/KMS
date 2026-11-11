@@ -22,6 +22,9 @@ class Query:
     def limit(self, *_args, **_kwargs):
         return self
 
+    def order(self, *_args, **_kwargs):
+        return self
+
     def execute(self):
         if self.error:
             raise self.error
@@ -184,6 +187,46 @@ def test_contribution_issues_reject_paths_not_present_in_company_repository_inde
             "company_id": "company-a",
             "payload": {"repo": "acme/service", "issue": issue},
         }]),
+        "codebase_files": Query([{
+            "repository_id": "repo-1",
+            "file_path": "api/handlers/webhook.go",
+        }]),
+    }[name]
+
+    assert RampEvidenceStore(supabase).contribution_issues("company-a") == []
+
+def test_latest_closed_issue_event_prevents_stale_open_issue_from_becoming_candidate():
+    base_issue = {
+        "number": 99,
+        "title": "Improve webhook handling",
+        "body": "- [ ] Handle retry state\\n- [ ] Add tests\\napi/handlers/webhook.go",
+        "labels": [{"name": "good first issue"}],
+        "assignee": None,
+    }
+    events = [
+        {
+            "delivery_id": "delivery-new",
+            "company_id": "company-a",
+            "payload": {
+                "repo": "acme/service",
+                "issue": {**base_issue, "state": "closed"},
+            },
+            "created_at": "2026-11-10T00:00:00Z",
+        },
+        {
+            "delivery_id": "delivery-old",
+            "company_id": "company-a",
+            "payload": {
+                "repo": "acme/service",
+                "issue": {**base_issue, "state": "open"},
+            },
+            "created_at": "2026-11-01T00:00:00Z",
+        },
+    ]
+    supabase = Mock()
+    supabase.table.side_effect = lambda name: {
+        "repositories": Query([{"id": "repo-1", "full_name": "acme/service"}]),
+        "events": Query(events),
         "codebase_files": Query([{
             "repository_id": "repo-1",
             "file_path": "api/handlers/webhook.go",
