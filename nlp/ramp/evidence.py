@@ -395,7 +395,7 @@ class RampEvidenceStore:
             snapshot_body = str(issue.get("body") or "")
             snapshot_checks = [
                 line.strip() for line in snapshot_body.splitlines()
-                if re.match(r"^\s*(?:[-*+]\\s+\\[[ xX]\\]|\\d+[.)]\\s+)", line)
+                if re.match(r"^\s*(?:[-*+]\s+\[[ xX]\]|\d+[.)]\s+)", line)
             ]
             if len(snapshot_checks) < 2:
                 continue
@@ -431,7 +431,7 @@ class RampEvidenceStore:
             body = str(current_issue.get("body") or "")
             checks = [
                 line.strip() for line in body.splitlines()
-                if re.match(r"^\s*(?:[-*+]\\s+\\[[ xX]\\]|\\d+[.)]\\s+)", line)
+                if re.match(r"^\s*(?:[-*+]\s+\[[ xX]\]|\d+[.)]\s+)", line)
             ]
             if len(checks) < 2:
                 continue
