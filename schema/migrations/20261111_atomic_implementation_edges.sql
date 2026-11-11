@@ -6,7 +6,7 @@ BEGIN;
 ALTER TABLE public.edges
   ADD COLUMN IF NOT EXISTS confidence double precision NOT NULL DEFAULT 1.0;
 
-DO $
+DO $$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
@@ -17,7 +17,7 @@ BEGIN
       ADD CONSTRAINT edges_confidence_range
       CHECK (confidence >= 0 AND confidence <= 1) NOT VALID;
   END IF;
-END $;
+END $$;
 
 ALTER TABLE public.edges VALIDATE CONSTRAINT edges_confidence_range;
 
