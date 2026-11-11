@@ -69,6 +69,7 @@ def relation(source, target, relation_type="CALLS", strength="derived"):
             "relation_type": relation_type,
             "confidence": 0.8 if strength == "derived" else 1.0,
             "provenance": {
+                "repository_id": "repo-1",
                 "source_revision": "a" * 40,
                 "extractor_id": "kms.go.gin.behavioral",
                 "extractor_version": "1",
