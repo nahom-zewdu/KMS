@@ -13,6 +13,7 @@ from typing import Mapping, Sequence
 
 from .evidence_composition import GoEvidenceComposer
 from .handler_call_evidence import GoHandlerCallEvidenceExtractor
+from .models import Evidence
 from .route_evidence import GoRouteEvidenceExtractor
 
 
@@ -246,3 +247,65 @@ class GoBehavioralEvidenceProducer:
             detail=detail,
             provenance=normalized_provenance,
         )
+
+
+def to_workflow_evidence(
+    records: Sequence[BehavioralEvidenceRecord],
+) -> list[Evidence]:
+    """Adapt composed observations to Ramp's in-memory evidence contract.
+
+    Only route -> handler -> direct-operation compositions become graph-shaped
+    workflow evidence. Primitive route/call observations remain available to
+    evaluators but are not promoted to file-to-file workflow relationships.
+    This adapter is intentionally in-memory; it does not imply DB persistence.
+    """
+    result: list[Evidence] = []
+    for record in records:
+        if record.evidence_type != "ROUTE_HANDLER_OPERATION":
+            continue
+        if len(record.provenance) != 2:
+            continue
+
+        route, call = record.provenance
+        if (
+            route.repository_id != call.repository_id
+            or route.source_revision != call.source_revision
+            or route.extractor_id != call.extractor_id
+            or route.extractor_version != call.extractor_version
+            or not route.source_file
+            or not call.source_file
+            or route.line < 1
+            or call.line < 1
+        ):
+            continue
+
+        provenance = {
+            "repository_id": route.repository_id,
+            "source_revision": route.source_revision,
+            "extractor_id": route.extractor_id,
+            "extractor_version": route.extractor_version,
+            "source_file": route.source_file,
+            "line": route.line,
+            "observation": "derived",
+            "call_source_file": call.source_file,
+            "call_line": call.line,
+            "call_observation": "direct",
+            "limitations": list(route.limitations),
+        }
+        result.append(
+            Evidence(
+                ref=record.ref,
+                source=route.extractor_id,
+                kind="implementation_relation",
+                strength="derived",
+                detail=record.detail,
+                repository_id=route.repository_id,
+                metadata={
+                    "source_ref": route.source_file,
+                    "target_ref": call.source_file,
+                    "relation_type": record.evidence_type,
+                    "provenance": provenance,
+                },
+            )
+        )
+    return sorted(result, key=lambda item: item.ref)
