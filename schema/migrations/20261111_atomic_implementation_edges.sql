@@ -25,6 +25,18 @@ BEGIN
   END IF;
 
   -- Validate the entire replacement set before deleting anything.
+  IF (
+    SELECT count(DISTINCT entity.id)
+    FROM public.entities AS entity
+    WHERE entity.id = ANY(p_source_ids)
+      AND entity.company_id = p_company_id
+  ) <> (
+    SELECT count(DISTINCT source_id)
+    FROM unnest(p_source_ids) AS source_id
+  ) THEN
+    RAISE EXCEPTION 'all source entities must belong to the requested company';
+  END IF;
+
   IF EXISTS (
     SELECT 1
     FROM jsonb_to_recordset(p_edges) AS e(
@@ -39,6 +51,7 @@ BEGIN
        OR e.source_id IS NULL
        OR e.target_id IS NULL
        OR e.source_id <> ALL(p_source_ids)
+       OR e.type IS NULL
        OR e.type NOT IN ('IMPORTS', 'ROUTE_HANDLER_OPERATION')
        OR e.company_id IS DISTINCT FROM p_company_id
        OR e.confidence IS NULL
@@ -46,6 +59,17 @@ BEGIN
        OR e.confidence > 1
   ) THEN
     RAISE EXCEPTION 'replacement edges contain invalid identity, tenant, type, or confidence';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM jsonb_to_recordset(p_edges) AS e(source_id uuid, target_id uuid)
+    LEFT JOIN public.entities AS source_entity ON source_entity.id = e.source_id
+    LEFT JOIN public.entities AS target_entity ON target_entity.id = e.target_id
+    WHERE source_entity.company_id IS DISTINCT FROM p_company_id
+       OR target_entity.company_id IS DISTINCT FROM p_company_id
+  ) THEN
+    RAISE EXCEPTION 'replacement edge endpoints must belong to the requested company';
   END IF;
 
   IF EXISTS (
