@@ -1,4 +1,9 @@
-from ramp.behavioral_evidence_producer import GoBehavioralEvidenceProducer
+from ramp.behavioral_evidence_producer import (
+    GoBehavioralEvidenceProducer,
+    to_workflow_evidence,
+)
+from ramp.models import ImplementationSurface
+from ramp.workflows import WorkflowDiscoverer
 
 
 def snapshot():
@@ -114,3 +119,55 @@ def test_missing_direct_call_does_not_create_composed_evidence():
     assert any(item.evidence_type == "ROUTE_HANDLES" for item in records)
     assert not any(item.evidence_type == "HANDLER_INVOKES" for item in records)
     assert not any(item.evidence_type == "ROUTE_HANDLER_OPERATION" for item in records)
+
+
+def test_composed_records_adapt_to_qualified_workflow_evidence():
+    records = GoBehavioralEvidenceProducer().produce(
+        snapshot(), repository_id="repo-123", source_revision="a" * 40
+    )
+    evidence = to_workflow_evidence(records)
+
+    assert len(evidence) == 1
+    item = evidence[0]
+    assert item.repository_id == "repo-123"
+    assert item.kind == "implementation_relation"
+    assert item.strength == "derived"
+    assert item.metadata["relation_type"] == "ROUTE_HANDLER_OPERATION"
+    assert item.metadata["source_ref"] == "api/handlers/routes.go"
+    assert item.metadata["target_ref"] == "api/handlers/github.go"
+    assert item.metadata["provenance"]["call_source_file"] == "api/handlers/github.go"
+
+    surfaces = [
+        ImplementationSurface(
+            ref=path,
+            path=path,
+            repository_id="repo-123",
+            module_path="api/handlers",
+            language="Go",
+        )
+        for path in ("api/handlers/routes.go", "api/handlers/github.go")
+    ]
+    workflows = WorkflowDiscoverer().discover(
+        surfaces, evidence, "backend-engineer"
+    )
+    assert workflows
+    assert workflows[0].implementation_refs == [
+        "api/handlers/routes.go",
+        "api/handlers/github.go",
+    ]
+    assert item.ref in workflows[0].evidence_refs
+
+
+def test_adapter_rejects_mixed_repository_or_revision_compositions():
+    records = GoBehavioralEvidenceProducer().produce(
+        snapshot(), repository_id="repo-123", source_revision="a" * 40
+    )
+    composed = next(item for item in records if item.evidence_type == "ROUTE_HANDLER_OPERATION")
+    call = composed.provenance[1]
+    from dataclasses import replace
+
+    corrupted = replace(
+        composed,
+        provenance=(composed.provenance[0], replace(call, source_revision="b" * 40)),
+    )
+    assert to_workflow_evidence([corrupted]) == []
