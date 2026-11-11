@@ -25,7 +25,15 @@ logger = logging.getLogger("engine.llm")
 def _is_json_validation_error(error: BadRequestError) -> bool:
     """Return True only for Groq's model-output JSON validation failure."""
     body = getattr(error, "body", None)
-    return isinstance(body, dict) and body.get("code") == "json_validate_failed"
+    if not isinstance(body, dict):
+        return False
+    # Groq has returned this code both at the top level and nested under
+    # the OpenAI-compatible {"error": {...}} response envelope.
+    nested_error = body.get("error")
+    code = body.get("code")
+    if code is None and isinstance(nested_error, dict):
+        code = nested_error.get("code")
+    return code == "json_validate_failed"
 
 
 @lru_cache(maxsize=500)
