@@ -99,3 +99,22 @@ def test_issue_backfill_rejects_invalid_tenant_and_limits():
     with pytest.raises(ValueError):
         sync._backfill_issue_events(repo, "acme/service", "company-a", max_issues=0)
     repo.get_issues.assert_not_called()
+
+def test_issue_backfill_caps_scanned_github_items_including_pull_requests():
+    supabase = Mock()
+    query = UpsertQuery()
+    supabase.table.return_value = query
+    repo = Mock()
+    repo.get_issues.return_value = [
+        make_issue(10, pull_request={"url": "https://api.github.com/pulls/10"}),
+        make_issue(11),
+    ]
+    sync = CodebaseBaselineSync(supabase)
+
+    count = sync._backfill_issue_events(
+        repo, "acme/service", "company-a", max_issues=1
+    )
+
+    assert count == 0
+    assert query.calls == []
+
