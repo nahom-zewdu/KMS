@@ -488,6 +488,11 @@ class RampPlanner:
     @staticmethod
     def _title(candidate: RampCandidate) -> str:
         """Generate a user-facing title from the candidate outcome, not a directory name."""
+        if candidate.candidate_type == "contribution-lead":
+            issue = candidate.metadata.get("issue") or {}
+            number = issue.get("number", "")
+            title = str(issue.get("title") or "Review a newcomer-friendly issue")
+            return f"Review issue #{number}: {title}".strip(": ")
         return {
             "orientation": "Map the engineering system",
             "role-surface": "Find your role's implementation surface",
