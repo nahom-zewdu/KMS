@@ -311,6 +311,18 @@ class RampPlanner:
             if surface.metadata.get("repository_default_branch")
         }
         repository_branch = next(iter(repository_branches)) if len(repository_branches) == 1 else "HEAD"
+
+        def source_url(file_path: str) -> Optional[str]:
+            surface = surfaces_by_path.get(file_path)
+            if not surface:
+                return None
+            repository = surface.metadata.get("repository_full_name")
+            branch = surface.metadata.get("repository_default_branch") or "HEAD"
+            if not repository:
+                return None
+            encoded_path = "/".join(quote(part, safe="") for part in file_path.split("/"))
+            return f"https://github.com/{repository}/blob/{quote(str(branch), safe='/')}/{encoded_path}"
+
         return {
             "id": step_id,
             "order": order,
@@ -331,10 +343,7 @@ class RampPlanner:
                         "path": ref,
                         "type": "file",
                         "repository_id": surfaces_by_path[ref].repository_id,
-                        "github_url": (
-                            f"https://github.com/{repository_name}/blob/{repository_branch}/"
-                            + "/".join(quote(part, safe='') for part in ref.split("/"))
-                        ) if repository_name and ref in surfaces_by_path else None,
+                        "github_url": source_url(ref),
                     }
                     for ref in candidate.implementation_refs
                 ],
@@ -344,10 +353,7 @@ class RampPlanner:
                 {
                     "type": "file",
                     "path": ref,
-                    "url": (
-                        f"https://github.com/{repository_name}/blob/{repository_branch}/"
-                        + "/".join(quote(part, safe="") for part in ref.split("/"))
-                    ) if repository_name and ref in surfaces_by_path else None,
+                    "url": source_url(ref),
                 }
                 for ref in candidate.implementation_refs
             ],
