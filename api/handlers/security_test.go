@@ -428,3 +428,36 @@ func (s *securityStorage) companyLookupCount() int {
 
 var _ domain.StoragePort = (*securityStorage)(nil)
 var _ domain.SlackIngestService = (*securitySlackIngest)(nil)
+
+func TestGitHubIssueSnapshotIsBoundedAndAllowlisted(t *testing.T) {
+	body := strings.Repeat("x", 10001)
+	issue := map[string]interface{}{
+		"number": 42,
+		"title": "Add retry visibility",
+		"body": body,
+		"state": "open",
+		"html_url": "https://github.com/acme/service/issues/42",
+		"labels": []interface{}{
+			map[string]interface{}{"name": "good first issue"},
+			map[string]interface{}{"name": "backend"},
+		},
+		"assignee": map[string]interface{}{"login": "alice"},
+		"milestone": map[string]interface{}{"title": "private internal milestone"},
+	}
+
+	snapshot := extractIssueSnapshot(issue)
+	if len([]rune(snapshot["body"].(string))) != 10000 {
+		t.Fatalf("issue body length = %d, want 10000", len([]rune(snapshot["body"].(string))))
+	}
+	labels, ok := snapshot["labels"].([]string)
+	if !ok || len(labels) != 2 || labels[0] != "good first issue" {
+		t.Fatalf("unexpected issue labels: %#v", snapshot["labels"])
+	}
+	if snapshot["assignee"] != "alice" {
+		t.Fatalf("assignee = %#v, want alice", snapshot["assignee"])
+	}
+	if _, exists := snapshot["milestone"]; exists {
+		t.Fatal("unapproved issue field leaked into the snapshot")
+	}
+}
+
