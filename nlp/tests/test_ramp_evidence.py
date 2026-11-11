@@ -313,3 +313,48 @@ def test_live_issue_snapshot_marks_github_404_as_not_found(monkeypatch):
     assert first == (None, "not_found")
     assert second == first
 
+def test_live_closed_issue_is_not_returned_as_contribution_candidate(monkeypatch):
+    import ramp.evidence as evidence_module
+
+    issue = {
+        "number": 42,
+        "title": "Improve webhook handling",
+        "body": "- [ ] Handle retry state\n- [ ] Add tests\napi/handlers/webhook.go",
+        "state": "open",
+        "labels": [{"name": "good first issue"}],
+        "assignee": None,
+        "html_url": "https://github.com/acme/service/issues/42",
+    }
+    supabase = Mock()
+    supabase.table.side_effect = lambda name: {
+        "repositories": Query([{
+            "id": "repo-1",
+            "full_name": "acme/service",
+            "default_branch": "main",
+        }]),
+        "events": Query([{
+            "delivery_id": "delivery-42",
+            "company_id": "company-a",
+            "event_type": "issues",
+            "payload": {"repo": "acme/service", "issue": issue},
+        }]),
+        "codebase_files": Query([{
+            "repository_id": "repo-1",
+            "file_path": "api/handlers/webhook.go",
+        }]),
+    }[name]
+    monkeypatch.setattr(
+        evidence_module.RampEvidenceStore,
+        "_live_issue_snapshot",
+        staticmethod(lambda *_args: ({
+            "number": 42,
+            "state": "closed",
+            "assignee": None,
+            "labels": [{"name": "good first issue"}],
+            "body": issue["body"],
+            "html_url": issue["html_url"],
+        }, "verified")),
+    )
+
+    assert RampEvidenceStore(supabase).contribution_issues("company-a") == []
+
