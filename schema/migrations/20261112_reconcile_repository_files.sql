@@ -34,8 +34,14 @@ BEGIN
     hashtext(p_repository_id::text)
   );
 
-  CREATE TEMP TABLE stale_repository_files ON COMMIT DROP AS
-  SELECT f.id AS codebase_file_id, e.id AS entity_id
+  CREATE TEMP TABLE IF NOT EXISTS stale_repository_files (
+    codebase_file_id uuid NOT NULL,
+    entity_id uuid NOT NULL
+  ) ON COMMIT DROP;
+  TRUNCATE TABLE pg_temp.stale_repository_files;
+
+  INSERT INTO pg_temp.stale_repository_files (codebase_file_id, entity_id)
+  SELECT f.id, e.id
   FROM public.repositories r
   JOIN public.entities repo_entity
     ON repo_entity.type = 'REPOSITORY'
