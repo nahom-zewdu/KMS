@@ -310,6 +310,7 @@ class RampEvidenceStore:
                 .eq("company_id", company_id)
                 .eq("source", "github")
                 .eq("event_type", "issues")
+                .order("created_at", desc=True)
                 .limit(1000)
                 .execute()
             ),
@@ -332,6 +333,7 @@ class RampEvidenceStore:
 
         results: List[Dict[str, Any]] = []
         path_pattern = re.compile(r"(?<![A-Za-z0-9_.-])(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\.[A-Za-z0-9]+")
+        seen_issue_keys = set()
         for row in getattr(response, "data", []) or []:
             if not isinstance(row, dict) or str(row.get("company_id") or "") != company_id:
                 continue
@@ -348,6 +350,12 @@ class RampEvidenceStore:
             issue = payload.get("issue")
             if not repository or not isinstance(issue, dict):
                 continue
+            issue_key = (repo_name, str(issue.get("number") or ""))
+            if not issue_key[1] or issue_key in seen_issue_keys:
+                continue
+            # The newest webhook snapshot wins, even when it is closed or assigned;
+            # never resurrect an older open/unassigned event for the same issue.
+            seen_issue_keys.add(issue_key)
             if str(issue.get("state") or "").lower() != "open" or issue.get("assignee"):
                 continue
             labels = issue.get("labels") if isinstance(issue.get("labels"), list) else []
