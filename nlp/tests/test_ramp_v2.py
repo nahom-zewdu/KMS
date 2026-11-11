@@ -68,6 +68,14 @@ def relation(source, target, relation_type="CALLS", strength="derived"):
             "target_ref": target,
             "relation_type": relation_type,
             "confidence": 0.8 if strength == "derived" else 1.0,
+            "provenance": {
+                "source_revision": "a" * 40,
+                "extractor_id": "kms.go.gin.behavioral",
+                "extractor_version": "1",
+                "source_file": source,
+                "line": 1,
+                "observation": strength,
+            },
         },
     )
 
@@ -107,6 +115,34 @@ def test_weak_relationships_do_not_create_workflow_candidates():
     surfaces = [surface("api/a.go"), surface("api/b.go")]
     evidence = [relation("api/a.go", "api/b.go", strength="inferred")]
     assert discoverer.discover(surfaces, evidence, "backend-engineer") == []
+
+
+def test_structural_import_edges_never_create_workflow_candidates():
+    discoverer = WorkflowDiscoverer()
+    surfaces = [surface("api/a.go"), surface("api/b.go")]
+    evidence = [relation("api/a.go", "api/b.go", relation_type="IMPORTS", strength="direct")]
+    assert discoverer.discover(surfaces, evidence, "backend-engineer") == []
+
+
+def test_behavioral_relation_without_provenance_is_rejected():
+    discoverer = WorkflowDiscoverer()
+    surfaces = [surface("api/a.go"), surface("api/b.go")]
+    item = relation("api/a.go", "api/b.go", relation_type="CALLS", strength="direct")
+    item.metadata.pop("provenance")
+    assert discoverer.discover(surfaces, [item], "backend-engineer") == []
+
+
+def test_structural_edges_are_removed_before_path_construction():
+    discoverer = WorkflowDiscoverer()
+    surfaces = [surface("api/a.go"), surface("api/b.go"), surface("api/c.go")]
+    evidence = [
+        relation("api/a.go", "api/b.go", relation_type="CALLS", strength="direct"),
+        relation("api/b.go", "api/c.go", relation_type="IMPORTS", strength="direct"),
+    ]
+    workflows = discoverer.discover(surfaces, evidence, "backend-engineer")
+    assert workflows
+    assert all("edge:api/b.go:api/c.go" not in item.evidence_refs for item in workflows)
+    assert all("api/c.go" not in item.implementation_refs for item in workflows)
 
 
 def test_candidate_engine_respects_stage_prerequisites():
