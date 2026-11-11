@@ -123,6 +123,21 @@ func extractRichContent(eventType string, payload map[string]interface{}) string
 	return strings.Join(sentences, ". ") + "."
 }
 
+// extractIssueSnapshot retains only bounded issue fields needed for contribution discovery.
+func extractIssueSnapshot(issue map[string]interface{}) map[string]interface{} {
+	return map[string]interface{}{
+		"number":     issue["number"],
+		"title":      getString(issue, "title"),
+		"body":       truncateText(getString(issue, "body"), 10000),
+		"state":      getString(issue, "state"),
+		"html_url":   getString(issue, "html_url"),
+		"created_at": issue["created_at"],
+		"updated_at": issue["updated_at"],
+		"labels":     extractIssueLabels(issue["labels"], 20),
+		"assignee":   getString(issue, "assignee", "login"),
+	}
+}
+
 // truncateText bounds webhook metadata retained for downstream indexing.
 func truncateText(value string, maxRunes int) string {
 	runes := []rune(value)
@@ -294,19 +309,8 @@ func (h *GitHubHandler) HandleGitHubWebhook(c *gin.Context) {
 
 	if eventType == "issues" {
 		if issue, ok := payload["issue"].(map[string]interface{}); ok {
-			issueSnapshot := map[string]interface{}{
-				"number":     issue["number"],
-				"title":      getString(issue, "title"),
-					"body":       truncateText(getString(issue, "body"), 10000),
-					"state":      getString(issue, "state"),
-					"html_url":   getString(issue, "html_url"),
-					"created_at": issue["created_at"],
-					"updated_at": issue["updated_at"],
-					"labels":     extractIssueLabels(issue["labels"], 20),
-					"assignee":   getString(issue, "assignee", "login"),
-			}
 			minimalPayload["action"] = getString(payload, "action")
-			minimalPayload["issue"] = issueSnapshot
+			minimalPayload["issue"] = extractIssueSnapshot(issue)
 		}
 	}
 
