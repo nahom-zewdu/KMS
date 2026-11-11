@@ -12,6 +12,8 @@ SET search_path = pg_catalog, public
 AS $$
 DECLARE
   v_deleted integer := 0;
+  v_stale_file_ids uuid[] := ARRAY[]::uuid[];
+  v_stale_entity_ids uuid[] := ARRAY[]::uuid[];
 BEGIN
   IF p_repository_id IS NULL
      OR nullif(btrim(p_company_id), '') IS NULL
@@ -34,14 +36,10 @@ BEGIN
     hashtext(p_repository_id::text)
   );
 
-  CREATE TEMP TABLE IF NOT EXISTS stale_repository_files (
-    codebase_file_id uuid NOT NULL,
-    entity_id uuid NOT NULL
-  ) ON COMMIT DROP;
-  TRUNCATE TABLE pg_temp.stale_repository_files;
-
-  INSERT INTO pg_temp.stale_repository_files (codebase_file_id, entity_id)
-  SELECT f.id, e.id
+  SELECT
+    coalesce(array_agg(DISTINCT f.id), ARRAY[]::uuid[]),
+    coalesce(array_agg(DISTINCT e.id), ARRAY[]::uuid[])
+  INTO v_stale_file_ids, v_stale_entity_ids
   FROM public.repositories r
   JOIN public.entities repo_entity
     ON repo_entity.type = 'REPOSITORY'
@@ -70,19 +68,19 @@ BEGIN
   END IF;
 
   DELETE FROM public.edges edge
-  USING stale_repository_files stale
   WHERE edge.company_id = p_company_id
-    AND (edge.source_id = stale.entity_id OR edge.target_id = stale.entity_id);
+    AND (
+      edge.source_id = ANY(v_stale_entity_ids)
+      OR edge.target_id = ANY(v_stale_entity_ids)
+    );
 
   DELETE FROM public.entities entity
-  USING stale_repository_files stale
-  WHERE entity.id = stale.entity_id
+  WHERE entity.id = ANY(v_stale_entity_ids)
     AND entity.company_id = p_company_id
     AND entity.type = 'FILE';
 
   DELETE FROM public.codebase_files f
-  USING stale_repository_files stale
-  WHERE f.id = stale.codebase_file_id
+  WHERE f.id = ANY(v_stale_file_ids)
     AND f.repository_id = p_repository_id;
 
   GET DIAGNOSTICS v_deleted = ROW_COUNT;
