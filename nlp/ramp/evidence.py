@@ -357,6 +357,7 @@ class RampEvidenceStore:
         results: List[Dict[str, Any]] = []
         path_pattern = re.compile(r"(?<![A-Za-z0-9_.-])(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\.[A-Za-z0-9]+")
         seen_issue_keys = set()
+        live_checks_remaining = 50
         for row in event_rows:
             if str(row.get("company_id") or "") != company_id:
                 continue
@@ -407,10 +408,14 @@ class RampEvidenceStore:
             if not snapshot_paths:
                 continue
 
-            live_issue, live_status = self._live_issue_snapshot(
-                str(repository.get("full_name") or ""),
-                str(issue.get("number") or ""),
-            )
+            if live_checks_remaining > 0:
+                live_issue, live_status = self._live_issue_snapshot(
+                    str(repository.get("full_name") or ""),
+                    str(issue.get("number") or ""),
+                )
+                live_checks_remaining -= 1
+            else:
+                live_issue, live_status = None, "unverified"
             if live_status == "not_found":
                 continue
             current_issue = {**issue, **(live_issue or {})}
