@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from urllib.parse import quote
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
@@ -330,7 +331,7 @@ class RampPlanner:
                         "repository_id": surfaces_by_path[ref].repository_id,
                         "github_url": (
                             f"https://github.com/{repository_name}/blob/{repository_branch}/"
-                            + "/".join(__import__("urllib.parse", fromlist=["quote"]).quote(part, safe="") for part in ref.split("/"))
+                            + "/".join(quote(part, safe='') for part in ref.split("/"))
                         ) if repository_name and ref in surfaces_by_path else None,
                     }
                     for ref in candidate.implementation_refs
