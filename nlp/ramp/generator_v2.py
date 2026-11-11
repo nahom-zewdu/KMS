@@ -272,10 +272,19 @@ class RampPlanner:
     ) -> List[RampCandidate]:
         """Create narrowly gated contribution leads from explicit issue evidence."""
         by_path = {surface.path: surface for surface in surfaces}
+        path_counts: Dict[str, int] = {}
+        for surface in surfaces:
+            path_counts[surface.path] = path_counts.get(surface.path, 0) + 1
         result: List[RampCandidate] = []
         role_tokens = self._role_tokens(role)
         for issue in issues:
-            paths = [path for path in issue.get("file_paths", []) if path in by_path]
+            repository_id = str(issue.get("repository_id") or "")
+            paths = [
+                path for path in issue.get("file_paths", [])
+                if path in by_path
+                and by_path[path].repository_id == repository_id
+                and path_counts.get(path) == 1
+            ]
             if not paths:
                 continue
             refs = [str(issue["ref"]), *paths]
