@@ -44,11 +44,11 @@ BEGIN
       jsonb_build_object('file_path', 'src/removed.go'));
 
   INSERT INTO public.codebase_files
-    (id, repository_id, file_path, file_name, company_id)
+    (id, repository_id, file_path, file_name)
   VALUES
-    (v_stale_row, v_repo, 'src/removed.go', 'removed.go', v_company),
-    (v_live_row, v_repo, 'src/live.go', 'live.go', v_company),
-    (v_other_row, v_other_repo, 'src/removed.go', 'removed.go', v_other_company);
+    (v_stale_row, v_repo, 'src/removed.go', 'removed.go'),
+    (v_live_row, v_repo, 'src/live.go', 'live.go'),
+    (v_other_row, v_other_repo, 'src/removed.go', 'removed.go');
 
   INSERT INTO public.edges
     (id, source_id, target_id, type, company_id)
