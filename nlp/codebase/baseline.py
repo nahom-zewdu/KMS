@@ -125,8 +125,10 @@ class CodebaseBaselineSync:
             for mod_path, file_count in module_map.items():
                 self._create_module(mod_path, physical_repo_id, file_count, company_id)
 
+            # Pin relationship extraction to one immutable source snapshot.
+            source_revision = repo.get_branch(repo.default_branch).commit.sha
             relationship_count = self.relationship_indexer.index_repository(
-                repo_full_name, company_id
+                repo_full_name, company_id, source_revision=source_revision
             )
             logger.info(
                 "Implementation relationship indexing complete: %d relationships",
