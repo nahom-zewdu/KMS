@@ -155,3 +155,7 @@ def test_failed_directory_traversal_never_runs_destructive_reconciliation():
         table == "repositories" and values.get("baseline_status") == "failed"
         for table, values in database.updates
     )
+    assert not any(
+        table == "repositories" and values.get("last_synced_at")
+        for table, values in database.updates
+    )
