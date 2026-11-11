@@ -5,7 +5,7 @@ import pytest
 from ramp.candidates import RampCandidateEngine
 from ramp.evidence import RampEvidenceRetrievalError
 from ramp.generator_v2 import RampPlanner
-from ramp.models import Evidence, ImplementationSurface
+from ramp.models import Evidence, ImplementationSurface, RampCandidate
 from ramp.workflows import WorkflowDiscoverer
 
 
@@ -364,3 +364,83 @@ def test_decomposition_abstains_when_no_meaningful_path_exists():
     evidence = [relation("pkg/a.go", "pkg/b.go", strength="inferred")]
 
     assert discoverer.discover(surfaces, evidence, "backend-engineer") == []
+
+def test_serialization_preserves_repository_and_relationship_source_paths():
+    planner = RampPlanner(Mock())
+    source = ImplementationSurface(
+        ref="source-id",
+        path="api/handlers/github.go",
+        repository_id="repo-1",
+        module_path="api/handlers",
+        language="Go",
+        metadata={
+            "repository_full_name": "acme/service",
+            "repository_default_branch": "main",
+        },
+    )
+    target = ImplementationSurface(
+        ref="target-id",
+        path="api/services/github.go",
+        repository_id="repo-1",
+        module_path="api/services",
+        language="Go",
+        metadata={
+            "repository_full_name": "acme/service",
+            "repository_default_branch": "main",
+        },
+    )
+    edge = Evidence(
+        ref="edge:relation-123",
+        source="edges",
+        kind="implementation_relation",
+        strength="derived",
+        repository_id="repo-1",
+        detail="handler invokes service",
+        metadata={
+            "source_ref": source.path,
+            "target_ref": target.path,
+            "relation_type": "ROUTE_HANDLER_OPERATION",
+        },
+    )
+    candidate = RampCandidate(
+        candidate_id="workflow:test",
+        candidate_type="workflow-learning",
+        stage="workflow",
+        objective="Trace the handler to service boundary.",
+        implementation_refs=[source.path, target.path],
+        evidence_refs=[edge.ref, source.path, target.path],
+        prerequisites=[],
+        role_relevance=1.0,
+        prerequisite_value=0.8,
+        evidence_strength=0.8,
+        workflow_value=0.8,
+        actionability=0.9,
+        verification_strength=0.8,
+        help_available=0.5,
+        risk="review",
+        company_scoped=True,
+        concrete_action="Read the handler and service.",
+        verification_method="Explain the observed call.",
+    )
+
+    step = planner._serialize(
+        candidate,
+        "backend-engineer",
+        "company-1",
+        1,
+        {source.path: source, target.path: target},
+        {edge.ref: edge},
+    )
+
+    assert step["target"]["repo"] == "acme/service"
+    assert step["target"]["default_branch"] == "main"
+    assert step["target"]["files"][0]["github_url"] == (
+        "https://github.com/acme/service/blob/main/api/handlers/github.go"
+    )
+    relation_evidence = step["evidence"][0]
+    assert relation_evidence["record_id"] == "relation-123"
+    assert relation_evidence["file_path"] == source.path
+    assert relation_evidence["related_file_path"] == target.path
+    assert relation_evidence["repository_full_name"] == "acme/service"
+    assert all(not item["record_id"].startswith("edge:") for item in step["evidence"])
+
