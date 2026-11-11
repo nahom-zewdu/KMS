@@ -34,22 +34,34 @@ BEGIN
     hashtext(p_repository_id::text)
   );
 
+  CREATE TEMP TABLE stale_repository_files ON COMMIT DROP AS
+  SELECT f.id AS codebase_file_id, e.id AS entity_id
+  FROM public.repositories r
+  JOIN public.entities repo_entity
+    ON repo_entity.type = 'REPOSITORY'
+   AND repo_entity.name = r.full_name
+   AND repo_entity.company_id = r.company_id
+  JOIN public.edges membership
+    ON membership.type = 'PART_OF'
+   AND membership.target_id = repo_entity.id
+   AND membership.company_id = r.company_id
+  JOIN public.entities e
+    ON e.id = membership.source_id
+   AND e.type = 'FILE'
+   AND e.company_id = r.company_id
+  JOIN public.codebase_files f
+    ON f.repository_id = r.id
+   AND e.metadata->>'file_path' = f.file_path
+  WHERE r.id = p_repository_id
+    AND r.company_id = p_company_id
+    AND NOT (f.file_path = ANY(p_live_paths));
+
   IF NOT EXISTS (
     SELECT 1 FROM public.repositories r
     WHERE r.id = p_repository_id AND r.company_id = p_company_id
   ) THEN
     RAISE EXCEPTION 'repository does not belong to requested company';
   END IF;
-
-  CREATE TEMP TABLE stale_repository_files ON COMMIT DROP AS
-  SELECT f.id AS codebase_file_id, e.id AS entity_id
-  FROM public.codebase_files f
-  JOIN public.entities e
-    ON e.type = 'FILE'
-   AND e.company_id = p_company_id
-   AND e.metadata->>'file_path' = f.file_path
-  WHERE f.repository_id = p_repository_id
-    AND NOT (f.file_path = ANY(p_live_paths));
 
   DELETE FROM public.edges edge
   USING stale_repository_files stale
