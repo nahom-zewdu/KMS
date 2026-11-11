@@ -97,6 +97,8 @@ def test_issue_backfill_rejects_invalid_tenant_and_limits():
     with pytest.raises(ValueError):
         sync._backfill_issue_events(repo, "acme/service", "default")
     with pytest.raises(ValueError):
+        sync._backfill_issue_events(repo, "acme/service", "   ")
+    with pytest.raises(ValueError):
         sync._backfill_issue_events(repo, "acme/service", "company-a", max_issues=0)
     repo.get_issues.assert_not_called()
 
