@@ -238,3 +238,80 @@ def test_latest_closed_issue_event_prevents_stale_open_issue_from_becoming_candi
 
     assert RampEvidenceStore(supabase).contribution_issues("company-a") == []
 
+def test_live_issue_snapshot_uses_github_current_state_and_short_cache(monkeypatch):
+    import json
+    from contextlib import contextmanager
+
+    import ramp.evidence as evidence_module
+
+    evidence_module._LIVE_ISSUE_CACHE.clear()
+    monkeypatch.setenv("GITHUB_API_TOKEN", "test-token")
+    calls = []
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self, _limit):
+            return json.dumps({
+                "number": 42,
+                "state": "closed",
+                "assignee": {"login": "maintainer"},
+                "labels": [{"name": "backend"}],
+                "body": "closed issue",
+                "html_url": "https://github.com/acme/service/issues/42",
+            }).encode()
+
+    def fake_urlopen(request, timeout):
+        calls.append((request.full_url, timeout, request.headers))
+        return Response()
+
+    monkeypatch.setattr(evidence_module, "urlopen", fake_urlopen)
+
+    first, first_status = RampEvidenceStore._live_issue_snapshot("acme/service", "42")
+    second, second_status = RampEvidenceStore._live_issue_snapshot("acme/service", "42")
+
+    assert first_status == second_status == "verified"
+    assert first["state"] == "closed"
+    assert first["assignee"]["login"] == "maintainer"
+    assert first["_verified_at"]
+    assert second == first
+    assert len(calls) == 1
+    assert calls[0][1] == 4
+    assert calls[0][0].endswith("/repos/acme/service/issues/42")
+
+
+def test_live_issue_snapshot_falls_back_as_unverified_without_token(monkeypatch):
+    import ramp.evidence as evidence_module
+
+    evidence_module._LIVE_ISSUE_CACHE.clear()
+    monkeypatch.delenv("GITHUB_API_TOKEN", raising=False)
+
+    snapshot, status = RampEvidenceStore._live_issue_snapshot("acme/service", "42")
+
+    assert snapshot is None
+    assert status == "unverified"
+
+
+def test_live_issue_snapshot_marks_github_404_as_not_found(monkeypatch):
+    from urllib.error import HTTPError
+
+    import ramp.evidence as evidence_module
+
+    evidence_module._LIVE_ISSUE_CACHE.clear()
+    monkeypatch.setenv("GITHUB_API_TOKEN", "test-token")
+
+    def fake_urlopen(_request, timeout):
+        raise HTTPError("https://api.github.com/repos/acme/service/issues/42", 404, "Not Found", {}, None)
+
+    monkeypatch.setattr(evidence_module, "urlopen", fake_urlopen)
+
+    first = RampEvidenceStore._live_issue_snapshot("acme/service", "42")
+    second = RampEvidenceStore._live_issue_snapshot("acme/service", "42")
+
+    assert first == (None, "not_found")
+    assert second == first
+
