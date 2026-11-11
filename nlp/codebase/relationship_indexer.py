@@ -55,7 +55,7 @@ class ImplementationRelationshipIndexer:
             row["file_path"]: self._file_entity_id(repo_full_name, company_id, row["file_path"])
             for row in repository_rows
         }
-        self._remove_existing_edges(list(file_entity_ids.values()), company_id)
+        source_entity_ids = list(file_entity_ids.values())
 
         rows = []
         for relation in relations:
@@ -125,8 +125,15 @@ class ImplementationRelationshipIndexer:
                 }
             )
 
-        if rows:
-            self.supabase.table("edges").upsert(rows, on_conflict="id").execute()
+        # One PostgreSQL RPC validates and replaces the full edge set atomically.
+        self.supabase.rpc(
+            "replace_implementation_edges",
+            {
+                "p_company_id": company_id,
+                "p_source_ids": source_entity_ids,
+                "p_edges": rows,
+            },
+        ).execute()
 
         logger.info(
             "Indexed %d implementation relationships for %s | company=%s",
@@ -199,13 +206,6 @@ class ImplementationRelationshipIndexer:
                 except (GithubException, UnicodeDecodeError, AttributeError):
                     continue
         return inventory
-
-    def _remove_existing_edges(self, file_entity_ids: list[str], company_id: str) -> None:
-        """Remove only implementation edges owned by this repository's source files."""
-        for source_id in file_entity_ids:
-            self.supabase.table("edges").delete().eq("source_id", source_id).eq(
-                "company_id", company_id
-            ).in_("type", list(self.RELATION_TYPES)).execute()
 
     @staticmethod
     def _file_entity_id(repo_full_name: str, company_id: str, path: str) -> str:
