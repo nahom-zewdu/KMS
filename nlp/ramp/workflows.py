@@ -246,8 +246,10 @@ class WorkflowDiscoverer:
             return False
         if item.strength not in {"direct", "derived"} or not isinstance(provenance, dict):
             return False
+        if not item.repository_id or provenance.get("repository_id") != item.repository_id:
+            return False
         required = (
-            "source_revision", "extractor_id", "extractor_version",
+            "repository_id", "source_revision", "extractor_id", "extractor_version",
             "source_file", "line", "observation",
         )
         if any(provenance.get(key) in (None, "") for key in required):
