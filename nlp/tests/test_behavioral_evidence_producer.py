@@ -70,9 +70,7 @@ def test_every_record_preserves_repository_revision_and_source_locations():
             assert provenance.extractor_version == "1"
             assert provenance.source_file.endswith(".go")
             assert provenance.line > 0
-            assert provenance.observation == (
-                "derived" if record.evidence_type == "ROUTE_HANDLER_OPERATION" else "direct"
-            )
+            assert provenance.observation == "direct"
             assert provenance.limitations
 
 
