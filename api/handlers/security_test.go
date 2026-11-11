@@ -461,3 +461,89 @@ func TestGitHubIssueSnapshotIsBoundedAndAllowlisted(t *testing.T) {
 	}
 }
 
+type capturingGitHubIngest struct {
+	requests []domain.IngestRequest
+}
+
+func (s *capturingGitHubIngest) IngestGitHubEvent(_ context.Context, request domain.IngestRequest) error {
+	s.requests = append(s.requests, request)
+	return nil
+}
+
+func testGitHubSignature(secret string, body []byte) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	_, _ = mac.Write(body)
+	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
+}
+
+func TestGitHubIssueWebhookPreservesBoundedContributionMetadata(t *testing.T) {
+	storage := &securityStorage{
+		companies: map[string]string{"github:acme": "company-a"},
+	}
+	ingest := &capturingGitHubIngest{}
+	handler := NewGitHubHandler(ingest, "webhook-secret", storage)
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.POST("/github", handler.HandleGitHubWebhook)
+
+	issueBody := strings.Repeat("acceptance ", 1000)
+	payload := map[string]interface{}{
+		"action": "opened",
+		"repository": map[string]interface{}{
+			"full_name": "acme/service",
+			"owner": map[string]interface{}{"login": "acme"},
+		},
+		"sender": map[string]interface{}{"login": "contributor"},
+		"issue": map[string]interface{}{
+			"number": 42,
+			"title": "Add retry visibility",
+			"body": issueBody,
+			"state": "open",
+			"html_url": "https://github.com/acme/service/issues/42",
+			"labels": []interface{}{
+				map[string]interface{}{"name": "good first issue"},
+			},
+			"assignee": nil,
+			"milestone": map[string]interface{}{"title": "not retained"},
+		},
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/github", bytes.NewReader(body))
+	request.Header.Set("X-Hub-Signature-256", testGitHubSignature("webhook-secret", body))
+	request.Header.Set("X-GitHub-Delivery", "123e4567-e89b-12d3-a456-426614174000")
+	request.Header.Set("X-GitHub-Event", "issues")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body=%s", response.Code, http.StatusOK, response.Body)
+	}
+	if len(ingest.requests) != 1 {
+		t.Fatalf("ingest calls = %d, want 1", len(ingest.requests))
+	}
+	got := ingest.requests[0]
+	if got.CompanyID != "company-a" || got.Payload["repo"] != "acme/service" {
+		t.Fatalf("tenant/repository context lost: %#v", got)
+	}
+	issue, ok := got.Payload["issue"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("issue snapshot missing: %#v", got.Payload["issue"])
+	}
+	if issue["number"] != float64(42) || issue["state"] != "open" {
+		t.Fatalf("issue identity/state lost: %#v", issue)
+	}
+	if len([]rune(issue["body"].(string))) != 10000 {
+		t.Fatalf("stored body length = %d, want 10000", len([]rune(issue["body"].(string))))
+	}
+	if _, exists := issue["milestone"]; exists {
+		t.Fatal("unapproved issue field leaked into the webhook job")
+	}
+	labels, ok := issue["labels"].([]string)
+	if !ok || len(labels) != 1 || labels[0] != "good first issue" {
+		t.Fatalf("issue labels not preserved: %#v", issue["labels"])
+	}
+}
+
