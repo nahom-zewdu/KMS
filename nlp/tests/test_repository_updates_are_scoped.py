@@ -68,7 +68,6 @@ def _assert_repository_update_is_tenant_scoped(database):
     assert updates
     assert all(("company_id", "company-a") in filters for filters in updates)
     assert any(("id", "repo-id") in filters for filters in updates)
-    assert any(("full_name", "org/repo") in filters for filters in updates)
 
 
 def test_incremental_repository_update_filters_by_company():
@@ -106,6 +105,13 @@ def test_baseline_repository_update_filters_by_company():
 
     assert sync.sync_repository("org/repo", "company-a")
     _assert_repository_update_is_tenant_scoped(database)
+    assert any(
+        table == "repositories"
+        and operation == "update"
+        and ("full_name", "org/repo") in filters
+        and ("company_id", "company-a") in filters
+        for table, operation, filters in database.calls
+    )
 
 
 
