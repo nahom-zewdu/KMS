@@ -366,7 +366,7 @@ class RampEvidenceStore:
             if not label_names.intersection({"good first issue", "good-first-issue", "help wanted", "help-wanted"}):
                 continue
             body = str(issue.get("body") or "")
-            checks = [line.strip() for line in body.splitlines() if re.match(r"^\s*(?:[-*+]\s+\\[[ xX]\\]|\\d+[.)]\s+)", line)]
+            checks = [line.strip() for line in body.splitlines() if re.match(r"^\s*(?:[-*+]\s+\[[ xX]\]|\d+[.)]\s+)", line)]
             if len(checks) < 2:
                 continue
             repo_id = str(repository["id"])
