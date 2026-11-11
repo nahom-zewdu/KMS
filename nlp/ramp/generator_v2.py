@@ -56,7 +56,22 @@ class RampPlanner:
         history = self._optional_evidence(
             "github_history", lambda: self.evidence.github_history(company_id)
         )
+        contribution_issues = self._optional_evidence(
+            "github_contribution_issues", lambda: self.evidence.contribution_issues(company_id)
+        )
         evidence = [self.evidence.evidence_for_surface(surface) for surface in surfaces]
+        evidence.extend(
+            Evidence(
+                ref=issue["ref"],
+                source="github_issue",
+                kind="contribution_issue",
+                strength="direct",
+                detail=issue["title"],
+                repository_id=issue["repository_id"],
+                metadata=issue,
+            )
+            for issue in contribution_issues
+        )
         evidence.extend(
             self._optional_evidence(
                 "implementation_relationships",
@@ -67,7 +82,7 @@ class RampPlanner:
         evidence_by_ref = {item.ref: item for item in evidence}
 
         candidates = self._build_candidates(
-            role_key, company_id, surfaces, modules, evidence, ownership, history
+            role_key, company_id, surfaces, modules, evidence, ownership, history, contribution_issues
         )
         selected = self.engine.select(candidates)
         if not selected:
@@ -99,6 +114,7 @@ class RampPlanner:
                     "implementation_relationships": sum(
                         1 for item in evidence if item.kind == "implementation_relation"
                     ),
+                    "contribution_issue_leads": len(contribution_issues),
                 },
                 "candidate_count": len(candidates),
                 "selected_count": len(selected),
@@ -149,6 +165,7 @@ class RampPlanner:
         evidence: List[Evidence],
         ownership: List[Dict[str, Any]],
         history: List[Dict[str, Any]],
+        contribution_issues: List[Dict[str, Any]],
     ) -> List[RampCandidate]:
         """Build the smallest useful candidate graph from currently available evidence."""
         candidates: List[RampCandidate] = []
@@ -166,8 +183,9 @@ class RampPlanner:
             candidate = self._with_prerequisite(candidate, role_surface.candidate_id if role_surface else "")
             candidates.append(candidate)
 
-        # Contribution candidates are intentionally absent until the evidence
-        # model contains a bounded change plus reliable verification precedent.
+        candidates.extend(
+            self._contribution_candidates(role, company_id, contribution_issues, surfaces)
+        )
         return candidates
 
     def _orientation_candidate(
@@ -245,6 +263,65 @@ class RampPlanner:
             verification_method="Confirm the proposed role surface by reading source and available ownership/history evidence; record unsupported responsibility as unknown.",
         )
 
+    def _contribution_candidates(
+        self,
+        role: str,
+        company_id: str,
+        issues: List[Dict[str, Any]],
+        surfaces: List[ImplementationSurface],
+    ) -> List[RampCandidate]:
+        """Create narrowly gated contribution leads from explicit issue evidence."""
+        by_path = {surface.path: surface for surface in surfaces}
+        result: List[RampCandidate] = []
+        role_tokens = self._role_tokens(role)
+        for issue in issues:
+            paths = [path for path in issue.get("file_paths", []) if path in by_path]
+            if not paths:
+                continue
+            refs = [str(issue["ref"]), *paths]
+            role_relevant = any(
+                any(token in path.lower() for token in role_tokens) for path in paths
+            )
+            candidate = RampCandidate(
+                candidate_id=f"contribution:{issue['repository_id']}:{issue['number']}",
+                candidate_type="contribution-lead",
+                stage="contribution",
+                objective=f"Evaluate GitHub issue #{issue['number']}: {issue['title']}",
+                implementation_refs=paths,
+                evidence_refs=refs,
+                prerequisites=[],
+                role_relevance=1.0 if role_relevant else 0.65,
+                prerequisite_value=0.7,
+                evidence_strength=1.0,
+                workflow_value=0.75,
+                actionability=0.9,
+                verification_strength=0.85,
+                help_available=0.9,
+                risk="low",
+                company_scoped=True,
+                concrete_action=(
+                    f"Review the issue and its acceptance checks, then inspect {', '.join(paths)}. "
+                    "Confirm the issue is still open and unassigned on GitHub before proposing a change. "
+                    "Agree on scope with the maintainer before editing code."
+                ),
+                verification_method=(
+                    "For each issue acceptance check, identify the relevant test or observable behavior. "
+                    "Do not mark the issue complete until the maintainer-approved checks pass."
+                ),
+                contribution_candidate=True,
+                history_strength=0.8,
+                metadata={
+                    "issue": issue,
+                    "selection_reason": (
+                        "Grounded in a tenant-scoped open, unassigned GitHub issue explicitly labeled "
+                        "good-first-issue/help-wanted, with multiple acceptance checks and paths matching indexed files."
+                    ),
+                },
+            )
+            if self.engine.contribution_eligible(candidate):
+                result.append(candidate)
+        return result
+
     @staticmethod
     def _with_prerequisite(candidate: RampCandidate, prerequisite: str) -> RampCandidate:
         """Return a candidate with one explicit prerequisite when available."""
@@ -266,6 +343,21 @@ class RampPlanner:
         evidence = []
         for ref in candidate.evidence_refs:
             item = evidence_by_ref.get(ref)
+            if item and item.kind == "contribution_issue":
+                issue = item.metadata
+                evidence.append({
+                    "kind": "direct",
+                    "source": "github_issue",
+                    "label": issue.get("title"),
+                    "detail": "Tenant-scoped GitHub issue event; status and assignment must be rechecked live.",
+                    "record_id": issue.get("number"),
+                    "issue_url": issue.get("url"),
+                    "issue_number": issue.get("number"),
+                    "repository_full_name": issue.get("repository_full_name"),
+                    "repository_default_branch": issue.get("default_branch"),
+                    "acceptance_checks": issue.get("acceptance_checks", []),
+                })
+                continue
             if item and item.kind == "implementation_relation":
                 source_path = str(item.metadata.get("source_ref") or "")
                 target_path = str(item.metadata.get("target_ref") or "")
@@ -375,6 +467,7 @@ class RampPlanner:
                 "contribution_candidate": candidate.contribution_candidate,
                 "selection_reason": candidate.metadata.get("selection_reason", "Selected from the evidence-backed Ramp candidate graph."),
                 "evidence_refs": candidate.evidence_refs,
+                "contribution_issue": candidate.metadata.get("issue") if candidate.contribution_candidate else None,
             },
             "overrides": {"title": False, "why": False, "owners": False, "risk_tier": False, "order": False},
         }
