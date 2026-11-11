@@ -49,9 +49,14 @@ class RecordingQuery:
 class RecordingSupabase:
     def __init__(self):
         self.calls = []
+        self.rpc_calls = []
 
     def table(self, name):
         return RecordingQuery(self, name)
+
+    def rpc(self, name, params):
+        self.rpc_calls.append((name, params))
+        return SimpleNamespace(execute=lambda: SimpleNamespace(data=0))
 
 
 def _assert_repository_update_is_tenant_scoped(database):
