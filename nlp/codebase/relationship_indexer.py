@@ -173,6 +173,10 @@ class ImplementationRelationshipIndexer:
                     continue
                 text = content.decoded_content.decode("utf-8")
             except (GithubException, UnicodeDecodeError, AttributeError) as exc:
+                if row.get("language") == "Go":
+                    raise RuntimeError(
+                        f"Cannot build complete Go behavioral snapshot: {path}"
+                    ) from exc
                 logger.debug("Skipping unreadable source %s: %s", path, exc)
                 continue
             inventory.append({"path": path, "language": row.get("language"), "content": text})
