@@ -24,6 +24,14 @@ BEGIN
     RAISE EXCEPTION 'edges must be a JSON array';
   END IF;
 
+  -- Serialize relationship replacements within a tenant. The lock is held
+  -- until transaction completion, so concurrent indexers cannot interleave
+  -- delete/insert phases for the same company.
+  PERFORM pg_advisory_xact_lock(
+    hashtext('kms-implementation-edge-replacement'),
+    hashtext(p_company_id)
+  );
+
   -- Validate the entire replacement set before deleting anything.
   IF (
     SELECT count(DISTINCT entity.id)
