@@ -1,5 +1,7 @@
 from unittest.mock import Mock
 
+from github import GithubException
+
 from codebase.relationships import ImplementationRelationshipExtractor
 from codebase.relationship_indexer import ImplementationRelationshipIndexer
 
@@ -132,3 +134,49 @@ def test_indexer_delete_scope_includes_all_repository_files_and_go_module():
     assert old_file_id in rpc_args["p_source_ids"]
     assert rpc_args["p_edges"][0]["type"] == "IMPORTS"
     assert not queries["edges"].filters
+
+
+
+def test_deleted_go_file_in_stale_inventory_is_skipped_for_current_snapshot():
+    class Content:
+        decoded_content = b"package current"
+
+    repo = Mock()
+    repo.get_contents.side_effect = lambda path, ref=None: (
+        (_ for _ in ()).throw(GithubException(404, {"message": "Not Found"}, {}))
+        if path == "api/deleted.go"
+        else Content()
+    )
+    indexer = ImplementationRelationshipIndexer(Mock(), Mock())
+
+    inventory = indexer._load_source_inventory(
+        repo,
+        [
+            {"file_path": "api/deleted.go", "language": "Go"},
+            {"file_path": "api/current.go", "language": "Go"},
+        ],
+        ref="a" * 40,
+    )
+
+    assert inventory == [
+        {"path": "api/current.go", "language": "Go", "content": "package current"}
+    ]
+
+
+def test_unavailable_go_file_fails_closed_when_not_deleted():
+    repo = Mock()
+    repo.get_contents.side_effect = GithubException(
+        403, {"message": "Forbidden"}, {}
+    )
+    indexer = ImplementationRelationshipIndexer(Mock(), Mock())
+
+    try:
+        indexer._load_source_inventory(
+            repo,
+            [{"file_path": "api/private.go", "language": "Go"}],
+            ref="a" * 40,
+        )
+    except RuntimeError as exc:
+        assert "Cannot build complete Go behavioral snapshot" in str(exc)
+    else:
+        raise AssertionError("unavailable Go source must fail closed")
