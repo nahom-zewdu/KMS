@@ -301,20 +301,30 @@ class RampEvidenceStore:
         }
         if not repo_by_name:
             return []
-        response = self._retrieve(
-            "events",
-            "list company GitHub issue events",
-            lambda: (
-                self.supabase.table("events")
-                .select("delivery_id, company_id, event_type, payload, created_at")
-                .eq("company_id", company_id)
-                .eq("source", "github")
-                .eq("event_type", "issues")
-                .order("created_at", desc=True)
-                .limit(1000)
-                .execute()
-            ),
-        )
+        # Page through a bounded recent history. A single Supabase response can
+        # be capped by the project's max-row setting, hiding older backfilled issues.
+        event_rows: List[Dict[str, Any]] = []
+        page_size = 1000
+        max_event_rows = 5000
+        for offset in range(0, max_event_rows, page_size):
+            response = self._retrieve(
+                "events",
+                "list company GitHub issue events",
+                lambda offset=offset: (
+                    self.supabase.table("events")
+                    .select("delivery_id, company_id, event_type, payload, created_at")
+                    .eq("company_id", company_id)
+                    .eq("source", "github")
+                    .eq("event_type", "issues")
+                    .order("created_at", desc=True)
+                    .range(offset, offset + page_size - 1)
+                    .execute()
+                ),
+            )
+            page = getattr(response, "data", []) or []
+            event_rows.extend(row for row in page if isinstance(row, dict))
+            if len(page) < page_size:
+                break
         files_response = self._retrieve(
             "codebase_files",
             "list files for contribution issue matching",
@@ -334,8 +344,8 @@ class RampEvidenceStore:
         results: List[Dict[str, Any]] = []
         path_pattern = re.compile(r"(?<![A-Za-z0-9_.-])(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\.[A-Za-z0-9]+")
         seen_issue_keys = set()
-        for row in getattr(response, "data", []) or []:
-            if not isinstance(row, dict) or str(row.get("company_id") or "") != company_id:
+        for row in event_rows:
+            if str(row.get("company_id") or "") != company_id:
                 continue
             payload = row.get("payload")
             if isinstance(payload, str):
