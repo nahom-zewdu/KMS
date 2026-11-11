@@ -112,7 +112,7 @@ def test_indexer_delete_scope_includes_all_repository_files_and_go_module():
             self.decoded_content = text.encode()
 
     repo = Mock(full_name="nahom-zewdu/KMS")
-    repo.get_contents.side_effect = lambda path: {
+    repo.get_contents.side_effect = lambda path, ref=None: {
         "api/main.go": Content('import "github.com/nahom-zewdu/kMS/api"\n'),
         "api/services.go": Content("package api\n"),
         "api/go.mod": Content("module github.com/nahom-zewdu/kMS/api\n"),
@@ -121,7 +121,9 @@ def test_indexer_delete_scope_includes_all_repository_files_and_go_module():
     github.get_repo.return_value = repo
 
     indexer = ImplementationRelationshipIndexer(supabase, github)
-    assert indexer.index_repository("nahom-zewdu/KMS", "company-1") == 1
+    assert indexer.index_repository(
+        "nahom-zewdu/KMS", "company-1", source_revision="a" * 40
+    ) == 1
 
     old_file_id = indexer._file_entity_id("nahom-zewdu/KMS", "company-1", "api/old.js")
     assert ("source_id", old_file_id) in queries["edges"].filters
