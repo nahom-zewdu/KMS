@@ -77,7 +77,7 @@ def test_every_record_preserves_repository_revision_and_source_locations():
 def test_production_is_deterministic_and_input_order_independent():
     producer = GoBehavioralEvidenceProducer()
     first = producer.produce(snapshot(), repository_id="r", source_revision="a" * 40)
-    second = producer.produce(list(reversed(snapshot())), repository_id="r", source_revision="b" * 40)
+    second = producer.produce(list(reversed(snapshot())), repository_id="r", source_revision="a" * 40)
     assert first == second
 
 
