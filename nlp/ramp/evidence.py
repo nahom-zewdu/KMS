@@ -7,10 +7,22 @@ Ramp candidates consume the normalized evidence produced here.
 from __future__ import annotations
 
 import json
+import logging
+import os
 import re
-from typing import Any, Callable, Dict, List
+import threading
+import time
+from typing import Any, Callable, Dict, List, Optional
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote
+from urllib.request import Request, urlopen
 
 from supabase import Client
+
+logger = logging.getLogger(__name__)
+_LIVE_ISSUE_CACHE: Dict[str, tuple[float, Optional[Dict[str, Any]]]] = {}
+_LIVE_ISSUE_CACHE_LOCK = threading.Lock()
+_LIVE_ISSUE_CACHE_TTL_SECONDS = 300
 
 from .models import Evidence, ImplementationSurface
 
@@ -289,9 +301,10 @@ class RampEvidenceStore:
     def contribution_issues(self, company_id: str) -> List[Dict[str, Any]]:
         """Return conservative contribution leads from tenant-scoped GitHub issue events.
 
-        Only open, unassigned issues explicitly marked good-first-issue/help-wanted,
+        Only live-open, unassigned issues explicitly marked good-first-issue/help-wanted,
         with multiple acceptance checks and indexed source paths, are returned.
-        This is a candidate feed, not proof that an issue is still open on GitHub.
+        When GitHub cannot be reached, a recent indexed snapshot may be returned as
+        unverified; consumers must keep that status visible to the user.
         """
         self._require_company_id(company_id)
         repositories = self._repository_records(company_id)
@@ -366,22 +379,35 @@ class RampEvidenceStore:
             # The newest webhook snapshot wins, even when it is closed or assigned;
             # never resurrect an older open/unassigned event for the same issue.
             seen_issue_keys.add(issue_key)
-            if str(issue.get("state") or "").lower() != "open" or issue.get("assignee"):
+            live_issue, live_status = self._live_issue_snapshot(
+                str(repository.get("full_name") or ""),
+                str(issue.get("number") or ""),
+            )
+            if live_status == "not_found":
                 continue
-            labels = issue.get("labels") if isinstance(issue.get("labels"), list) else []
+            current_issue = {**issue, **(live_issue or {})}
+            if str(current_issue.get("state") or "").lower() != "open" or current_issue.get("assignee"):
+                continue
+            labels = current_issue.get("labels") if isinstance(current_issue.get("labels"), list) else []
             label_names = {
                 str(label.get("name") if isinstance(label, dict) else label).strip().lower()
                 for label in labels
             }
             if not label_names.intersection({"good first issue", "good-first-issue", "help wanted", "help-wanted"}):
                 continue
-            body = str(issue.get("body") or "")
-            checks = [line.strip() for line in body.splitlines() if re.match(r"^\s*(?:[-*+]\s+\[[ xX]\]|\d+[.)]\s+)", line)]
+            body = str(current_issue.get("body") or "")
+            checks = [
+                line.strip() for line in body.splitlines()
+                if re.match(r"^\s*(?:[-*+]\s+\[[ xX]\]|\d+[.)]\s+)", line)
+            ]
             if len(checks) < 2:
                 continue
             repo_id = str(repository["id"])
             known_paths = files_by_repo.get(repo_id, set())
-            referenced_paths = sorted({match.group(0).rstrip(".,:;)") for match in path_pattern.finditer(body)} & known_paths)
+            referenced_paths = sorted({
+                match.group(0).rstrip(".,:;)")
+                for match in path_pattern.finditer(body)
+            } & known_paths)
             if not referenced_paths:
                 continue
             results.append({
@@ -390,16 +416,88 @@ class RampEvidenceStore:
                 "repository_id": repo_id,
                 "repository_full_name": repository.get("full_name"),
                 "default_branch": repository.get("default_branch") or "HEAD",
-                "number": issue.get("number"),
-                "title": str(issue.get("title") or "").strip(),
+                "number": current_issue.get("number"),
+                "title": str(current_issue.get("title") or "").strip(),
                 "body": body,
-                "url": issue.get("html_url"),
+                "url": current_issue.get("html_url"),
                 "labels": sorted(label_names),
                 "acceptance_checks": checks,
                 "file_paths": referenced_paths,
                 "created_at": row.get("created_at"),
+                "live_status": live_status,
+                "live_verified_at": live_issue.get("_verified_at") if live_issue else None,
             })
         return sorted(results, key=lambda item: (str(item.get("repository_full_name")), int(item.get("number") or 0)))
+
+    @staticmethod
+    def _live_issue_snapshot(
+        repository_full_name: str,
+        issue_number: str,
+    ) -> tuple[Optional[Dict[str, Any]], str]:
+        """Fetch and briefly cache GitHub's current issue state.
+
+        Returns (snapshot, status): verified, unverified, or not_found. Failures
+        deliberately fall back to the indexed snapshot but never masquerade as
+        a successful live verification.
+        """
+        cache_key = f"{repository_full_name.lower()}#{issue_number}"
+        now = time.monotonic()
+        with _LIVE_ISSUE_CACHE_LOCK:
+            cached = _LIVE_ISSUE_CACHE.get(cache_key)
+            if cached and cached[0] > now:
+                return cached[1], "verified" if cached[1] is not None else "not_found"
+
+        token = os.getenv("GITHUB_API_TOKEN", "").strip()
+        if not token:
+            return None, "unverified"
+        url = (
+            "https://api.github.com/repos/"
+            f"{quote(repository_full_name, safe='/')}/issues/{quote(issue_number, safe='')}"
+        )
+        request = Request(
+            url,
+            headers={
+                "Accept": "application/vnd.github+json",
+                "Authorization": f"Bearer {token}",
+                "X-GitHub-Api-Version": "2022-11-28",
+                "User-Agent": "KMS-Ramp",
+            },
+        )
+        try:
+            with urlopen(request, timeout=4) as response:
+                payload = json.loads(response.read(256_000).decode("utf-8"))
+            if not isinstance(payload, dict) or payload.get("pull_request"):
+                return None, "not_found"
+            payload["_verified_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            with _LIVE_ISSUE_CACHE_LOCK:
+                _LIVE_ISSUE_CACHE[cache_key] = (
+                    time.monotonic() + _LIVE_ISSUE_CACHE_TTL_SECONDS,
+                    payload,
+                )
+            return payload, "verified"
+        except HTTPError as exc:
+            if exc.code == 404:
+                with _LIVE_ISSUE_CACHE_LOCK:
+                    _LIVE_ISSUE_CACHE[cache_key] = (
+                        time.monotonic() + _LIVE_ISSUE_CACHE_TTL_SECONDS,
+                        None,
+                    )
+                return None, "not_found"
+            logger.warning(
+                "GitHub issue verification unavailable: repo=%s issue=%s status=%s",
+                repository_full_name,
+                issue_number,
+                exc.code,
+            )
+            return None, "unverified"
+        except (URLError, TimeoutError, ValueError, OSError) as exc:
+            logger.warning(
+                "GitHub issue verification unavailable: repo=%s issue=%s error=%s",
+                repository_full_name,
+                issue_number,
+                type(exc).__name__,
+            )
+            return None, "unverified"
 
     @staticmethod
     def _require_company_id(company_id: str) -> None:
