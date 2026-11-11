@@ -511,3 +511,50 @@ def test_contribution_candidate_rejects_paths_missing_from_index():
         "backend-engineer", "company-1", [issue], [surface("api/handlers/webhook.go")]
     ) == []
 
+def test_generated_plan_includes_issue_backed_contribution_after_orientation():
+    planner = planner_with_evidence([
+        ImplementationSurface(
+            ref="file-1",
+            path="api/handlers/webhook.go",
+            repository_id="repo-1",
+            module_path="api/handlers",
+            language="Go",
+            importance=0.9,
+            metadata={
+                "repository_full_name": "acme/service",
+                "repository_default_branch": "main",
+            },
+        )
+    ])
+    issue = {
+        "ref": "github-issue:delivery-42:42",
+        "repository_id": "repo-1",
+        "repository_full_name": "acme/service",
+        "default_branch": "main",
+        "number": 42,
+        "title": "Add retry visibility",
+        "url": "https://github.com/acme/service/issues/42",
+        "labels": ["good first issue"],
+        "acceptance_checks": ["Show retry state", "Add a regression test"],
+        "file_paths": ["api/handlers/webhook.go"],
+    }
+    planner.evidence.contribution_issues = Mock(return_value=[issue])
+    planner.store.save_plan = Mock()
+
+    plan = planner.generate("backend-engineer", "company-1")
+
+    types = [step["machine"]["candidate_type"] for step in plan["steps"]]
+    assert types[:2] == ["orientation", "role-surface"]
+    assert "contribution-lead" in types
+    contribution = next(
+        step for step in plan["steps"]
+        if step["machine"]["candidate_type"] == "contribution-lead"
+    )
+    issue_evidence = next(item for item in contribution["evidence"] if item["source"] == "github_issue")
+    assert issue_evidence["issue_url"] == "https://github.com/acme/service/issues/42"
+    assert issue_evidence["acceptance_checks"] == ["Show retry state", "Add a regression test"]
+    assert contribution["target"]["repo"] == "acme/service"
+    assert contribution["target"]["files"][0]["github_url"] == (
+        "https://github.com/acme/service/blob/main/api/handlers/webhook.go"
+    )
+
