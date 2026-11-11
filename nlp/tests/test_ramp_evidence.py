@@ -202,7 +202,7 @@ def test_latest_closed_issue_event_prevents_stale_open_issue_from_becoming_candi
     base_issue = {
         "number": 99,
         "title": "Improve webhook handling",
-        "body": "- [ ] Handle retry state\\n- [ ] Add tests\\napi/handlers/webhook.go",
+        "body": "- [ ] Handle retry state\n- [ ] Add tests\napi/handlers/webhook.go",
         "labels": [{"name": "good first issue"}],
         "assignee": None,
     }
@@ -240,8 +240,6 @@ def test_latest_closed_issue_event_prevents_stale_open_issue_from_becoming_candi
 
 def test_live_issue_snapshot_uses_github_current_state_and_short_cache(monkeypatch):
     import json
-    from contextlib import contextmanager
-
     import ramp.evidence as evidence_module
 
     evidence_module._LIVE_ISSUE_CACHE.clear()
