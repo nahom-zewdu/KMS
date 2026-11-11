@@ -179,7 +179,20 @@ class ImplementationRelationshipIndexer:
                 if isinstance(content, list):
                     continue
                 text = content.decoded_content.decode("utf-8")
-            except (GithubException, UnicodeDecodeError, AttributeError) as exc:
+            except GithubException as exc:
+                # A 404 means the indexed inventory contains a deleted/stale
+                # path. Keep it in source_entity_ids so the atomic replacement
+                # can remove its old outgoing edges, but do not parse it.
+                if exc.status == 404:
+                    logger.info("Skipping stale indexed source path %s", path)
+                    continue
+                if row.get("language") == "Go":
+                    raise RuntimeError(
+                        f"Cannot build complete Go behavioral snapshot: {path}"
+                    ) from exc
+                logger.debug("Skipping unreadable source %s: %s", path, exc)
+                continue
+            except (UnicodeDecodeError, AttributeError) as exc:
                 if row.get("language") == "Go":
                     raise RuntimeError(
                         f"Cannot build complete Go behavioral snapshot: {path}"
