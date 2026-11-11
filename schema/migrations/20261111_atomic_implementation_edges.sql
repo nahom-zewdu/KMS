@@ -40,7 +40,7 @@ BEGIN
   END IF;
   IF p_source_ids IS NULL
      OR cardinality(p_source_ids) = 0
-     OR array_position(p_source_ids, NULL) IS NOT NULL
+     OR array_position(p_source_ids, NULL::uuid) IS NOT NULL
      OR cardinality(p_source_ids) <> (
        SELECT count(DISTINCT requested.source_id)
        FROM unnest(p_source_ids) AS requested(source_id)
