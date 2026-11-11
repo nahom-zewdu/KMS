@@ -222,7 +222,7 @@ class GoBehavioralEvidenceProducer:
                 extractor_version=item.extractor_version,
                 source_file=item.source_file,
                 line=item.line,
-                observation=observation,
+                observation=item.observation,
                 limitations=item.limitations,
             )
             for item in provenance
