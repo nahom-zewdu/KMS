@@ -18,3 +18,9 @@ dependencies = [
     "tqdm>=4.67.1",
     "uvicorn>=0.47.0",
 ]
+
+[tool.pytest.ini_options]
+# Tests currently exercise both package-qualified imports (nlp.*) and
+# NLP-service-local imports (ramp.*, api). Keep both roots available when
+# pytest is invoked from the nlp/ project directory.
+pythonpath = ["..", "."]
