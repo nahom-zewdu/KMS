@@ -32,7 +32,7 @@ BEGIN
       AND entity.company_id = p_company_id
   ) <> (
     SELECT count(DISTINCT source_id)
-    FROM unnest(p_source_ids) AS source_id
+    FROM unnest(p_source_ids) AS requested(source_id)
   ) THEN
     RAISE EXCEPTION 'all source entities must belong to the requested company';
   END IF;
