@@ -84,9 +84,9 @@ class GoBehavioralCandidateProjector:
             key=lambda item: (
                 item.method,
                 item.path,
+                item.call_line,
                 item.handler_symbol,
                 item.receiver_field,
                 item.operation,
-                item.call_line,
             ),
         )
