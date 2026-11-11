@@ -467,7 +467,7 @@ def test_contribution_candidate_requires_bounded_issue_evidence_and_passes_hard_
     assert len(candidates) == 1
     candidate = candidates[0]
     assert candidate.contribution_candidate is True
-    assert candidate.history_strength >= 0.6
+    assert candidate.history_strength == 0.0  # No commit-history precedent is claimed.
     assert planner.engine.contribution_eligible(candidate)
     assert planner.engine.eligible(candidate)
     assert candidate.implementation_refs == ["api/handlers/webhook.go"]
