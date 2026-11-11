@@ -56,7 +56,7 @@ def test_produces_distinct_typed_route_call_and_composed_evidence():
 
 def test_every_record_preserves_repository_revision_and_source_locations():
     records = GoBehavioralEvidenceProducer().produce(
-        snapshot(), repository_id="repo-123", source_revision="d".repeat(40)
+        snapshot(), repository_id="repo-123", source_revision="d" * 40
     )
 
     assert records
@@ -65,7 +65,7 @@ def test_every_record_preserves_repository_revision_and_source_locations():
         assert record.provenance
         for provenance in record.provenance:
             assert provenance.repository_id == "repo-123"
-            assert provenance.source_revision == "deadbeef"
+            assert provenance.source_revision == "d" * 40
             assert provenance.extractor_id == "kms.go.gin.behavioral"
             assert provenance.extractor_version == "1"
             assert provenance.source_file.endswith(".go")
@@ -77,7 +77,7 @@ def test_every_record_preserves_repository_revision_and_source_locations():
 def test_production_is_deterministic_and_input_order_independent():
     producer = GoBehavioralEvidenceProducer()
     first = producer.produce(snapshot(), repository_id="r", source_revision="a" * 40)
-    second = producer.produce(list(reversed(snapshot())), repository_id="r", source_revision="sha")
+    second = producer.produce(list(reversed(snapshot())), repository_id="r", source_revision="b" * 40)
     assert first == second
 
 
