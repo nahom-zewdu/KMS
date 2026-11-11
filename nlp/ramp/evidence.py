@@ -379,6 +379,34 @@ class RampEvidenceStore:
             # The newest webhook snapshot wins, even when it is closed or assigned;
             # never resurrect an older open/unassigned event for the same issue.
             seen_issue_keys.add(issue_key)
+            # Filter indexed snapshots before spending GitHub API quota. Live
+            # verification is capped per plan generation to bound latency/rate use.
+            if str(issue.get("state") or "").lower() != "open" or issue.get("assignee"):
+                continue
+            snapshot_labels = issue.get("labels") if isinstance(issue.get("labels"), list) else []
+            snapshot_label_names = {
+                str(label.get("name") if isinstance(label, dict) else label).strip().lower()
+                for label in snapshot_labels
+            }
+            eligible_labels = {"good first issue", "good-first-issue", "help wanted", "help-wanted"}
+            if not snapshot_label_names.intersection(eligible_labels):
+                continue
+            snapshot_body = str(issue.get("body") or "")
+            snapshot_checks = [
+                line.strip() for line in snapshot_body.splitlines()
+                if re.match(r"^\\s*(?:[-*+]\\s+\\[[ xX]\\]|\\d+[.)]\\s+)", line)
+            ]
+            if len(snapshot_checks) < 2:
+                continue
+            repo_id = str(repository["id"])
+            known_paths = files_by_repo.get(repo_id, set())
+            snapshot_paths = {
+                match.group(0).rstrip(".,:;)")
+                for match in path_pattern.finditer(snapshot_body)
+            } & known_paths
+            if not snapshot_paths:
+                continue
+
             live_issue, live_status = self._live_issue_snapshot(
                 str(repository.get("full_name") or ""),
                 str(issue.get("number") or ""),
@@ -393,17 +421,15 @@ class RampEvidenceStore:
                 str(label.get("name") if isinstance(label, dict) else label).strip().lower()
                 for label in labels
             }
-            if not label_names.intersection({"good first issue", "good-first-issue", "help wanted", "help-wanted"}):
+            if not label_names.intersection(eligible_labels):
                 continue
             body = str(current_issue.get("body") or "")
             checks = [
                 line.strip() for line in body.splitlines()
-                if re.match(r"^\s*(?:[-*+]\s+\[[ xX]\]|\d+[.)]\s+)", line)
+                if re.match(r"^\\s*(?:[-*+]\\s+\\[[ xX]\\]|\\d+[.)]\\s+)", line)
             ]
             if len(checks) < 2:
                 continue
-            repo_id = str(repository["id"])
-            known_paths = files_by_repo.get(repo_id, set())
             referenced_paths = sorted({
                 match.group(0).rstrip(".,:;)")
                 for match in path_pattern.finditer(body)
