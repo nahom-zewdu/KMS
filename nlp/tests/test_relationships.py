@@ -106,6 +106,7 @@ def test_indexer_delete_scope_includes_all_repository_files_and_go_module():
     }
     supabase = Mock()
     supabase.table.side_effect = lambda name: queries[name]
+    supabase.rpc.return_value.execute.return_value = Mock(data=1)
 
     class Content:
         def __init__(self, text):
@@ -126,4 +127,8 @@ def test_indexer_delete_scope_includes_all_repository_files_and_go_module():
     ) == 1
 
     old_file_id = indexer._file_entity_id("nahom-zewdu/KMS", "company-1", "api/old.js")
-    assert ("source_id", old_file_id) in queries["edges"].filters
+    rpc_name, rpc_args = supabase.rpc.call_args.args
+    assert rpc_name == "replace_implementation_edges"
+    assert old_file_id in rpc_args["p_source_ids"]
+    assert rpc_args["p_edges"][0]["type"] == "IMPORTS"
+    assert not queries["edges"].filters
