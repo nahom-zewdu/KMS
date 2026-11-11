@@ -144,6 +144,24 @@ class CodebaseBaselineSync:
                     files_processed += 1
                     live_paths.append(item.path)
 
+            # Seed the issue history from GitHub so newly connected repositories
+            # have contribution candidates even when issues predate webhook setup.
+            try:
+                issue_count = self._backfill_issue_events(repo, repo_full_name, company_id)
+                logger.info(
+                    "GitHub issue backfill complete: %d issue snapshots | repo=%s",
+                    issue_count,
+                    repo_full_name,
+                )
+            except Exception:
+                # Issue discovery is an enhancement to baseline indexing; a GitHub
+                # issues API outage must not invalidate a successfully indexed codebase.
+                logger.warning(
+                    "GitHub issue backfill failed; codebase baseline will remain usable | repo=%s",
+                    repo_full_name,
+                    exc_info=True,
+                )
+
             # Reconcile stale file rows/entities only after the entire immutable
             # Git tree has been traversed and every live file indexed successfully.
             self.supabase.rpc(
@@ -196,6 +214,103 @@ class CodebaseBaselineSync:
             except Exception:
                 logger.exception("Could not persist failed baseline state for %s", repo_full_name)
             return False
+
+    def _backfill_issue_events(
+        self,
+        repo,
+        repo_full_name: str,
+        company_id: str,
+        max_issues: int = 2000,
+        batch_size: int = 100,
+    ) -> int:
+        """Persist a bounded, idempotent snapshot history of GitHub issues.
+
+        Event created_at is the issue's GitHub updated_at timestamp, not import time.
+        This lets newer webhook deliveries win over older backfill snapshots when
+        Ramp resolves the latest state for an issue.
+        """
+        if not company_id or company_id.strip().lower() == "default":
+            raise ValueError("company_id must resolve to a real company")
+        if max_issues < 1 or batch_size < 1:
+            raise ValueError("max_issues and batch_size must be positive")
+
+        batch = []
+        snapshots_written = 0
+        issues = repo.get_issues(state="all", sort="updated", direction="desc")
+        for issue in issues:
+            if snapshots_written >= max_issues:
+                break
+            # GitHub's issues endpoint also returns pull requests.
+            if getattr(issue, "pull_request", None):
+                continue
+            number = getattr(issue, "number", None)
+            updated_at = getattr(issue, "updated_at", None) or getattr(issue, "created_at", None)
+            if number is None or updated_at is None:
+                continue
+
+            updated_at = updated_at.astimezone(timezone.utc)
+            updated_at_text = updated_at.isoformat()
+            body = str(getattr(issue, "body", None) or "")
+            labels = []
+            for label in getattr(issue, "labels", []) or []:
+                name = getattr(label, "name", None)
+                if name and str(name).strip():
+                    labels.append(str(name).strip())
+                if len(labels) >= 20:
+                    break
+            assignee = getattr(issue, "assignee", None)
+            assignee_login = getattr(assignee, "login", None) if assignee else None
+            issue_snapshot = {
+                "number": number,
+                "title": str(getattr(issue, "title", None) or ""),
+                "body": body[:10000],
+                "state": str(getattr(issue, "state", "") or ""),
+                "html_url": str(getattr(issue, "html_url", "") or ""),
+                "created_at": getattr(issue, "created_at", None).astimezone(timezone.utc).isoformat()
+                if getattr(issue, "created_at", None) else None,
+                "updated_at": updated_at_text,
+                "labels": labels,
+                "assignee": str(assignee_login) if assignee_login else "",
+            }
+            delivery_id = (
+                f"backfill:github-issue:{company_id}:{repo_full_name}:{number}:{updated_at_text}"
+            )
+            event_id = str(
+                uuid.uuid5(uuid.NAMESPACE_URL, delivery_id)
+            )
+            batch.append({
+                "id": event_id,
+                "company_id": company_id,
+                "source": "github",
+                "event_type": "issues",
+                "payload": {
+                    "repo": repo_full_name,
+                    "sender": "baseline-backfill",
+                    "event_type": "issues",
+                    "action": "backfill",
+                    "issue": issue_snapshot,
+                },
+                "delivery_id": delivery_id,
+                "processed": True,
+                "truncated": len(body) > 10000,
+                "created_at": updated_at_text,
+            })
+            snapshots_written += 1
+            if len(batch) >= batch_size:
+                self._upsert_issue_event_batch(batch)
+                batch = []
+
+        if batch:
+            self._upsert_issue_event_batch(batch)
+        return snapshots_written
+
+    def _upsert_issue_event_batch(self, events) -> None:
+        """Idempotently insert historical issue snapshots without enqueueing workers."""
+        self.supabase.table("events").upsert(
+            events,
+            on_conflict="delivery_id",
+            ignore_duplicates=True,
+        ).execute()
 
     def _build_author_map(self, repo, max_commits: int = 200) -> Dict[str, str]:
         """
