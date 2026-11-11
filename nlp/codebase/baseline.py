@@ -229,7 +229,7 @@ class CodebaseBaselineSync:
         This lets newer webhook deliveries win over older backfill snapshots when
         Ramp resolves the latest state for an issue.
         """
-        if not company_id or company_id.strip().lower() == "default":
+        if not company_id or not company_id.strip() or company_id.strip().lower() == "default":
             raise ValueError("company_id must resolve to a real company")
         if max_issues < 1 or batch_size < 1:
             raise ValueError("max_issues and batch_size must be positive")
