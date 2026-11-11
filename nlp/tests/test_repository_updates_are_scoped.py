@@ -105,3 +105,33 @@ def test_baseline_repository_update_filters_by_company():
 
     assert sync.sync_repository("org/repo", "company-a")
     _assert_repository_update_is_tenant_scoped(database)
+
+
+
+def test_failed_directory_traversal_never_runs_destructive_reconciliation():
+    from github import GithubException
+
+    database = RecordingSupabase()
+    restricted_directory = SimpleNamespace(type="dir", path="restricted")
+    repository = SimpleNamespace(
+        full_name="org/repo",
+        description="description",
+        language="Python",
+        default_branch="main",
+        get_commits=lambda: [],
+        get_branch=lambda _branch: SimpleNamespace(commit=SimpleNamespace(sha="a" * 40)),
+        get_contents=lambda path, ref=None: (
+            [restricted_directory]
+            if path == ""
+            else (_ for _ in ()).throw(
+                GithubException(403, {"message": "Forbidden"}, {})
+            )
+        ),
+    )
+    sync = CodebaseBaselineSync.__new__(CodebaseBaselineSync)
+    sync.supabase = database
+    sync.gh = SimpleNamespace(get_repo=lambda _name: repository)
+    sync.relationship_indexer = SimpleNamespace(index_repository=lambda *_args, **_kwargs: 0)
+
+    assert not sync.sync_repository("org/repo", "company-a")
+    assert database.rpc_calls == []
