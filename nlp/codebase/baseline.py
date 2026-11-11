@@ -36,6 +36,7 @@ class CodebaseBaselineSync:
         logger.info(f"Starting full baseline sync for {repo_full_name} | company={company_id}")
         try:
             repo = self.gh.get_repo(repo_full_name)
+            source_revision = repo.get_branch(repo.default_branch).commit.sha
             now = datetime.now(timezone.utc).isoformat()
 
             # 1. REPOSITORY entity (tenant-scoped id)
@@ -98,7 +99,7 @@ class CodebaseBaselineSync:
             author_map = self._build_author_map(repo, max_commits=200)
             logger.info("Author map: %d files with last_author", len(author_map))
 
-            contents = repo.get_contents("")
+            contents = repo.get_contents("", ref=source_revision)
             files_processed = 0
             module_map: Dict[str, int] = {}
 
@@ -106,7 +107,7 @@ class CodebaseBaselineSync:
                 item = contents.pop(0)
                 if item.type == "dir":
                     try:
-                        contents.extend(repo.get_contents(item.path))
+                        contents.extend(repo.get_contents(item.path, ref=source_revision))
                         module_map[item.path] = module_map.get(item.path, 0) + 1
                     except GithubException:
                         continue
@@ -125,8 +126,7 @@ class CodebaseBaselineSync:
             for mod_path, file_count in module_map.items():
                 self._create_module(mod_path, physical_repo_id, file_count, company_id)
 
-            # Pin relationship extraction to one immutable source snapshot.
-            source_revision = repo.get_branch(repo.default_branch).commit.sha
+            # Relationship extraction uses the same immutable snapshot as file indexing.
             relationship_count = self.relationship_indexer.index_repository(
                 repo_full_name, company_id, source_revision=source_revision
             )
