@@ -280,6 +280,7 @@ class RampPlanner:
                     "file_path": source_path or None,
                     "related_file_path": target_path or None,
                     "repository_full_name": (source_surface.metadata.get("repository_full_name") if source_surface else None),
+                    "repository_default_branch": (source_surface.metadata.get("repository_default_branch") if source_surface else None),
                 })
                 continue
             surface = surfaces_by_path.get(ref)
@@ -293,6 +294,7 @@ class RampPlanner:
                     "module_path": surface.module_path,
                     "record_id": surface.ref,
                     "repository_full_name": surface.metadata.get("repository_full_name"),
+                    "repository_default_branch": surface.metadata.get("repository_default_branch"),
                 })
         implementation_surfaces = [
             surfaces_by_path[path] for path in candidate.implementation_refs if path in surfaces_by_path
