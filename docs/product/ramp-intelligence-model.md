@@ -2,7 +2,7 @@
 
 **Status:** Active implementation baseline
 **Branch:** `feat/implementation-relations`
-**Last updated:** 2026-09-21
+**Last updated:** 2026-11-11
 **Scope:** RID-01 through RID-05; next work is RID-07 in `docs/development/roadmap.md`
 
 ## 1. Product question
@@ -59,7 +59,7 @@ The implementation uses four core layers:
 
 ### WorkflowCandidate
 
-A bounded directed path over implementation-relation evidence (today: resolved `IMPORTS` edges). It is a **candidate exploration path**, not a confirmed business workflow. It contains evidence refs, signals, confidence (of those relations), role relevance, action, verification, risk, and prerequisites. Names are labels such as `api implementation flow`, not a feature taxonomy.
+A bounded directed path over explicitly qualified behavioral evidence. Structural `IMPORTS`, `OWNS`, and `PART_OF` relationships are excluded before traversal. Behavioral records must carry repository-matched source provenance; a relation label or confidence score alone is insufficient. A candidate remains a bounded source-inspection path, not a confirmed runtime workflow. It contains evidence refs, signals, confidence (of the qualifying observations), role relevance, action, verification, risk, and prerequisites.
 
 ### RampCandidate
 
@@ -131,7 +131,7 @@ GitHub webhook
  → Redis github_jobs publication
 ```
 
-Generated candidates on the 2026-09-20 live snapshot were import paths grouped as `api implementation flow` / `nlp implementation flow`. They are not this ingestion sequence and are not validated workflows. Source-level **import** extraction exists; source-level **behavioral** extraction (routes, calls, queues, tests) does not.
+Generated candidates on the 2026-09-20 live snapshot were import paths grouped as `api implementation flow` / `nlp implementation flow`. They are not this ingestion sequence and are not validated workflows. Source-level import extraction exists and produces structural evidence only. Narrow Go/Gin route registration, handler dependency-call, and route-to-operation extractors now exist under `nlp/ramp/`, alongside a provenance-preserving evaluation producer. These extractors are not a general Go AST/call-graph analysis, do not resolve interface implementations or runtime dispatch, and do not establish branch execution or downstream completion. They are not yet wired into the repository indexing/persistence pipeline. Human usefulness and production-scale coverage remain unvalidated.
 
 The generated learning action requires source verification and recording unsupported control/data-flow links as unknown. That hedging is required; it does not make the path a verified workflow.
 
@@ -164,18 +164,22 @@ It may not:
 
 ## 10. Next implementation frontier
 
-Import-path relationship evidence is **implemented**. It is not sufficient onboarding intelligence.
+Import-path relationship evidence is implemented but is structural only. Narrow Go/Gin route and handler-call extraction plus composition are implemented as read-only evaluation primitives. A typed producer preserves repository/revision and source-location provenance. Workflow discovery now rejects structural edges and requires explicit behavioral type and provenance.
 
-The next quality increase is **behavioral corroboration of existing candidates**, not more import heuristics or onboarding prose. Selected task: RID-07 in `docs/development/roadmap.md`.
+Production integration is still pending: the typed records are not persisted or loaded by `RampEvidenceStore`, and the current graph indexer still writes only `IMPORTS`. Do not claim production behavioral workflows until the producer-to-storage-to-`Evidence` adapter is designed against the actual schema and an end-to-end test proves that persisted evidence reaches discovery without admitting structural edges.
 
 ```text
 indexed files/modules
        ↓
-IMPORTS (implemented; structural only)
+IMPORTS (implemented; structural only; excluded from workflows)
        ↓
-route/call/queue/test corroboration (not implemented)
+Go/Gin route + handler-call extractors (read-only evaluation)
        ↓
-verified workflow structure
+typed provenance-preserving behavioral records
+       ↓
+[production persistence and evidence adapter — pending]
+       ↓
+qualified bounded workflow exploration paths
        ↓
 change/history/verification evidence
        ↓
