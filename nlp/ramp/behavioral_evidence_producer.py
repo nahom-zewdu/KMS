@@ -85,8 +85,10 @@ class GoBehavioralEvidenceProducer:
         source_revision = source_revision.strip()
         if not repository_id:
             raise ValueError("repository_id is required")
-        if not source_revision:
-            raise ValueError("source_revision is required")
+        if len(source_revision) != 40 or any(
+            character not in "0123456789abcdefABCDEF" for character in source_revision
+        ):
+            raise ValueError("source_revision must be a 40-character Git commit SHA")
 
         normalized: list[dict[str, str]] = []
         seen_paths: set[str] = set()
@@ -276,6 +278,8 @@ def to_workflow_evidence(
             or not call.source_file
             or route.line < 1
             or call.line < 1
+            or route.observation != "direct"
+            or call.observation != "direct"
         ):
             continue
 
