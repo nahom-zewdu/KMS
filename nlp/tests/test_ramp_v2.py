@@ -444,3 +444,70 @@ def test_serialization_preserves_repository_and_relationship_source_paths():
     assert relation_evidence["repository_full_name"] == "acme/service"
     assert all(not item["record_id"].startswith("edge:") for item in step["evidence"])
 
+def test_contribution_candidate_requires_bounded_issue_evidence_and_passes_hard_gates():
+    planner = RampPlanner(Mock())
+    indexed = surface("api/handlers/webhook.go", 0.9)
+    issue = {
+        "ref": "github-issue:delivery-42:42",
+        "repository_id": "repo-1",
+        "repository_full_name": "acme/service",
+        "default_branch": "main",
+        "number": 42,
+        "title": "Add retry visibility",
+        "url": "https://github.com/acme/service/issues/42",
+        "acceptance_checks": ["Show retry state", "Add a regression test"],
+        "file_paths": ["api/handlers/webhook.go"],
+        "labels": ["good first issue"],
+    }
+
+    candidates = planner._contribution_candidates(
+        "backend-engineer", "company-1", [issue], [indexed]
+    )
+
+    assert len(candidates) == 1
+    candidate = candidates[0]
+    assert candidate.contribution_candidate is True
+    assert candidate.history_strength >= 0.6
+    assert planner.engine.contribution_eligible(candidate)
+    assert planner.engine.eligible(candidate)
+    assert candidate.implementation_refs == ["api/handlers/webhook.go"]
+    assert candidate.evidence_refs[0] == issue["ref"]
+
+
+def test_contribution_candidate_rejects_ambiguous_or_foreign_repository_paths():
+    planner = RampPlanner(Mock())
+    issue = {
+        "ref": "github-issue:delivery-42:42",
+        "repository_id": "repo-1",
+        "number": 42,
+        "title": "Add retry visibility",
+        "file_paths": ["api/handlers/webhook.go"],
+    }
+    own_surface = surface("api/handlers/webhook.go")
+    foreign_surface = ImplementationSurface(
+        ref="other-file",
+        path="api/handlers/webhook.go",
+        repository_id="repo-2",
+        module_path="api/handlers",
+        language="Go",
+    )
+
+    assert planner._contribution_candidates(
+        "backend-engineer", "company-1", [issue], [own_surface, foreign_surface]
+    ) == []
+
+
+def test_contribution_candidate_rejects_paths_missing_from_index():
+    planner = RampPlanner(Mock())
+    issue = {
+        "ref": "github-issue:delivery-42:42",
+        "repository_id": "repo-1",
+        "number": 42,
+        "title": "Add retry visibility",
+        "file_paths": ["api/handlers/not-indexed.go"],
+    }
+
+    assert planner._contribution_candidates(
+        "backend-engineer", "company-1", [issue], [surface("api/handlers/webhook.go")]
+    ) == []
+
