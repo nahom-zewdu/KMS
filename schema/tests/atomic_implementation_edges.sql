@@ -92,7 +92,7 @@ BEGIN
     );
     RAISE EXCEPTION 'cross-company endpoint was not rejected';
   EXCEPTION WHEN raise_exception THEN
-    IF SQLERRM = 'cross-company endpoint was not rejected' THEN
+    IF SQLERRM <> 'replacement edge endpoints must belong to the requested company' THEN
       RAISE;
     END IF;
   END;
@@ -110,7 +110,20 @@ BEGIN
     );
     RAISE EXCEPTION 'duplicate source IDs were not rejected';
   EXCEPTION WHEN raise_exception THEN
-    IF SQLERRM = 'duplicate source IDs were not rejected' THEN
+    IF SQLERRM <> 'source file identities must be non-empty, non-null, and unique' THEN
+      RAISE;
+    END IF;
+  END;
+
+  BEGIN
+    PERFORM public.replace_implementation_edges(
+      v_company,
+      ARRAY[v_source, NULL::uuid]::uuid[],
+      '[]'::jsonb
+    );
+    RAISE EXCEPTION 'null source IDs were not rejected';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'source file identities must be non-empty, non-null, and unique' THEN
       RAISE;
     END IF;
   END;
