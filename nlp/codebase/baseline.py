@@ -29,15 +29,30 @@ class CodebaseBaselineSync:
         self.gh = Github(os.getenv("GITHUB_API_TOKEN"))
         self.relationship_indexer = ImplementationRelationshipIndexer(self.supabase, self.gh)
 
+    def _set_sync_state(self, repo_full_name: str, company_id: str, **fields) -> None:
+        """Persist baseline lifecycle state for the company-owned repository."""
+        fields["updated_at"] = datetime.now(timezone.utc).isoformat()
+        self.supabase.table("repositories").update(fields).eq(
+            "full_name", repo_full_name
+        ).eq("company_id", company_id).execute()
+
     def sync_repository(self, repo_full_name: str, company_id: str) -> bool:
         """Perform a full baseline sync for the given repository."""
         if not company_id or company_id.strip().lower() == "default":
             raise ValueError("company_id must resolve to a real company")
         logger.info(f"Starting full baseline sync for {repo_full_name} | company={company_id}")
         try:
+            started_at = datetime.now(timezone.utc).isoformat()
+            self._set_sync_state(
+                repo_full_name,
+                company_id,
+                baseline_status="indexing",
+                baseline_started_at=started_at,
+                baseline_error=None,
+            )
             repo = self.gh.get_repo(repo_full_name)
             source_revision = repo.get_branch(repo.default_branch).commit.sha
-            now = datetime.now(timezone.utc).isoformat()
+            now = started_at
 
             # 1. REPOSITORY entity (tenant-scoped id)
             repo_entity_id = str(
@@ -76,7 +91,6 @@ class CodebaseBaselineSync:
                         "description": repo.description or "",
                         "language": repo.language,
                         "default_branch": repo.default_branch,
-                        "last_synced_at": now,
                         "updated_at": now,
                     }
                 ).eq("id", physical_repo_id).eq("company_id", company_id).execute()
@@ -90,7 +104,8 @@ class CodebaseBaselineSync:
                         "description": repo.description or "",
                         "language": repo.language,
                         "default_branch": repo.default_branch,
-                        "last_synced_at": now,
+                        "baseline_status": "indexing",
+                        "baseline_started_at": now,
                         "updated_at": now,
                     }
                 ).execute()
@@ -152,6 +167,17 @@ class CodebaseBaselineSync:
                 relationship_count,
             )
 
+            completed_at = datetime.now(timezone.utc).isoformat()
+            self._set_sync_state(
+                repo_full_name,
+                company_id,
+                baseline_status="ready",
+                baseline_completed_at=completed_at,
+                baseline_error=None,
+                baseline_file_count=files_processed,
+                baseline_revision=source_revision,
+                last_synced_at=completed_at,
+            )
             logger.info(
                 f"Baseline sync complete: {files_processed} files, "
                 f"{len(module_map)} modules | company={company_id}"
@@ -160,6 +186,15 @@ class CodebaseBaselineSync:
             return True
         except Exception as e:
             logger.error(f"Baseline sync failed: {e}", exc_info=True)
+            try:
+                self._set_sync_state(
+                    repo_full_name,
+                    company_id,
+                    baseline_status="failed",
+                    baseline_error="Baseline indexing failed. Check worker logs.",
+                )
+            except Exception:
+                logger.exception("Could not persist failed baseline state for %s", repo_full_name)
             return False
 
     def _build_author_map(self, repo, max_commits: int = 200) -> Dict[str, str]:
