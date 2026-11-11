@@ -362,7 +362,13 @@ class RampPlanner:
                     "kind": "direct",
                     "source": "github_issue",
                     "label": issue.get("title"),
-                    "detail": "Issue snapshot from a signed GitHub webhook. Recheck current status and assignment before starting.",
+                    "detail": (
+                        "Live-checked against GitHub. Recheck before starting."
+                        if issue.get("live_status") == "verified"
+                        else "GitHub could not be reached. This is an older snapshot; verify status and assignment manually."
+                    ),
+                    "live_status": issue.get("live_status", "unverified"),
+                    "live_verified_at": issue.get("live_verified_at"),
                     "record_id": str(issue.get("number") or ""),
                     "issue_url": issue.get("url"),
                     "issue_number": issue.get("number"),
