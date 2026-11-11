@@ -34,9 +34,11 @@ class RampEvidenceStore:
     def implementation_surfaces(self, company_id: str) -> List[ImplementationSurface]:
         """Return indexed files for a company as normalized implementation surfaces."""
         self._require_company_id(company_id)
-        repository_ids = self._repository_ids(company_id)
+        repositories = self._repository_records(company_id)
+        repository_ids = [str(row["id"]) for row in repositories if row.get("id")]
         if not repository_ids:
             return []
+        repository_by_id = {str(row["id"]): row for row in repositories if row.get("id")}
         response = self._retrieve(
             "codebase_files",
             "list implementation surfaces",
@@ -67,7 +69,11 @@ class RampEvidenceStore:
                     importance=float(row.get("importance_score") or 0.0),
                     last_author=row.get("last_author"),
                     last_commit_sha=row.get("last_commit_sha"),
-                    metadata=row.get("metadata") if isinstance(row.get("metadata"), dict) else {},
+                    metadata={
+                        **(row.get("metadata") if isinstance(row.get("metadata"), dict) else {}),
+                        "repository_full_name": repository_by_id.get(str(row.get("repository_id")), {}).get("full_name"),
+                        "repository_default_branch": repository_by_id.get(str(row.get("repository_id")), {}).get("default_branch"),
+                    },
                 )
             )
         return sorted(result, key=lambda item: (-item.importance, item.path))
@@ -94,18 +100,21 @@ class RampEvidenceStore:
         )
         return [row for row in (getattr(response, "data", []) or []) if isinstance(row, dict)]
 
-    def _repository_ids(self, company_id: str) -> List[str]:
+    def _repository_records(self, company_id: str) -> List[Dict[str, Any]]:
         response = self._retrieve(
             "repositories",
             "list company repositories",
             lambda: (
                 self.supabase.table("repositories")
-                .select("id")
+                .select("id, full_name, default_branch")
                 .eq("company_id", company_id)
                 .execute()
             ),
         )
-        return [row["id"] for row in (getattr(response, "data", []) or []) if row.get("id")]
+        return [row for row in (getattr(response, "data", []) or []) if isinstance(row, dict)]
+
+    def _repository_ids(self, company_id: str) -> List[str]:
+        return [str(row["id"]) for row in self._repository_records(company_id) if row.get("id")]
 
     def ownership(self, company_id: str) -> List[Dict[str, Any]]:
         """Return ownership edges available in the existing knowledge graph."""
