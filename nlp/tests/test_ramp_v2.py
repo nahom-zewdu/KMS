@@ -60,6 +60,7 @@ def relation(source, target, relation_type="CALLS", strength="derived"):
     return Evidence(
         ref=f"edge:{source}:{target}",
         source="edges",
+        repository_id="repo-1",
         kind="implementation_relation",
         strength=strength,
         detail=f"{source} --{relation_type}--> {target}",
