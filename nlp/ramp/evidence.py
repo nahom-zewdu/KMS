@@ -199,6 +199,7 @@ class RampEvidenceStore:
                 or str(edge.get("company_id") or "") != company_id
                 or not isinstance(provenance_items, list)
                 or len(provenance_items) != 2
+                or not all(isinstance(item, dict) for item in provenance_items)
                 or str(metadata.get("repository_id") or "") not in path_repository_ids.get(source_path, set())
                 or str(metadata.get("repository_id") or "") not in path_repository_ids.get(target_path, set())
             ):
@@ -225,6 +226,11 @@ class RampEvidenceStore:
                 or provenance.get("call_source_file") != target_path
                 or provenance.get("observation") != "derived"
                 or provenance.get("call_observation") != "direct"
+                or not isinstance(provenance.get("line"), int)
+                or provenance.get("line") < 1
+                or not isinstance(provenance.get("call_line"), int)
+                or provenance.get("call_line") < 1
+                or len(str(provenance.get("source_revision") or "")) != 40
             ):
                 continue
             try:
