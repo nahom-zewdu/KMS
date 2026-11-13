@@ -172,7 +172,9 @@ class RampStore:
         reason: str | None = None,
     ) -> Dict[str, Any]:
         """Create or replace one member's feedback for a validated Ramp step."""
-        normalized_rating = (rating or "").strip().lower()
+        if not isinstance(rating, str):
+            raise ValueError("rating must be text")
+        normalized_rating = rating.strip().lower()
         if normalized_rating not in FEEDBACK_RATINGS:
             raise ValueError(f"rating must be one of: {', '.join(sorted(FEEDBACK_RATINGS))}")
         if not user_id:
