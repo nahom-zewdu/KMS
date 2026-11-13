@@ -165,6 +165,12 @@ class RampPlanner:
             plan_id, step_id, company_id, user_id, rating, reason
         )
 
+    def get_step_feedback(
+        self, plan_id: str, step_id: str, company_id: str, user_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """Read the requesting engineer's saved feedback for one step."""
+        return self.store.get_step_feedback(plan_id, step_id, company_id, user_id)
+
     def feedback_summary(self, plan_id: str, company_id: str) -> Dict[str, Any]:
         """Return aggregate feedback for a company manager."""
         return self.store.feedback_summary(plan_id, company_id)
