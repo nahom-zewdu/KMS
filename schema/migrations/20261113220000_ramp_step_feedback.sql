@@ -32,11 +32,8 @@ CREATE POLICY "members read own or manager-visible Ramp feedback"
 ON public.ramp_step_feedback
 FOR SELECT TO authenticated
 USING (
-  public.is_company_member(company_id)
-  AND (
-    user_id = auth.uid()::text
-    OR public.is_company_member(company_id, ARRAY['admin', 'manager'])
-  )
+  user_id = auth.uid()::text
+  AND public.is_company_member(company_id)
 );
 
 CREATE POLICY "members submit own Ramp feedback"
