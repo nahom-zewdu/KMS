@@ -97,6 +97,46 @@ def test_submit_feedback_rejects_long_reason():
     assert tables["ramp_step_feedback"].record is None
 
 
+def test_submit_feedback_updates_existing_engineer_rating_in_place():
+    store, tables = store_with_plan()
+    tables["ramp_step_feedback"] = Query([{
+        "id": "feedback-1",
+        "created_at": "2026-01-01T00:00:00+00:00",
+        "plan_id": "plan-1",
+        "step_id": "step-1",
+        "company_id": "company-1",
+        "user_id": "user-1",
+        "rating": "partially_useful",
+        "reason": None,
+    }])
+
+    store.submit_step_feedback(
+        "plan-1", "step-1", "company-1", "user-1", "useful", "Much clearer now"
+    )
+
+    saved = tables["ramp_step_feedback"].record
+    assert saved["id"] == "feedback-1"
+    assert saved["created_at"] == "2026-01-01T00:00:00+00:00"
+    assert saved["rating"] == "useful"
+
+
+def test_get_step_feedback_is_scoped_to_requesting_engineer():
+    store, tables = store_with_plan()
+    tables["ramp_step_feedback"] = Query([{
+        "plan_id": "plan-1",
+        "step_id": "step-1",
+        "company_id": "company-1",
+        "user_id": "user-1",
+        "rating": "useful",
+        "reason": "Clear",
+    }])
+
+    result = store.get_step_feedback("plan-1", "step-1", "company-1", "user-1")
+
+    assert result["rating"] == "useful"
+    assert ("user_id", "user-1") in tables["ramp_step_feedback"].filters
+
+
 def test_feedback_summary_returns_aggregates_without_user_identifiers():
     store, tables = store_with_plan()
     tables["ramp_step_feedback"] = Query([
