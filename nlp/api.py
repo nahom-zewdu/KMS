@@ -450,6 +450,67 @@ async def get_step_progress(
         return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
 
 
+@app.put("/ramp-plans/{plan_id}/steps/{step_id}/feedback")
+async def submit_ramp_step_feedback(
+    plan_id: str,
+    step_id: str,
+    payload: dict,
+    authorization: str | None = Header(default=None, alias="Authorization"),
+    legacy_user_id: str | None = Header(default=None, alias="X-User-Id"),
+    company_id: str | None = Header(default=None, alias="X-Company-Id"),
+):
+    """Create or update the authenticated engineer's usefulness feedback."""
+    effective_company_id = require_company_id(company_id, "X-Company-Id")
+    try:
+        identity = require_authenticated_identity(authorization, legacy_user_id=legacy_user_id)
+        require_company_membership(identity["user_id"], effective_company_id)
+        feedback = ramp_generator.submit_step_feedback(
+            plan_id=plan_id,
+            step_id=step_id,
+            company_id=effective_company_id,
+            user_id=identity["user_id"],
+            rating=(payload or {}).get("rating"),
+            reason=(payload or {}).get("reason"),
+        )
+        return JSONResponse({"success": True, "feedback": feedback})
+    except ValueError as exc:
+        message = str(exc)
+        code = 400 if "rating" in message or "reason" in message else 404
+        return JSONResponse({"success": False, "error": message}, status_code=code)
+    except KeyError as exc:
+        return JSONResponse({"success": False, "error": str(exc)}, status_code=404)
+    except HTTPException:
+        raise
+    except Exception:
+        logging.exception("Ramp step feedback submission failed")
+        raise HTTPException(status_code=500, detail="Failed to save Ramp step feedback")
+
+
+@app.get("/ramp-plans/{plan_id}/feedback-summary")
+async def get_ramp_feedback_summary(
+    plan_id: str,
+    authorization: str | None = Header(default=None, alias="Authorization"),
+    legacy_user_id: str | None = Header(default=None, alias="X-User-Id"),
+    company_id: str | None = Header(default=None, alias="X-Company-Id"),
+):
+    """Return feedback aggregates only to company managers and admins."""
+    effective_company_id = require_company_id(company_id, "X-Company-Id")
+    try:
+        identity = require_authenticated_identity(authorization, legacy_user_id=legacy_user_id)
+        require_company_membership(
+            identity["user_id"], effective_company_id, require_role="manager"
+        )
+        summary = ramp_generator.feedback_summary(plan_id, effective_company_id)
+        return JSONResponse({"success": True, "summary": summary})
+    except ValueError as exc:
+        return JSONResponse({"success": False, "error": str(exc)}, status_code=404)
+    except HTTPException:
+        raise
+    except Exception:
+        logging.exception("Ramp feedback summary read failed")
+        raise HTTPException(status_code=500, detail="Failed to retrieve Ramp feedback summary")
+
+
 @app.post("/playbooks/generate")
 async def generate_playbook(
     payload: dict,
