@@ -43,7 +43,7 @@ REVOKE ALL ON TABLE public.ramp_step_feedback FROM anon, authenticated;
 GRANT SELECT, INSERT, UPDATE ON TABLE public.ramp_step_feedback TO authenticated;
 GRANT ALL ON TABLE public.ramp_step_feedback TO service_role;
 
-CREATE POLICY "members read own or manager-visible Ramp feedback"
+CREATE POLICY "members read own Ramp feedback"
 ON public.ramp_step_feedback
 FOR SELECT TO authenticated
 USING (
