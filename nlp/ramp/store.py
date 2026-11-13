@@ -184,6 +184,8 @@ class RampStore:
         if not any(str(step.get("id")) == str(step_id) for step in plan.get("steps") or []):
             raise KeyError(f"step_id {step_id} not found in plan {plan_id}")
 
+        if reason is not None and not isinstance(reason, str):
+            raise ValueError("reason must be text")
         normalized_reason = (reason or "").strip() or None
         if normalized_reason and len(normalized_reason) > 1000:
             raise ValueError("reason must be 1000 characters or fewer")
