@@ -188,9 +188,9 @@ class RampStore:
 
         if reason is not None and not isinstance(reason, str):
             raise ValueError("reason must be text")
-        normalized_reason = (reason or "").strip() or None
-        if normalized_reason and len(normalized_reason) > 1000:
+        if reason is not None and len(reason) > 1000:
             raise ValueError("reason must be 1000 characters or fewer")
+        normalized_reason = (reason or "").strip() or None
         existing = (
             self.supabase.table("ramp_step_feedback")
             .select("id, created_at")
