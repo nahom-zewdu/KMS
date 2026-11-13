@@ -3,7 +3,7 @@
 
 BEGIN;
 
-DO $
+DO $$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
@@ -13,7 +13,7 @@ BEGIN
     ALTER TABLE public.ramp_plans
       ADD CONSTRAINT ramp_plans_id_company_id_key UNIQUE (id, company_id);
   END IF;
-END $;
+END $$;
 
 CREATE TABLE IF NOT EXISTS public.ramp_step_feedback (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
