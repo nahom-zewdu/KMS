@@ -221,6 +221,29 @@ class RampStore:
             "updated_at": now,
         }
 
+    def get_step_feedback(
+        self, plan_id: str, step_id: str, company_id: str, user_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """Return only the requesting engineer's feedback for a validated step."""
+        self._require_company_id(company_id)
+        plan = self.get_plan(plan_id, company_id)
+        if not plan:
+            raise ValueError("ramp plan not found")
+        if not any(str(step.get("id")) == str(step_id) for step in plan.get("steps") or []):
+            raise KeyError(f"step_id {step_id} not found in plan {plan_id}")
+        response = (
+            self.supabase.table("ramp_step_feedback")
+            .select("plan_id, step_id, rating, reason, updated_at")
+            .eq("plan_id", plan_id)
+            .eq("step_id", step_id)
+            .eq("company_id", company_id)
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        rows = getattr(response, "data", []) or []
+        return dict(rows[0]) if rows else None
+
     def feedback_summary(self, plan_id: str, company_id: str) -> Dict[str, Any]:
         """Return tenant-scoped aggregate ratings without exposing individual identities."""
         self._require_company_id(company_id)
