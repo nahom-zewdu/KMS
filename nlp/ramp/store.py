@@ -10,6 +10,7 @@ from supabase import Client
 
 
 STATUSES = {"not_started", "in_progress", "completed"}
+FEEDBACK_RATINGS = {"useful", "partially_useful", "not_useful"}
 
 
 class RampPlanPersistenceError(RuntimeError):
@@ -160,6 +161,97 @@ class RampStore:
         }
         self.supabase.table("ramp_step_progress").upsert(record, on_conflict="plan_id,step_id,user_id").execute()
         return record
+
+    def submit_step_feedback(
+        self,
+        plan_id: str,
+        step_id: str,
+        company_id: str,
+        user_id: str,
+        rating: str,
+        reason: str | None = None,
+    ) -> Dict[str, Any]:
+        """Create or replace one member's feedback for a validated Ramp step."""
+        normalized_rating = (rating or "").strip().lower()
+        if normalized_rating not in FEEDBACK_RATINGS:
+            raise ValueError(f"rating must be one of: {', '.join(sorted(FEEDBACK_RATINGS))}")
+        if not user_id:
+            raise ValueError("user_id is required")
+        self._require_company_id(company_id)
+        plan = self.get_plan(plan_id, company_id)
+        if not plan:
+            raise ValueError("ramp plan not found")
+        if not any(str(step.get("id")) == str(step_id) for step in plan.get("steps") or []):
+            raise KeyError(f"step_id {step_id} not found in plan {plan_id}")
+
+        normalized_reason = (reason or "").strip() or None
+        if normalized_reason and len(normalized_reason) > 1000:
+            raise ValueError("reason must be 1000 characters or fewer")
+        existing = (
+            self.supabase.table("ramp_step_feedback")
+            .select("id, created_at")
+            .eq("plan_id", plan_id)
+            .eq("step_id", step_id)
+            .eq("company_id", company_id)
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        rows = getattr(existing, "data", []) or []
+        now = datetime.now(timezone.utc).isoformat()
+        record = {
+            "id": rows[0].get("id") if rows else str(uuid.uuid4()),
+            "plan_id": plan_id,
+            "company_id": company_id,
+            "step_id": step_id,
+            "user_id": user_id,
+            "rating": normalized_rating,
+            "reason": normalized_reason,
+            "created_at": (rows[0].get("created_at") if rows else None) or now,
+            "updated_at": now,
+        }
+        self.supabase.table("ramp_step_feedback").upsert(
+            record, on_conflict="plan_id,step_id,user_id"
+        ).execute()
+        return {
+            "plan_id": plan_id,
+            "step_id": step_id,
+            "rating": normalized_rating,
+            "reason": normalized_reason,
+            "updated_at": now,
+        }
+
+    def feedback_summary(self, plan_id: str, company_id: str) -> Dict[str, Any]:
+        """Return tenant-scoped aggregate ratings without exposing individual identities."""
+        self._require_company_id(company_id)
+        plan = self.get_plan(plan_id, company_id)
+        if not plan:
+            raise ValueError("ramp plan not found")
+        response = (
+            self.supabase.table("ramp_step_feedback")
+            .select("step_id, rating")
+            .eq("plan_id", plan_id)
+            .eq("company_id", company_id)
+            .execute()
+        )
+        rows = getattr(response, "data", []) or []
+        counts = {rating: 0 for rating in sorted(FEEDBACK_RATINGS)}
+        by_step: Dict[str, Dict[str, int]] = {}
+        for row in rows:
+            rating = row.get("rating")
+            if rating not in FEEDBACK_RATINGS:
+                continue
+            counts[rating] += 1
+            step_counts = by_step.setdefault(
+                str(row.get("step_id")), {key: 0 for key in sorted(FEEDBACK_RATINGS)}
+            )
+            step_counts[rating] += 1
+        return {
+            "plan_id": plan_id,
+            "total": sum(counts.values()),
+            "ratings": counts,
+            "steps": by_step,
+        }
 
     @staticmethod
     def _require_company_id(company_id: str | None) -> None:
