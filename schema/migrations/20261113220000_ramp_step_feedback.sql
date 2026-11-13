@@ -3,9 +3,21 @@
 
 BEGIN;
 
+DO $
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.ramp_plans'::regclass
+      AND conname = 'ramp_plans_id_company_id_key'
+  ) THEN
+    ALTER TABLE public.ramp_plans
+      ADD CONSTRAINT ramp_plans_id_company_id_key UNIQUE (id, company_id);
+  END IF;
+END $;
+
 CREATE TABLE IF NOT EXISTS public.ramp_step_feedback (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  plan_id UUID NOT NULL REFERENCES public.ramp_plans(id) ON DELETE CASCADE,
+  plan_id UUID NOT NULL,
   company_id TEXT NOT NULL,
   step_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
@@ -15,6 +27,9 @@ CREATE TABLE IF NOT EXISTS public.ramp_step_feedback (
   reason TEXT CHECK (reason IS NULL OR length(reason) <= 1000),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT ramp_step_feedback_plan_company_fkey
+    FOREIGN KEY (plan_id, company_id)
+    REFERENCES public.ramp_plans(id, company_id) ON DELETE CASCADE,
   CONSTRAINT ramp_step_feedback_plan_step_user_key
     UNIQUE (plan_id, step_id, user_id)
 );
