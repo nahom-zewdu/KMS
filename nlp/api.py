@@ -450,6 +450,34 @@ async def get_step_progress(
         return JSONResponse({"success": False, "error": str(exc)}, status_code=500)
 
 
+@app.get("/ramp-plans/{plan_id}/steps/{step_id}/feedback")
+async def get_ramp_step_feedback(
+    plan_id: str,
+    step_id: str,
+    authorization: str | None = Header(default=None, alias="Authorization"),
+    legacy_user_id: str | None = Header(default=None, alias="X-User-Id"),
+    company_id: str | None = Header(default=None, alias="X-Company-Id"),
+):
+    """Read only the authenticated engineer's saved feedback for a step."""
+    effective_company_id = require_company_id(company_id, "X-Company-Id")
+    try:
+        identity = require_authenticated_identity(authorization, legacy_user_id=legacy_user_id)
+        require_company_membership(identity["user_id"], effective_company_id)
+        feedback = ramp_generator.get_step_feedback(
+            plan_id, step_id, effective_company_id, identity["user_id"]
+        )
+        return JSONResponse({"success": True, "feedback": feedback})
+    except ValueError as exc:
+        return JSONResponse({"success": False, "error": str(exc)}, status_code=404)
+    except KeyError as exc:
+        return JSONResponse({"success": False, "error": str(exc)}, status_code=404)
+    except HTTPException:
+        raise
+    except Exception:
+        logging.exception("Ramp step feedback read failed")
+        raise HTTPException(status_code=500, detail="Failed to retrieve Ramp step feedback")
+
+
 @app.put("/ramp-plans/{plan_id}/steps/{step_id}/feedback")
 async def submit_ramp_step_feedback(
     plan_id: str,
