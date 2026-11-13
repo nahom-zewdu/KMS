@@ -156,6 +156,19 @@ class RampPlanner:
         """Return one user's progress for one stable step."""
         return self.store.progress_for_plan(plan_id, company_id, user_id).get(str(step_id))
 
+    def submit_step_feedback(
+        self, plan_id: str, step_id: str, company_id: str, user_id: str,
+        rating: str, reason: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Persist one authenticated engineer's usefulness rating for a Ramp step."""
+        return self.store.submit_step_feedback(
+            plan_id, step_id, company_id, user_id, rating, reason
+        )
+
+    def feedback_summary(self, plan_id: str, company_id: str) -> Dict[str, Any]:
+        """Return aggregate feedback for a company manager."""
+        return self.store.feedback_summary(plan_id, company_id)
+
     def _build_candidates(
         self,
         role: str,
