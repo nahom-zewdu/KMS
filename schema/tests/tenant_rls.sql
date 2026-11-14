@@ -247,7 +247,7 @@ END $$;
 
 RESET ROLE;
 SET ROLE service_role;
-DO $$ DECLARE row_count integer; BEGIN
+DO $ DECLARE row_count integer; ownership_rejected boolean := false; file_count integer; BEGIN
   SELECT count(*) INTO row_count FROM public.entities;
   IF row_count <> 2 THEN RAISE EXCEPTION 'service role should access both tenants; got %', row_count; END IF;
   SELECT count(*) INTO row_count
@@ -256,9 +256,7 @@ DO $$ DECLARE row_count integer; BEGIN
   SELECT count(*) INTO row_count
   FROM public.search_edges_by_entity('B data', ARRAY[]::text[], 'company-b');
   IF row_count <> 1 THEN RAISE EXCEPTION 'service-role graph RPC company filter failed, got %', row_count; END IF;
-  DECLARE
-    ownership_rejected boolean := false;
-    file_count integer;
+  ownership_rejected := false;
   BEGIN
     BEGIN
       PERFORM public.reconcile_repository_files(
