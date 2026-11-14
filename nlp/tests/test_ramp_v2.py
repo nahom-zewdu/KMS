@@ -266,15 +266,15 @@ def test_required_evidence_failure_aborts_and_preserves_existing_plan():
 def test_optional_evidence_failures_are_logged_and_generation_continues(caplog):
     planner = planner_with_evidence([surface("api/server.go")])
     optional_sources = {
-        "module_records": ("codebase_modules", "list module records"),
-        "ownership": ("edges", "list ownership relationships"),
-        "github_history": ("raw_data", "list GitHub history"),
-        "implementation_relationships": ("entities", "list file entities"),
-        "contribution_issues": ("events", "list company GitHub issue events"),
+        "module_records": ("module_records", "codebase_modules", "list module records"),
+        "ownership": ("ownership", "edges", "list ownership relationships"),
+        "github_history": ("github_history", "raw_data", "list GitHub history"),
+        "implementation_relationships": ("implementation_relationships", "entities", "list file entities"),
+        "contribution_issues": ("github_contribution_issues", "events", "list company GitHub issue events"),
     }
-    for method, (source, operation) in optional_sources.items():
+    for method, (source, table, operation) in optional_sources.items():
         getattr(planner.evidence, method).side_effect = RampEvidenceRetrievalError(
-            source, operation, "RuntimeError"
+            table, operation, "RuntimeError"
         )
     planner.store.save_plan = Mock()
 
@@ -283,7 +283,9 @@ def test_optional_evidence_failures_are_logged_and_generation_continues(caplog):
 
     assert plan["steps"]
     planner.store.save_plan.assert_called_once_with(plan)
-    assert {record.ramp_evidence_source for record in caplog.records} == set(optional_sources)
+    assert {record.ramp_evidence_source for record in caplog.records} == {
+        source for source, _table, _operation in optional_sources.values()
+    }
 
 
 def test_no_eligible_candidates_never_replaces_existing_plan():
