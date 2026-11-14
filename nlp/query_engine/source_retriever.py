@@ -91,7 +91,7 @@ def retrieve_source_chunks(
     # Resolve repository inventory strictly through this company's repository IDs.
     repository_response = (
         supabase.table("repositories")
-        .select("id,full_name,default_branch")
+        .select("id,full_name,default_branch,baseline_revision")
         .eq("company_id", company_id)
         .execute()
     )
@@ -179,7 +179,7 @@ def retrieve_source_chunks(
         path = str(row["file_path"])
         try:
             contents = github.get_repo(str(repository["full_name"])).get_contents(
-                path, ref=repository.get("default_branch") or None
+                path, ref=repository.get("baseline_revision") or repository.get("default_branch") or None
             )
             if isinstance(contents, list):
                 continue
