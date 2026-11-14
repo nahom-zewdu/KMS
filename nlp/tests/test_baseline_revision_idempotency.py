@@ -1,4 +1,4 @@
-"""Regression tests for idempotent baseline revision handling."""
+"""Regression tests for database-coordinated baseline synchronization."""
 
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -6,63 +6,60 @@ from unittest.mock import Mock
 from codebase.baseline import CodebaseBaselineSync
 
 
-def _sync_with_repository_row(row):
+def _sync_with_claim_status(status):
     sync = CodebaseBaselineSync.__new__(CodebaseBaselineSync)
+    sync.gh = Mock()
+    repository = sync.gh.get_repo.return_value
+    repository.default_branch = "main"
+    repository.get_branch.return_value.commit.sha = "abc123"
     sync.supabase = Mock()
-    query = Mock()
-    query.select.return_value = query
-    query.eq.return_value = query
-    query.limit.return_value = query
-    query.execute.return_value = SimpleNamespace(data=[row] if row else [])
-    sync.supabase.table.return_value = query
+    sync.supabase.rpc.return_value.execute.return_value = SimpleNamespace(data=status)
     return sync
 
 
-def test_ready_baseline_at_same_revision_is_already_indexed():
-    sync = _sync_with_repository_row({
-        "baseline_status": "ready",
-        "baseline_revision": "abc123",
-    })
-
-    assert sync._is_revision_already_ready("org/repo", "company-a", "abc123") is True
-
-
-def test_ready_baseline_at_different_revision_requires_sync():
-    sync = _sync_with_repository_row({
-        "baseline_status": "ready",
-        "baseline_revision": "old123",
-    })
-
-    assert sync._is_revision_already_ready("org/repo", "company-a", "new456") is False
-
-
-def test_indexing_baseline_is_not_treated_as_complete():
-    sync = _sync_with_repository_row({
-        "baseline_status": "indexing",
-        "baseline_revision": "abc123",
-    })
-
-    assert sync._is_revision_already_ready("org/repo", "company-a", "abc123") is False
-
-
-def test_missing_repository_row_requires_sync():
-    sync = _sync_with_repository_row(None)
-
-    assert sync._is_revision_already_ready("org/repo", "company-a", "abc123") is False
-
-
-
-def test_sync_returns_without_mutating_state_for_already_ready_revision():
-    sync = CodebaseBaselineSync.__new__(CodebaseBaselineSync)
-    sync.gh = Mock()
-    sync.gh.get_repo.return_value.default_branch = "main"
-    sync.gh.get_repo.return_value.get_branch.return_value.commit.sha = "abc123"
-    sync._is_revision_already_ready = Mock(return_value=True)
-    sync._set_sync_state = Mock()
+def test_same_ready_revision_is_skipped_by_atomic_claim():
+    sync = _sync_with_claim_status("ready")
 
     assert sync.sync_repository("org/repo", "company-a") is True
 
-    sync._is_revision_already_ready.assert_called_once_with(
-        "org/repo", "company-a", "abc123"
+    sync.supabase.rpc.assert_called_once_with(
+        "claim_repository_baseline",
+        {
+            "p_full_name": "org/repo",
+            "p_company_id": "company-a",
+            "p_source_revision": "abc123",
+            "p_run_id": sync.supabase.rpc.call_args.args[1]["p_run_id"],
+            "p_lease_seconds": 180,
+        },
     )
-    sync._set_sync_state.assert_not_called()
+    sync.supabase.table.assert_not_called()
+
+
+def test_concurrent_repository_claim_is_left_retryable():
+    sync = _sync_with_claim_status("busy")
+
+    assert sync.sync_repository("org/repo", "company-a") is False
+
+    sync.supabase.table.assert_not_called()
+    assert sync.supabase.rpc.call_count == 1
+
+
+def test_unknown_claim_response_does_not_start_indexing():
+    sync = _sync_with_claim_status(None)
+
+    assert sync.sync_repository("org/repo", "company-a") is False
+
+    sync.supabase.table.assert_not_called()
+
+
+def test_company_scope_is_required_before_claiming():
+    sync = _sync_with_claim_status("ready")
+
+    try:
+        sync.sync_repository("org/repo", "default")
+    except ValueError as exc:
+        assert "company_id" in str(exc)
+    else:
+        raise AssertionError("expected invalid company scope to be rejected")
+
+    sync.supabase.rpc.assert_not_called()
