@@ -437,7 +437,7 @@ REVOKE ALL ON TABLE
   public.edges, public.raw_data, public.playbooks, public.ramp_plans,
   public.ramp_step_progress, public.events, public.contributions,
   public.pull_requests, public.issues, public.query_logs,
-  public.ingestion_outbox, public.ramp_step_feedback
+  public.ingestion_outbox, public.ramp_step_feedback, public.profiles
 FROM PUBLIC, anon, authenticated;
 
 GRANT SELECT ON TABLE
