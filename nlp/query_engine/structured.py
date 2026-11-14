@@ -135,7 +135,11 @@ def _ownership_answer(
         .eq("company_id", company_id)
         .in_("id", source_ids)
     )
-    names = {str(row["id"]): str(row.get("name") or "") for row in people if row.get("id")}
+    names = {
+        str(row["id"]): str(row.get("name") or "")
+        for row in people
+        if row.get("id") and str(row.get("type") or "").lower() == "person"
+    }
     grouped: dict[str, list[str]] = {}
     for edge in edges:
         owner = names.get(str(edge.get("source_id") or ""), "")
