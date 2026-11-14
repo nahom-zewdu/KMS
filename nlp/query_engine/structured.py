@@ -159,9 +159,10 @@ def answer_structured_question(
     if re.search(r"\b(who|which person)\b.*\b(implemented|authored|wrote|changed|committed)\b|\b(implemented|authored|wrote)\b", q):
         _, files = _company_inventory(supabase, company_id)
         paths = _context_paths(context)
-        if not paths and "handler" in q:
-            paths = [str(row.get("file_path")) for row in files
-                     if "api/handlers/" in str(row.get("file_path") or "")]
+        if "handler" in q:
+            handler_paths = [str(row.get("file_path")) for row in files
+                             if "api/handlers/" in str(row.get("file_path") or "")]
+            paths = handler_paths or paths
         selected = [row for row in files if not paths or row.get("file_path") in set(paths)]
         authors: dict[str, list[str]] = {}
         for row in selected:
@@ -187,7 +188,7 @@ def answer_structured_question(
             "answer": answer, "confidence": "medium" if authors else "low",
             "sources": [{"source": "codebase_files", "file_path": path}
                         for paths_for_author in authors.values() for path in paths_for_author][:8],
-            "owners": sorted(authors),
+            "owners": [],
             "abstain_reason": None if authors else "author_metadata_unavailable",
         }
 
