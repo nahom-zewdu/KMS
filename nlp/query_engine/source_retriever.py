@@ -126,14 +126,15 @@ def retrieve_source_chunks(
         if row.get("file_path")
     ]
 
-    if "domain" in q:
+    # Broad discovery must never widen an explicit file-path allowlist.
+    if not explicit_paths and "domain" in q:
         selected = [
             row for row in indexed_files
             if "domain" in str(row.get("file_path") or "").lower()
             or "domain" in str(row.get("module_path") or "").lower()
         ]
         refs = [{"path": row["file_path"], "repository_id": row.get("repository_id")} for row in selected] + refs
-    elif "handler" in q:
+    elif not explicit_paths and "handler" in q:
         selected = [
             row for row in indexed_files
             if "/handlers/" in str(row.get("file_path") or "")
@@ -194,7 +195,14 @@ def retrieve_source_chunks(
             )
             if isinstance(contents, list):
                 continue
-            source_text = contents.decoded_content.decode("utf-8")
+            decoded_content = getattr(contents, "decoded_content", None)
+            if not isinstance(decoded_content, bytes):
+                logger.warning(
+                    "Skipping source response without byte content | repo=%s | path=%s",
+                    repository.get("full_name"), path,
+                )
+                continue
+            source_text = decoded_content.decode("utf-8")
         except (GithubException, UnicodeDecodeError, AttributeError) as exc:
             logger.warning(
                 "Could not retrieve indexed source file | repo=%s | path=%s | error=%s",
