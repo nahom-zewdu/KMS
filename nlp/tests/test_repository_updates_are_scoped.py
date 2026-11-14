@@ -58,7 +58,13 @@ class RecordingSupabase:
 
     def rpc(self, name, params):
         self.rpc_calls.append((name, params))
-        return SimpleNamespace(execute=lambda: SimpleNamespace(data=0))
+        result = {
+            "claim_repository_baseline": "claimed",
+            "renew_repository_baseline_lease": True,
+            "complete_repository_baseline": True,
+            "fail_repository_baseline": True,
+        }.get(name, False)
+        return SimpleNamespace(execute=lambda: SimpleNamespace(data=result))
 
 
 def _assert_repository_update_is_tenant_scoped(database):
@@ -114,13 +120,13 @@ def test_baseline_repository_update_filters_by_company():
         and ("company_id", "company-a") in filters
         for table, operation, filters in database.calls
     )
-    assert any(
-        table == "repositories"
-        and values.get("baseline_status") == "ready"
-        and values.get("last_synced_at")
-        and values.get("baseline_revision") == "a" * 40
-        for table, values in database.updates
+    completion = next(
+        params for name, params in database.rpc_calls
+        if name == "complete_repository_baseline"
     )
+    assert completion["p_company_id"] == "company-a"
+    assert completion["p_source_revision"] == "a" * 40
+    assert completion["p_file_count"] == 0
 
 
 
@@ -150,11 +156,11 @@ def test_failed_directory_traversal_never_runs_destructive_reconciliation():
     sync.relationship_indexer = SimpleNamespace(index_repository=lambda *_args, **_kwargs: 0)
 
     assert not sync.sync_repository("org/repo", "company-a")
-    assert database.rpc_calls == []
-    assert any(
-        table == "repositories" and values.get("baseline_status") == "failed"
-        for table, values in database.updates
-    )
+    rpc_names = [name for name, _params in database.rpc_calls]
+    assert "claim_repository_baseline" in rpc_names
+    assert "fail_repository_baseline" in rpc_names
+    assert "reconcile_repository_files" not in rpc_names
+    assert "complete_repository_baseline" not in rpc_names
     assert not any(
         table == "repositories" and values.get("last_synced_at")
         for table, values in database.updates
