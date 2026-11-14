@@ -19,6 +19,14 @@ _MAX_FILES = 4
 _MAX_FILE_CHARS = 9000
 
 
+def _response_rows(response: Any) -> list[dict[str, Any]]:
+    """Return concrete database rows; fail closed for mock/error-shaped responses."""
+    data = getattr(response, "data", None)
+    if not isinstance(data, (list, tuple)):
+        return []
+    return [row for row in data if isinstance(row, dict)]
+
+
 def _paths_from_text(value: str) -> list[str]:
     return re.findall(
         r"(?:[\w.-]+/)+[\w.-]+\.(?:go|py|ts|tsx|js|jsx|sql|md)",
@@ -96,8 +104,8 @@ def retrieve_source_chunks(
         .execute()
     )
     repositories = [
-        row for row in (getattr(repository_response, "data", None) or [])
-        if isinstance(row, dict) and row.get("id") and row.get("full_name")
+        row for row in _response_rows(repository_response)
+        if row.get("id") and row.get("full_name")
     ]
     # A mocked/failed client response is not repository evidence. Fail closed.
     if not repositories:
@@ -114,8 +122,8 @@ def retrieve_source_chunks(
         .execute()
     )
     indexed_files = [
-        row for row in (getattr(file_response, "data", None) or [])
-        if isinstance(row, dict) and row.get("file_path")
+        row for row in _response_rows(file_response)
+        if row.get("file_path")
     ]
 
     if "domain" in q:
