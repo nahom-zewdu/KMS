@@ -41,6 +41,7 @@ class Supabase:
                 "company_id": "company-a",
                 "full_name": "acme/service",
                 "default_branch": "main",
+                "baseline_revision": "abc123",
             }],
             "codebase_files": [{
                 "repository_id": "repo-1",
@@ -76,7 +77,7 @@ def test_source_retrieval_fetches_only_indexed_company_file(monkeypatch):
     assert chunks[0]["file_path"] == "api/handlers/routes.go"
     assert "func RegisterRoutes" in chunks[0]["content"]
     github_client.get_repo.assert_called_once_with("acme/service")
-    github_repo.get_contents.assert_called_once_with("api/handlers/routes.go", ref="main")
+    github_repo.get_contents.assert_called_once_with("api/handlers/routes.go", ref="abc123")
 
 
 def test_source_retrieval_never_fetches_unindexed_path(monkeypatch):
