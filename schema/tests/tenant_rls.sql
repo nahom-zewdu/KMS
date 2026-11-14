@@ -148,13 +148,32 @@ RESET ROLE;
 
 SET ROLE authenticated;
 SET request.jwt.claim.sub = '00000000-0000-0000-0000-000000000001';
+DO $ BEGIN
+  IF has_function_privilege('authenticated','public.search_edges_by_entity(text,text[],text)','EXECUTE') THEN
+    RAISE EXCEPTION 'authenticated can execute graph search RPC';
+  END IF;
+  IF has_function_privilege('authenticated','public.reconcile_repository_files(uuid,text,text[])','EXECUTE') THEN
+    RAISE EXCEPTION 'authenticated can execute repository reconciliation RPC';
+  END IF;
+  IF has_function_privilege('authenticated','public.replace_implementation_edges(text,uuid[],jsonb)','EXECUTE') THEN
+    RAISE EXCEPTION 'authenticated can execute implementation edge replacement RPC';
+  END IF;
+  IF to_regprocedure('public.match_documents(extensions.vector,double precision,integer,text)') IS NOT NULL
+     AND has_function_privilege('authenticated','public.match_documents(extensions.vector,double precision,integer,text)','EXECUTE') THEN
+    RAISE EXCEPTION 'authenticated can execute vector search RPC';
+  END IF;
+  IF NOT has_function_privilege('service_role','public.search_edges_by_entity(text,text[],text)','EXECUTE') THEN
+    RAISE EXCEPTION 'service_role cannot execute graph search RPC';
+  END IF;
+END $;
+BEGIN
 DO $$ DECLARE row_count integer; BEGIN
   SELECT count(*) INTO row_count FROM public.entities;
   IF row_count <> 1 THEN RAISE EXCEPTION 'cross-company entity read: expected 1 got %', row_count; END IF;
   SELECT count(*) INTO row_count FROM public.edges;
   IF row_count <> 1 THEN RAISE EXCEPTION 'cross-company edge read: expected 1 got %', row_count; END IF;
   SELECT count(*) INTO row_count FROM public.raw_data;
-  IF row_count <> 1 THEN RAISE EXCEPTION 'cross-company raw_data read: expected 1 got %', row_count; END IF;
+  IF row_count <> 2 THEN RAISE EXCEPTION 'cross-company raw_data read: expected 2 got %', row_count; END IF;
   SELECT count(*) INTO row_count FROM public.company_members;
   IF row_count <> 2 THEN RAISE EXCEPTION 'membership visibility or recursive policy failure: expected 2 got %', row_count; END IF;
   SELECT count(*) INTO row_count
