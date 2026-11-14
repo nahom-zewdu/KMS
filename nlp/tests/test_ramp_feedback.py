@@ -140,9 +140,9 @@ def test_get_step_feedback_is_scoped_to_requesting_engineer():
 def test_feedback_summary_returns_aggregates_without_user_identifiers():
     store, tables = store_with_plan()
     tables["ramp_step_feedback"] = Query([
-        {"step_id": "step-1", "rating": "useful", "user_id": "secret-user"},
-        {"step_id": "step-1", "rating": "not_useful", "user_id": "secret-user-2"},
-        {"step_id": "step-2", "rating": "partially_useful", "user_id": "secret-user-3"},
+        {"plan_id": "plan-1", "company_id": "company-1", "step_id": "step-1", "rating": "useful", "user_id": "secret-user"},
+        {"plan_id": "plan-1", "company_id": "company-1", "step_id": "step-1", "rating": "not_useful", "user_id": "secret-user-2"},
+        {"plan_id": "plan-1", "company_id": "company-1", "step_id": "step-2", "rating": "partially_useful", "user_id": "secret-user-3"},
     ])
     store.supabase.table.side_effect = lambda name: tables[name]
 
