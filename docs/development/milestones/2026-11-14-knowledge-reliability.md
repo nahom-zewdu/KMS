@@ -1,9 +1,9 @@
 # KMS Knowledge Reliability & Trust — Implementation Brief
 
-**Status:** SPECIFIED — implementation not started
+**Status:** IN_PROGRESS — audit confirmed critical exposure; frontend hardening started
 **Document date:** 2026-11-14
-**Target implementation base:** `feat/ramp` after `feat/implementation-relations` is merged
-**Implementation branch:** To be created from the updated `feat/ramp` after that merge
+**Target implementation base:** merged `feat/ramp` at `68ad38f4d2b40f9e9cb535243f1a2dab4ab1ea9b`
+**Implementation branch:** `feat/krt-00-tenant-isolation` (backend and frontend repositories)
 **Execution ledger:** `docs/development/roadmap.md`
 **Scope owner:** KMS core platform
 
@@ -19,7 +19,7 @@ The objective is not to add a fashionable RAG framework. It is to make KMS relia
 
 ## 2. Current milestone and handoff boundary
 
-The current working branch is `feat/implementation-relations`. Its work is the current Ramp intelligence/evidence milestone and must be merged into `feat/ramp` first.
+The current implementation branch is `feat/krt-00-tenant-isolation`, created from merged `feat/ramp` at `68ad38f4d2b40f9e9cb535243f1a2dab4ab1ea9b`. PR #21 merged the prior `feat/implementation-relations` work into `feat/ramp`.
 
 The merge sequence is deliberate:
 
@@ -29,7 +29,7 @@ The merge sequence is deliberate:
 4. Create a new implementation branch from that merged `feat/ramp` head.
 5. Begin KRT implementation on that new branch.
 
-Do not begin KRT implementation on `feat/implementation-relations`, and do not create the implementation branch from its pre-merge state. This document and the roadmap are preparation only.
+Do not implement KRT on the previous `feat/implementation-relations` branch.
 
 PR #20 is historical context: it merged `feat/ramp` into `feat/implementation-relations`, the opposite direction from the next merge requested here. It is not evidence that the current branch has been merged back.
 
@@ -244,3 +244,44 @@ Do not start KRT-01 or add code embeddings before KRT-00 is accepted.
 | Date | Change |
 |---|---|
 | 2026-11-14 | Initial implementation brief created from the current architecture/data/retrieval audit. No implementation or database changes are included in this document. |
+
+
+## 11. KRT-00 live audit and implementation log — 2026-11-14
+
+**Status:** IN_PROGRESS  
+**Backend branch:** `feat/krt-00-tenant-isolation`  
+**Frontend branch:** `feat/krt-00-tenant-isolation`  
+**Database changes:** none applied
+
+### Confirmed critical findings
+
+The active Supabase project's Security Advisor and direct catalog inspection confirm:
+- 11 public tables have RLS disabled while `anon` and `authenticated` have broad table privileges.
+- `company_members` has public self-insert and self-update policies; the update policy has no `WITH CHECK`. This is a membership self-enrollment/role-escalation path.
+- `entities` and `playbooks` have permissive public `USING (true)` policies; `companies` is also publicly readable.
+- `match_documents` is executable by `anon` and `authenticated`, permits a NULL tenant filter, and has no fixed search_path.
+- `search_edges_by_entity` is executable by browser roles, has no company filter, and its live signature differs from the Python caller.
+- `reconcile_repository_files` and `replace_implementation_edges` are executable by browser roles. Repository reconciliation does not validate repository/company ownership before deletion.
+- `company_integrations` has broad browser table grants despite storing access tokens, refresh tokens, and webhook secrets.
+
+These findings establish potential unauthorized access and privilege escalation. They do not establish that exploitation occurred.
+
+### Data integrity checks
+
+Live read-only checks found 2 companies, 2 admin memberships, 422 entities, 611 edges, 153 raw records, 149 events, 237 codebase files, and 96 modules. Tenant IDs were present on all checked entities, edges, raw records, and events; edge endpoints had no cross-company mismatches; files/modules referenced existing repositories. `contributions` is empty and has no `company_id` column, despite current application code expecting one.
+
+### Frontend changes committed
+
+The frontend KRT branch now:
+- requires authentication and active-company repository scope for `GET /api/codebase`;
+- accesses integration metadata through the server-only admin client after explicit membership/role checks;
+- requires authentication and active-company filtering for legacy `/onboard/[slug]` playbooks;
+- documents why public role-slug playbook sharing is disabled until a revocable share-token mechanism exists.
+
+Commits are on `nahom-zewdu/kms-frontend:feat/krt-00-tenant-isolation`. Build/lint/tests have not yet been run.
+
+### Remaining work and acceptance
+
+The database migration and SQL regression harness are not yet implemented. Next implementation batch is the migration and tests, not vector/RAG work. It must include table RLS/grants, membership policy correction, safe function privileges/search_path, tenant-required RPC contracts, repository ownership checks, and contribution schema drift.
+
+KRT-00 remains **IN_PROGRESS**, not VERIFIED. No live SQL changes have been applied.
