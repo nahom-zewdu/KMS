@@ -1,6 +1,6 @@
 # Architecture Overview
 
-> Current-state snapshot: system shape as of `feat/ramp` (merged) plus `feat/implementation-relations` (2026-09-21). This document describes the system as it exists, not an aspirational architecture. Ramp intelligence detail: `docs/architecture/ramp.md`.
+> Current-state snapshot: `feat/implementation-relations`, reviewed 2026-11-14. This describes the current repository architecture; it is not a claim that every quality/security guarantee is verified. Ramp intelligence detail: `docs/architecture/ramp.md`. Knowledge-pipeline audit and target direction: `docs/architecture/knowledge-reliability.md`.
 
 ## System boundary
 
@@ -82,3 +82,12 @@ These are engineering/product claims that require executable or live-system evid
 ## Architectural principle
 
 KMS should remain small while customer value is being validated. New infrastructure must solve a demonstrated problem. Correctness and security issues that directly affect customer data or a core user flow are exceptions and should be fixed when encountered.
+
+
+## Knowledge pipeline status (2026-11-14)
+
+The current system stores raw engineering records, graph entities/edges, repository/file/module metadata, and embeddings for raw event records. It does not yet have a durable code-chunk embedding index or a unified hybrid retrieval planner. Code-source retrieval remains a separate bounded path that selects indexed files and fetches source from GitHub at query time.
+
+The current code intelligence includes Python/Go import relationships and read-only Go route/handler/direct-operation evidence. Import relationships are structural facts, not runtime traces. The route/handler evidence composition is not yet a general cross-language call graph or proof of complete runtime behavior.
+
+See `docs/architecture/knowledge-reliability.md` for the detailed audit, known security risks, target retrieval architecture, and implementation gates. Do not infer tenant isolation from company_id columns alone; verify RLS, grants, RPC contracts, and application authorization against the live system.
