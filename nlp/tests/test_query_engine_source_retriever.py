@@ -93,3 +93,17 @@ def test_source_retrieval_never_fetches_unindexed_path(monkeypatch):
 
     assert chunks == []
     github_client.get_repo.assert_not_called()
+
+def test_source_retrieval_fails_closed_when_supabase_returns_mock_response(monkeypatch):
+    monkeypatch.setenv("GITHUB_API_TOKEN", "test-token")
+    supabase = Mock()
+    with patch("query_engine.source_retriever.Github") as github:
+        chunks = retrieve_source_chunks(
+            supabase,
+            "company-a",
+            "Explain api/handlers/secrets.go",
+            '{"kind":"ramp_step","active_step":{"target":{"files":[{"path":"api/handlers/secrets.go"}]}}}',
+        )
+
+    assert chunks == []
+    github.assert_not_called()
