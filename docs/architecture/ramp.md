@@ -2,7 +2,7 @@
 
 **Status:** Clean intelligence rewrite in progress (RID-05)
 **Branch:** `feat/implementation-relations`
-**Last updated:** 2026-09-21
+**Last updated:** 2026-11-14
 
 Product contract: `docs/product/ramp-prd.md`.
 Evidence/candidate semantics: `docs/product/ramp-intelligence-model.md`.
@@ -121,3 +121,10 @@ Until those signals exist, Ramp should stop at investigation/readiness. The curr
 Do not add features to a restored module-first generator. If a useful behavior is needed, implement it against the evidence/candidate model or discard it.
 
 Working infrastructure—Supabase, ingestion, progress persistence, API routes, and the existing frontend workspace—is preserved because it is infrastructure, not the old Ramp reasoning model.
+
+
+## 8. Current branch handoff
+
+The route/handler/direct-operation evidence work has progressed beyond the initial import-only model, but the composed evidence remains read-only and unintegrated into the production planner/index. RID-09 still requires local verification and human usefulness evaluation. Do not describe the current candidates as verified runtime workflows.
+
+The next platform milestone is KRT (Knowledge Reliability & Trust), specified in `docs/development/milestones/2026-11-14-knowledge-reliability.md`. It is intentionally scheduled after `feat/implementation-relations` is merged into `feat/ramp`; no KRT implementation belongs on the current branch.
