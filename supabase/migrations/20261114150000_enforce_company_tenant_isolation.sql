@@ -64,7 +64,7 @@ BEGIN
   ) THEN RAISE EXCEPTION 'ramp_step_feedback contains a cross-company plan reference'; END IF;
 END $$;
 
-DO $
+DO $krt$
 DECLARE
   item record;
   has_invalid_rows boolean;
@@ -80,7 +80,7 @@ BEGIN
     SELECT * FROM (VALUES
       ('company_members'),('company_integrations'),('company_repos'),
       ('repositories'),('entities'),('edges'),('raw_data'),('events'),
-      ('contributions'),('playbooks'),('ramp_plans'),
+      ('playbooks'),('ramp_plans'),
       ('ramp_step_progress'),('ramp_step_feedback')
     ) AS tenant_table(table_name)
   LOOP
@@ -92,7 +92,7 @@ BEGIN
       RAISE EXCEPTION 'public.% contains null, blank, or default company identifiers', item.table_name;
     END IF;
   END LOOP;
-END $;
+END $krt$;
 
 ALTER TABLE public.companies ALTER COLUMN id DROP DEFAULT;
 
@@ -183,7 +183,7 @@ ALTER TABLE public.ramp_step_progress VALIDATE CONSTRAINT ramp_step_progress_com
 ALTER TABLE public.ramp_step_feedback VALIDATE CONSTRAINT ramp_step_feedback_company_id_fkey;
 
 -- Enforce company equality at relationship boundaries, not only in application code.
-DO $
+DO $krt$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='public.entities'::regclass AND conname='entities_id_company_id_key') THEN
     ALTER TABLE public.entities ADD CONSTRAINT entities_id_company_id_key UNIQUE (id,company_id);
@@ -211,7 +211,7 @@ BEGIN
     ALTER TABLE public.ramp_step_feedback ADD CONSTRAINT ramp_step_feedback_plan_company_fkey
       FOREIGN KEY (plan_id,company_id) REFERENCES public.ramp_plans(id,company_id) ON DELETE CASCADE NOT VALID;
   END IF;
-END $;
+END $krt$;
 
 ALTER TABLE public.edges VALIDATE CONSTRAINT edges_source_company_fkey;
 ALTER TABLE public.edges VALIDATE CONSTRAINT edges_target_company_fkey;
@@ -220,7 +220,7 @@ ALTER TABLE public.ramp_step_progress VALIDATE CONSTRAINT ramp_step_progress_pla
 ALTER TABLE public.ramp_step_feedback VALIDATE CONSTRAINT ramp_step_feedback_plan_company_fkey;
 
 ALTER TABLE public.contributions DROP CONSTRAINT IF EXISTS contributions_person_name_repo_name_key;
-DO $
+DO $krt$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
@@ -232,12 +232,12 @@ BEGIN
       ADD CONSTRAINT contributions_company_person_repo_key
       UNIQUE (company_id,person_name,repo_name);
   END IF;
-END $;
+END $krt$;
 CREATE INDEX IF NOT EXISTS idx_contributions_company_repo
   ON public.contributions(company_id, repo_name);
 
 -- Reject blank/default tenant identifiers even when writes bypass RLS.
-DO $
+DO $krt$
 DECLARE
   item record;
 BEGIN
@@ -265,7 +265,7 @@ BEGIN
       );
     END IF;
   END LOOP;
-END $;
+END $krt$;
 
 ALTER TABLE public.companies VALIDATE CONSTRAINT companies_id_not_default;
 ALTER TABLE public.company_members VALIDATE CONSTRAINT company_members_company_id_not_default;
