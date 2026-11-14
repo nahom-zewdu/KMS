@@ -474,3 +474,10 @@ Backend branch now includes `supabase/migrations/20261114150000_enforce_company_
 - Test harness now includes the migration plus anonymous denial, RPC privilege, tenant-scoped graph, membership self-insert, and self-promotion assertions.
 - The migration and test harness have **not** been executed. Do not infer correctness from successful GitHub file writes.
 - Frontend hardening continues in the separate draft PR #3: Slack OAuth callback authorization and active-company switch validation were added after the initial codebase/playbook changes.
+
+
+### Pull request tracking
+
+- Backend: [PR #22 — KRT-00 database tenant isolation](https://github.com/nahom-zewdu/KMS/pull/22) — draft; migration and SQL harness require runtime verification.
+- Frontend: [PR #3 — KRT-00 frontend access hardening](https://github.com/nahom-zewdu/kms-frontend/pull/3) — draft; lint/build and OAuth tests require runtime verification.
+- The two PRs are a coordinated release unit. Neither should merge independently.
