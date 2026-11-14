@@ -6,7 +6,7 @@
 > Current Ramp runtime: `docs/architecture/ramp.md`.
 > Scoring spec vs implemented subset: `docs/product/ramp-candidate-scoring.md`.
 
-**Last updated:** 2026-09-21
+**Last updated:** 2026-11-14
 **Current branch:** `feat/implementation-relations`
 **Current milestone:** MVP-1 — New Engineer Ramp
 **Current objective:** Prove that Ramp can move a new engineer from unfamiliarity to useful, safe contribution faster than normal onboarding.
@@ -25,7 +25,7 @@
 | `docs/product/ramp-candidate-evaluation-2026-09-20.md` | Read-only live candidate-quality snapshot |
 | `docs/decisions/ADR-003-deterministic-ramp.md` | Deterministic fact/selection layer |
 | `docs/decisions/ADR-004-imports-are-not-workflows.md` | Import edges are structural, not behavioral proof |
-| this file | Task state, verified status, selected next work |
+| `docs/architecture/knowledge-reliability.md` | Current knowledge-pipeline audit and target architecture |\n| `docs/development/milestones/2026-11-14-knowledge-reliability.md` | Specified implementation milestone and acceptance criteria |\n| this file | Task state, verified status, selected next work |
 
 Do not copy pipeline diagrams into every document. Link here or to the intelligence model.
 
@@ -344,3 +344,46 @@ Local execution is still required before marking RID-09 VERIFIED. Acceptance add
 ## Deferred infrastructure
 
 Live Supabase schema reconciliation, RLS/security hardening, and canonical migration workflow remain separate workstreams. Do not pull them into RID-07.
+
+
+---
+
+# 2026-11-14 — Milestone transition: KMS Knowledge Reliability & Trust
+
+**Current branch:** `feat/implementation-relations`  
+**Current milestone:** MVP-1 Ramp intelligence/evidence work — handoff pending  
+**Next milestone:** KRT — Knowledge Reliability & Trust  
+**Status:** SPECIFIED; implementation has not started  
+**Specification:** `docs/development/milestones/2026-11-14-knowledge-reliability.md`
+
+## Current milestone record
+
+The current branch extends the Ramp intelligence model with Python/Go import indexing, read-only Go route/handler evidence, direct handler-operation evidence, and evidence composition. The roadmap and related evaluation artifacts explicitly distinguish structural dependencies from behavioral proof.
+
+The work is not accepted as customer-ready Ramp intelligence. RID-05 remains in progress; RID-09's structural evidence composition is implemented but still requires local verification and a human usefulness test. Customer validation remains not started. See the task sections and dated evaluation artifacts above for exact boundaries.
+
+## Branch and merge gate
+
+The next repository integration step is to merge `feat/implementation-relations` **into** `feat/ramp`. PR #20 is not that merge: it merged `feat/ramp` into `feat/implementation-relations`.
+
+Do not start KRT implementation on this branch. After the requested merge:
+1. Verify the updated `feat/ramp` head and relevant backend/frontend checks.
+2. Create a fresh KRT implementation branch from that merged `feat/ramp` head.
+3. Start KRT-00 (tenant isolation/security) only.
+
+## KRT milestone overview
+
+| ID | Workstream | Priority | Status | Exit condition |
+|---|---|---:|---|---|
+| KRT-00 | Supabase tenant isolation and RPC security | P0 | SPECIFIED | Cross-tenant access is denied and covered by role-aware tests |
+| KRT-01 | Durable source snapshots and provenance | P1 | PLANNED | Source is retrievable by exact commit/path/hash and stale deletions reconcile |
+| KRT-02 | Code intelligence (symbols and behavioral evidence) | P1 | PLANNED | Source-backed symbol/reference evidence is available for supported languages |
+| KRT-03 | Hybrid retrieval (SQL, FTS, path, vector, graph) | P1 | PLANNED | Retrieval benchmark shows correct scope and relevant evidence |
+| KRT-04 | Typed query planning and grounded synthesis | P1 | PLANNED | Correct tool routing, claim-level citations, and reliable abstention |
+| KRT-05 | Evaluation and observability | P1 | PLANNED | Versioned benchmark and end-to-end traces gate query changes |
+
+**Why KRT-00 comes first:** the live Supabase audit reported RLS/grant/RPC configurations that may permit cross-tenant access. This must be re-verified against the active project and corrected before adding more retrieval surfaces or exposing real customer data.
+
+**Architecture decision:** retain the existing Go, Python, Redis Streams, Supabase/Postgres, and pgvector stack. Improve data contracts, provenance, indexing, retrieval orchestration, and evaluation before considering new infrastructure.
+
+**Scope discipline:** this is not a commitment to build every phase at once. KRT-00 is the only first implementation batch. Each later phase is activated only after the prior acceptance gate and an updated review of the evidence.
