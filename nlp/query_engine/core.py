@@ -92,7 +92,8 @@ class QueryEngine:
         # Structured company facts must come from authoritative tables, not vector top-k.
         try:
             structured = answer_structured_question(
-                self.supabase, effective_question, company_id, ramp_context
+                self.supabase, effective_question, company_id, ramp_context,
+                conversation_history=conversation_history,
             )
         except Exception:
             logger.exception("Structured query failed | company=%s", company_id)
