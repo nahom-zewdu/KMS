@@ -187,7 +187,7 @@ def _active_plan(supabase: Any, company_id: str, context: dict[str, Any]) -> dic
 def _repository_list_answer(repositories: list[dict[str, Any]]) -> dict[str, Any]:
     """List the company's connected repositories."""
     names = sorted({str(row.get("full_name")).strip() for row in repositories if row.get("full_name")})
-    answer = "Connected repositories:\\n" + "\\n".join(f"- {name}" for name in names) if names else (
+    answer = "Connected repositories:\n" + "\n".join(f"- {name}" for name in names) if names else (
         "No connected repositories are currently indexed for this company."
     )
     return {"answer": answer, "confidence": "high",
@@ -225,7 +225,7 @@ def answer_structured_question(
     context = parse_ramp_context(ramp_context)
     context["conversation_history"] = conversation_history or []
 
-    if re.search(r"\\b(list|show|name)\\b.*\\b(steps?|tasks?)\\b|\\bwhat are the steps\\b|\\bcan you list the steps\\b", q):
+    if re.search(r"\b(list|show|name)\b.*\b(steps?|tasks?)\b|\bwhat are the steps\b|\bcan you list the steps\b", q):
         plan = _active_plan(supabase, company_id, context)
         if not plan:
             return {"answer": "I couldn't identify the current Ramp plan, so I can't list its steps reliably.",
@@ -236,7 +236,7 @@ def answer_structured_question(
                   for i, step in enumerate(steps, start=1) if isinstance(step, dict)]
         answer = f"The {plan.get('role', 'current')} Ramp has {len(steps)} steps."
         if titles:
-            answer += "\\n" + "\\n".join(f"{i}. {title}" for i, title in enumerate(titles, start=1))
+            answer += "\n" + "\n".join(f"{i}. {title}" for i, title in enumerate(titles, start=1))
         return {"answer": answer, "confidence": "high",
                 "sources": [{"source": "ramp_plans", "record_id": str(plan.get("id") or "")}],
                 "owners": [], "abstain_reason": None}
@@ -314,11 +314,11 @@ def answer_structured_question(
                 "owners": [], "abstain_reason": None,
             }
 
-    if re.search(r"\\b(list|show|what are)\\b.*\\b(all )?(connected )?repositories\\b|\\bconnected repositories\\b", q):
+    if re.search(r"\b(list|show|what are)\b.*\b(all )?(connected )?repositories\b|\bconnected repositories\b", q):
         repositories, _ = _company_inventory(supabase, company_id)
         return _repository_list_answer(repositories)
 
-    if re.search(r"\\b(who|which person)\\b.*\\b(created|generated|made)\\b.*\\b(ramp|plan)\\b", q):
+    if re.search(r"\b(who|which person)\b.*\b(created|generated|made)\b.*\b(ramp|plan)\b", q):
         plan = _active_plan(supabase, company_id, context)
         if plan:
             creator = next((str(plan.get(key)).strip() for key in
@@ -332,7 +332,7 @@ def answer_structured_question(
                     "sources": [{"source": "ramp_plans", "record_id": str(plan.get("id") or "")}],
                     "owners": [], "abstain_reason": None if creator else "ramp_creator_not_recorded"}
 
-    if re.search(r"\\b(for whom|who is this ramp for|who is the ramp for)\\b", q):
+    if re.search(r"\b(for whom|who is this ramp for|who is the ramp for)\b", q):
         plan = _active_plan(supabase, company_id, context)
         if plan:
             employee = str(plan.get("employee_name") or "").strip()
@@ -342,7 +342,7 @@ def answer_structured_question(
                     "sources": [{"source": "ramp_plans", "record_id": str(plan.get("id") or "")}],
                     "owners": [], "abstain_reason": None if employee else "ramp_employee_not_recorded"}
 
-    if re.search(r"\\b(name|title)\\b.*\\b(current )?ramp\\b|\\bwhat is this ramp called\\b", q):
+    if re.search(r"\b(name|title)\b.*\b(current )?ramp\b|\bwhat is this ramp called\b", q):
         plan = _active_plan(supabase, company_id, context)
         if plan:
             role = str(plan.get("role") or "engineering").replace("-", " ").title()
@@ -375,21 +375,18 @@ def answer_structured_question(
             "owners": [], "abstain_reason": None,
         }
 
-    if re.search(r"\\b(how many|count|number of)\\b.*\\b(files?|source files?)\\b|\\b(files?|source files?)\\s+(are|is)\\s+indexed\\b", q):
+    if re.search(r"\b(how many|count|number of)\b.*\b(files?|source files?)\b|\b(files?|source files?)\s+(are|is)\s+indexed\b", q):
         repositories, files = _company_inventory(supabase, company_id)
         scoped = _repository_specific_count(repositories, files, question)
         if scoped:
             return scoped
-    if re.search(r"\b(how many|count|number of)\b.*\b(files?|source files?)\b|\b(files?|source files?)\s+(are|is)\s+indexed\b", q):
-        repositories, files = _company_inventory(supabase, company_id)
         counts: dict[str, int] = {}
         names = {str(row.get("id")): str(row.get("full_name") or "Unknown repository") for row in repositories}
         for file in files:
             key = names.get(str(file.get("repository_id")), "Unknown repository")
             counts[key] = counts.get(key, 0) + 1
-        total = len(files)
         breakdown = "; ".join(f"{name}: {count}" for name, count in sorted(counts.items()))
-        answer = f"{total} files are indexed across {len(repositories)} connected repositories."
+        answer = f"{len(files)} files are indexed across {len(repositories)} connected repositories."
         if breakdown:
             answer += f" {breakdown}."
         return {
