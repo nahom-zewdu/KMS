@@ -178,12 +178,6 @@ class QueryEngine:
             answer_json = abstain("no_relevant_evidence")
         else:
             grounded_sources = sources_from_chunks(relevant_chunks)
-            asks_ownership = bool(
-                re.search(
-                    r"\b(owner|owners|owns|maintainer|maintainers|responsible for)\b",
-                    question.lower(),
-                )
-            )
             grounded_owners = owners_from_chunks(relevant_chunks)
             try:
                 raw = reasoning_synthesize(
