@@ -151,45 +151,56 @@ ALTER TABLE public.ramp_step_progress VALIDATE CONSTRAINT ramp_step_progress_com
 ALTER TABLE public.ramp_step_feedback VALIDATE CONSTRAINT ramp_step_feedback_company_id_fkey;
 
 -- Enforce company equality at relationship boundaries, not only in application code.
-ALTER TABLE public.entities
-  ADD CONSTRAINT entities_id_company_id_key UNIQUE (id, company_id);
-ALTER TABLE public.ramp_plans
-  ADD CONSTRAINT ramp_plans_id_company_id_key UNIQUE (id, company_id);
+DO $
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='public.entities'::regclass AND conname='entities_id_company_id_key') THEN
+    ALTER TABLE public.entities ADD CONSTRAINT entities_id_company_id_key UNIQUE (id,company_id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='public.ramp_plans'::regclass AND conname='ramp_plans_id_company_id_key') THEN
+    ALTER TABLE public.ramp_plans ADD CONSTRAINT ramp_plans_id_company_id_key UNIQUE (id,company_id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='public.edges'::regclass AND conname='edges_source_company_fkey') THEN
+    ALTER TABLE public.edges ADD CONSTRAINT edges_source_company_fkey
+      FOREIGN KEY (source_id,company_id) REFERENCES public.entities(id,company_id) NOT VALID;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='public.edges'::regclass AND conname='edges_target_company_fkey') THEN
+    ALTER TABLE public.edges ADD CONSTRAINT edges_target_company_fkey
+      FOREIGN KEY (target_id,company_id) REFERENCES public.entities(id,company_id) NOT VALID;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='public.raw_data'::regclass AND conname='raw_data_event_company_fkey') THEN
+    ALTER TABLE public.raw_data ADD CONSTRAINT raw_data_event_company_fkey
+      FOREIGN KEY (event_id,company_id) REFERENCES public.events(id,company_id) NOT VALID;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='public.ramp_step_progress'::regclass AND conname='ramp_step_progress_plan_company_fkey') THEN
+    ALTER TABLE public.ramp_step_progress ADD CONSTRAINT ramp_step_progress_plan_company_fkey
+      FOREIGN KEY (plan_id,company_id) REFERENCES public.ramp_plans(id,company_id) ON DELETE CASCADE NOT VALID;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='public.ramp_step_feedback'::regclass AND conname='ramp_step_feedback_plan_company_fkey') THEN
+    ALTER TABLE public.ramp_step_feedback ADD CONSTRAINT ramp_step_feedback_plan_company_fkey
+      FOREIGN KEY (plan_id,company_id) REFERENCES public.ramp_plans(id,company_id) ON DELETE CASCADE NOT VALID;
+  END IF;
+END $;
 
-ALTER TABLE public.edges
-  ADD CONSTRAINT edges_source_company_fkey
-  FOREIGN KEY (source_id, company_id)
-  REFERENCES public.entities(id, company_id) NOT VALID;
-ALTER TABLE public.edges
-  ADD CONSTRAINT edges_target_company_fkey
-  FOREIGN KEY (target_id, company_id)
-  REFERENCES public.entities(id, company_id) NOT VALID;
 ALTER TABLE public.edges VALIDATE CONSTRAINT edges_source_company_fkey;
 ALTER TABLE public.edges VALIDATE CONSTRAINT edges_target_company_fkey;
-
-ALTER TABLE public.raw_data
-  ADD CONSTRAINT raw_data_event_company_fkey
-  FOREIGN KEY (event_id, company_id)
-  REFERENCES public.events(id, company_id) NOT VALID;
 ALTER TABLE public.raw_data VALIDATE CONSTRAINT raw_data_event_company_fkey;
-
-ALTER TABLE public.ramp_step_progress
-  ADD CONSTRAINT ramp_step_progress_plan_company_fkey
-  FOREIGN KEY (plan_id, company_id)
-  REFERENCES public.ramp_plans(id, company_id) ON DELETE CASCADE NOT VALID;
 ALTER TABLE public.ramp_step_progress VALIDATE CONSTRAINT ramp_step_progress_plan_company_fkey;
-
-ALTER TABLE public.ramp_step_feedback
-  ADD CONSTRAINT ramp_step_feedback_plan_company_fkey
-  FOREIGN KEY (plan_id, company_id)
-  REFERENCES public.ramp_plans(id, company_id) ON DELETE CASCADE NOT VALID;
 ALTER TABLE public.ramp_step_feedback VALIDATE CONSTRAINT ramp_step_feedback_plan_company_fkey;
 
-ALTER TABLE public.contributions
-  DROP CONSTRAINT IF EXISTS contributions_person_name_repo_name_key;
-ALTER TABLE public.contributions
-  ADD CONSTRAINT contributions_company_person_repo_key
-  UNIQUE (company_id, person_name, repo_name);
+ALTER TABLE public.contributions DROP CONSTRAINT IF EXISTS contributions_person_name_repo_name_key;
+DO $
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid='public.contributions'::regclass
+      AND contype='u'
+      AND pg_get_constraintdef(oid)='UNIQUE (company_id, person_name, repo_name)'
+  ) THEN
+    ALTER TABLE public.contributions
+      ADD CONSTRAINT contributions_company_person_repo_key
+      UNIQUE (company_id,person_name,repo_name);
+  END IF;
+END $;
 CREATE INDEX IF NOT EXISTS idx_contributions_company_repo
   ON public.contributions(company_id, repo_name);
 
