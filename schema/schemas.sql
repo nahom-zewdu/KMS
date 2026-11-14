@@ -429,3 +429,30 @@ CREATE INDEX IF NOT EXISTS idx_ramp_step_progress_plan_step
 
 CREATE INDEX IF NOT EXISTS idx_ramp_step_progress_company_user
   ON public.ramp_step_progress (company_id, user_id, status);
+
+
+-- Per-engineer usefulness feedback for Ramp onboarding steps.
+-- The NLP API accesses this table with service_role after validating user identity
+-- and company membership; it is intentionally unavailable to anon/authenticated.
+CREATE TABLE IF NOT EXISTS public.ramp_step_feedback (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  plan_id UUID NOT NULL REFERENCES public.ramp_plans(id) ON DELETE CASCADE,
+  company_id TEXT NOT NULL,
+  step_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  rating TEXT NOT NULL CHECK (rating IN ('useful', 'partially_useful', 'not_useful')),
+  reason TEXT CHECK (reason IS NULL OR char_length(reason) <= 1000),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (plan_id, step_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ramp_step_feedback_plan_step
+  ON public.ramp_step_feedback (plan_id, step_id);
+
+CREATE INDEX IF NOT EXISTS idx_ramp_step_feedback_company_plan
+  ON public.ramp_step_feedback (company_id, plan_id);
+
+ALTER TABLE public.ramp_step_feedback ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.ramp_step_feedback FROM PUBLIC, anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.ramp_step_feedback TO service_role;
