@@ -233,6 +233,32 @@ BEGIN
       UNIQUE (company_id,person_name,repo_name);
   END IF;
 END $krt$;
+DO $
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid='public.repositories'::regclass
+      AND conname='repositories_full_name_company_id_key'
+  ) THEN
+    ALTER TABLE public.repositories
+      ADD CONSTRAINT repositories_full_name_company_id_key
+      UNIQUE (full_name,company_id);
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid='public.contributions'::regclass
+      AND conname='contributions_repository_company_fkey'
+  ) THEN
+    ALTER TABLE public.contributions
+      ADD CONSTRAINT contributions_repository_company_fkey
+      FOREIGN KEY (repo_name,company_id)
+      REFERENCES public.repositories(full_name,company_id) NOT VALID;
+  END IF;
+END $;
+
+ALTER TABLE public.contributions
+  VALIDATE CONSTRAINT contributions_repository_company_fkey;
+
 CREATE INDEX IF NOT EXISTS idx_contributions_company_repo
   ON public.contributions(company_id, repo_name);
 
