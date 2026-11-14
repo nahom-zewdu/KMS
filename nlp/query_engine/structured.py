@@ -92,6 +92,14 @@ def _ownership_answer(
     explicit = re.findall(r"(?:[\w.-]+/)*[\w.-]+\.(?:go|py|ts|tsx|js|jsx|sql|md)", question)
     if explicit:
         wanted_paths = list(dict.fromkeys(explicit + wanted_paths))
+    if "handler" in question.lower():
+        handler_paths = [path for path in wanted_paths if "/handlers/" in path]
+        if handler_paths:
+            wanted_paths = handler_paths
+    if "domain" in question.lower():
+        domain_paths = [path for path in wanted_paths if "domain" in path.lower()]
+        if domain_paths:
+            wanted_paths = domain_paths
     if wanted_paths:
         wanted = set(wanted_paths)
         file_by_id = {
@@ -101,7 +109,11 @@ def _ownership_answer(
         }
     target_ids = list(file_by_id)
     if not target_ids:
-        return None
+        return {
+            "answer": "I don't have indexed file records for the files referenced by this Ramp, so I can't identify their owners reliably.",
+            "confidence": "low", "sources": [], "owners": [],
+            "abstain_reason": "ownership_evidence_unavailable",
+        }
     edges = _rows(
         supabase.table("edges")
         .select("source_id,target_id,type,confidence")
@@ -111,7 +123,11 @@ def _ownership_answer(
         .limit(2000)
     )
     if not edges:
-        return None
+        return {
+            "answer": "I couldn't find indexed OWNS or MAINTAINS relationships for the referenced files. I won't infer owners from commit authors or file names.",
+            "confidence": "low", "sources": [], "owners": [],
+            "abstain_reason": "ownership_evidence_unavailable",
+        }
     source_ids = list(dict.fromkeys(str(row["source_id"]) for row in edges if row.get("source_id")))
     people = _rows(
         supabase.table("entities")
@@ -129,7 +145,11 @@ def _ownership_answer(
         if owner and path:
             grouped.setdefault(owner, []).append(path)
     if not grouped:
-        return None
+        return {
+            "answer": "The indexed ownership relationships did not resolve to named people for these files.",
+            "confidence": "low", "sources": [], "owners": [],
+            "abstain_reason": "ownership_people_unresolved",
+        }
     lines = [
         f"{owner}: {', '.join(sorted(set(paths))[:8])}"
         for owner, paths in sorted(grouped.items())
