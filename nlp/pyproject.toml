@@ -8,6 +8,7 @@ dependencies = [
     "fastapi>=0.136.1",
     "openai>=2.7.1",
     "pydantic>=2.12.4",
+    "pyjwt[crypto]>=2.10.1",
     "pygithub>=2.9.1",
     "python-dotenv>=1.2.1",
     "python-json-logger>=4.0.0",
@@ -17,3 +18,9 @@ dependencies = [
     "tqdm>=4.67.1",
     "uvicorn>=0.47.0",
 ]
+
+[tool.pytest.ini_options]
+# Tests currently exercise both package-qualified imports (nlp.*) and
+# NLP-service-local imports (ramp.*, api). Keep both roots available when
+# pytest is invoked from the nlp/ project directory.
+pythonpath = ["..", "."]

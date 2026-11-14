@@ -1,0 +1,655 @@
+# Backend Hardening Progress
+
+This file is the source of truth for the hardening program and survives Copilot sessions.
+
+## Batch ledger
+
+| Batch | Objective | Status | Notes |
+|---|---|---:|---|
+| Batch 0 | Baseline and architecture verification | IMPLEMENTED | Architecture reviewed and documented; no production security changes made in this batch. |
+| Batch 1 | Tenant isolation and database security | IMPLEMENTED | Tenant guards and RLS policies are implemented and pass disposable PostgreSQL tests; live Supabase inventory/data preflight is BLOCKED. |
+| Batch 2 | Authentication and authorization | IMPLEMENTED | JWT identity and membership boundaries are implemented and locally tested; production signer configuration and invitation-flow verification remain BLOCKED. |
+| Batch 3 | GitHub integration security | VERIFIED | OAuth state binding, callback validation, and replay protection are hardened; focused tests pass. |
+| Batch 4 | Go API protection and rate limiting | BLOCKED | Go authentication/webhook controls are implemented and tested by the corrective review; rate limiting remains explicitly not started. |
+| Batch 5 | Go HTTP server hardening | VERIFIED | Explicit server timeouts, header bound, graceful shutdown, and Redis close handling are implemented and tested; live deployment remains unverified. |
+| Batch 6 | Redis Streams and worker reliability | IMPLEMENTED / VERIFICATION BLOCKED | Transactional outbox and lease-based worker recovery are implemented; focused tests pass. Disposable PostgreSQL migration execution and three unrelated full-suite failures remain unresolved. |
+| Batch 7 | Observability | PLANNED | Pending structured logging and telemetry instrumentation. |
+| Batch 8 | Database lifecycle and data integrity | PLANNED | Pending migration and retention controls review. |
+| Batch 9 | Python NLP service hardening | PLANNED | Pending tenant-scoped retrieval and API validation review. |
+| Batch 10 | Performance, CI/CD, and recovery | PLANNED | Pending automation and disaster-recovery validation. |
+
+## Batch 0
+
+### Objective
+
+Verify the live architecture, route boundaries, tenant-resolution model, and risk inventory before any production security change. This batch intentionally avoids database and runtime hardening work.
+
+### Findings before implementation
+
+- The repository is split into a Go ingress layer (`api/`) and a Python NLP/worker layer (`nlp/`).
+- The Go API exposes webhook endpoints and company resolution logic in `api/handlers/routes.go` and `api/handlers/tenant.go`.
+- Slack and GitHub webhook handlers verify signatures (`X-Slack-Signature`, `X-Hub-Signature-256`) before processing.
+- Tenant resolution is implemented via `ResolveCompanyByIntegration` / `ResolveCompanyByInstallation` and rejects unresolved or conflicting mappings.
+- `nlp/api.py` includes a public FastAPI interface with default `company_id="default"` values for multiple endpoints. This is an architectural risk because the repository documents a strict no-default-tenant rule.
+- The live architecture expects company-scoped data propagation, but the current FastAPI layer still exposes default-tenant fallbacks for untrusted callers.
+- Runtime validation was not yet in a passing state because the environment and package layout are not fully configured for the project test suite.
+
+### Files reviewed
+
+- `api/main.go`
+- `api/handlers/routes.go`
+- `api/handlers/tenant.go`
+- `api/handlers/slack.go`
+- `api/handlers/github.go`
+- `nlp/main.py`
+- `nlp/api.py`
+- `nlp/worker/ingestion.py`
+- `nlp/worker/baseline.py`
+- `nlp/worker/codebase_analysis.py`
+- `docs/architecture/overview.md`
+- `docs/architecture/tenancy.md`
+
+### Files changed
+
+- `docs/backend-hardening/PROGRESS.md`
+- `docs/backend-hardening/ARCHITECTURE.md`
+- `docs/backend-hardening/SECURITY-DECISIONS.md`
+- `docs/backend-hardening/TEST-MATRIX.md`
+
+### Security decisions
+
+- Preserve the project’s company-scoped design and do not introduce a shared production fallback tenant.
+- Treat `default` as an insecure fallback that must be rejected by user-facing API paths until an explicit tenant is validated.
+- Keep the Go ingress and Python worker separated; do not move tenant enforcement into a generic default path.
+- Do not enable broader database changes during this batch; the next batch will review tenant-scoped policy, membership checks, and database security.
+
+### Tests added
+
+- None in this batch. Batch 0 is documentation and architecture validation only.
+
+### Commands executed and actual results
+
+1. `cd /home/nahom/Projects/personal/KMS && go test ./...`
+   - Result: failed because the repository root is not a Go module and there is no `go.mod` at the repo root (`directory prefix . does not contain main module or its selected dependencies`).
+2. `cd /home/nahom/Projects/personal/KMS/nlp && uv run pytest -q tests`
+   - Result: failed during import collection. The project environment is not yet configured to run the full Python test suite as-is (`ModuleNotFoundError` for project dependencies and package layout issues).
+3. File inspection of the live code paths above
+   - Result: architecture and tenant-scoping findings were confirmed from code and documentation.
+
+### Remaining risks
+
+- `nlp/api.py` still defaults to `company_id="default"` in several endpoints; this should be treated as an outstanding risk and not as a production guarantee.
+- The Python package/test layout needs a consistent import path setup before CI can reliably validate the service.
+- Database RLS, membership enforcement, and service-role boundaries were not yet audited in this batch.
+
+### Status
+
+IMPLEMENTED
+
+### Recommended next batch
+
+Batch 1 — Tenant isolation and database security.
+
+## Batch 1
+
+### Objective
+
+Enforce tenant validation at the service boundary and add explicit database guardrails to reject the shared default company in tenant-scoped tables.
+
+### Findings before implementation
+
+- `api/handlers/tenant.go` rejected `default` only when it was exactly lower-case, so uppercase or mixed-case variants could slip through.
+- `nlp/api.py` accepted and defaulted `company_id` to `"default"` in public endpoints, directly contradicting the no-shared-default rule.
+- The schema files define `company_id DEFAULT 'default'` in several tenant-scoped tables, which is a policy gap that should be addressed by explicit migration guardrails.
+
+### Files changed
+
+- `api/handlers/tenant.go`
+- `api/handlers/tenant_test.go`
+- `nlp/api.py`
+- `schema/migrations/20261031_tenant_guardrails.sql`
+- `docs/backend-hardening/PROGRESS.md`
+
+### Security decisions
+
+- Treat `default` as an invalid value for any tenant-scoped company ID regardless of casing.
+- Reject missing tenant values before any work is performed on a company-scoped resource.
+- Keep the tenant guardrails in both service logic and versioned database migration files so the runtime and DB schema are aligned.
+
+### Tests added
+
+- Added Go coverage for uppercase `DEFAULT` values to ensure they are rejected as invalid tenants.
+
+### Commands executed and actual results
+
+1. `cd /home/nahom/Projects/personal/KMS/api && go test ./...`
+   - Result: passed.
+
+### Remaining risks
+
+- The repository still contains schema defaults that assume `default` is an acceptable fallback, so a live database reset or migration must be reviewed before applying this to production data.
+- Full end-to-end tenant and RLS coverage remains to be validated against the actual Supabase project configuration.
+
+### Historical status
+
+VERIFIED when Batch 1 was first completed; superseded by the corrective review below.
+
+### Recommended next batch
+
+Batch 2 — Authentication and authorization.
+
+## Batch 2
+
+### Objective
+
+Centralize tenant-scoped authorization checks for the public Python API so only company members can access company-specific resources, and verify role boundaries explicitly.
+
+### Findings before implementation
+
+- `nlp/api.py` accepted company-scoped requests without verifying the caller’s company membership, even though `company_members` is the project’s canonical tenant model.
+- The API used header-based identity (`X-User-Id`) without validating it against the requested company.
+- Cross-company access was possible in principle whenever a caller supplied any non-empty, non-default `company_id` value.
+
+### Files changed
+
+- `nlp/api.py`
+- `nlp/tests/test_authz.py`
+- `docs/backend-hardening/PROGRESS.md`
+
+### Security decisions
+
+- Require `X-User-Id` and a valid non-default `company_id` on tenant-scoped endpoints.
+- Query `company_members` to verify membership before executing any company-specific operation.
+- Treat missing member records as an authorization failure (403) rather than silently continuing.
+- Keep role checks explicit and centralized for admin-only routes when a future endpoint requires them.
+
+### Tests added
+
+- Added focused authz tests covering missing user IDs, invalid default company IDs, non-membership, valid membership, and admin-role rejection.
+
+### Commands executed and actual results
+
+1. `cd /home/nahom/Projects/personal/KMS/nlp && PYTHONPATH=. pytest -q tests/test_authz.py`
+   - Result: passed (`5 passed in 1.40s`).
+
+### Remaining risks
+
+- This batch validates the explicit company-membership boundary at the Python API layer; it does not replace a full authentication review across the frontend and Go ingress.
+- The live Supabase project still needs a full RLS and policy review before more tables are exposed directly.
+
+### Historical status
+
+VERIFIED when Batch 2 was first completed; superseded by the corrective review below.
+
+### Recommended next batch
+
+Batch 3 — GitHub integration security.
+
+## Batch 3
+
+### Objective
+
+Hardens the GitHub App install flow in the frontend by enforcing cryptographically signed, user/company-bound OAuth state, rejecting expired or replayed callbacks, and ensuring the authenticated user is authorized for the target company before persisting the installation.
+
+### Findings before implementation
+
+- The start route generated a client-encoded `base64url` state payload without any server-side signature or expiry check.
+- The callback route accepted a query-only state fallback, allowed cookie+query mismatches, and did not require the logged-in user to match the bound user ID.
+- The callback route did not reject replayed state values or validate that the user was still an admin for the target company.
+- `setup_action` and `installation_id` parameters were not strictly validated before persisting installation metadata.
+
+### Files changed
+
+- `kms-frontend/app/api/integrations/github/start/route.ts`
+- `kms-frontend/app/api/integrations/github/callback/route.ts`
+- `kms-frontend/lib/github-app-state.ts`
+- `kms-frontend/lib/github-app-state.test.ts`
+- `docs/backend-hardening/PROGRESS.md`
+
+### Security decisions
+
+- Use a signed, opaque state token with a cryptographic nonce and a short expiry window.
+- Bind the state to both the authenticated user ID and the target company ID.
+- Require an exact match between the callback cookie and query parameter, reject replayed state markers, and delete the cookie on first successful use.
+- Treat `installation_id` as a positive integer and reject unexpected `setup_action` values.
+- Require the authenticated user to be an admin of the same company before saving installation metadata.
+
+### Tests added
+
+- Added unit tests covering valid state, tampered state, expired state, missing state, user/company mismatches, and replay hash detection.
+
+### Commands executed and actual results
+
+1. `cd /home/nahom/Projects/personal/kms-frontend/kms-frontend && npx --yes tsx --test lib/github-app-state.test.ts`
+   - Result: passed (`6 passed`).
+2. `cd /home/nahom/Projects/personal/kms-frontend/kms-frontend && npx tsc --noEmit --pretty false`
+   - Result: failed due pre-existing TypeScript issues unrelated to this batch in other routes and `lib/auth.ts` typing (`activePlaybooks`, `maxPlaybooks`, missing `role` on user context).
+
+### Remaining risks
+
+- The broader frontend TypeScript project still has unrelated type errors outside the GitHub integration patch.
+- The callback and start flow still require a live runtime test against the actual GitHub App installation lifecycle and environment variables.
+
+### Status
+
+VERIFIED
+
+## Corrective review: identity boundary, membership policy, and tenant isolation
+
+This section preserves the earlier corrective-review record. Its status and implementation summaries are historical and are superseded by the final corrective review follow-up below.
+
+### Trigger
+
+The project’s security review identified three unresolved issues in the completed tenant/authz work:
+
+1. `nlp/api.py` trusted `X-User-Id` as an identity signal without cryptographic authentication.
+2. `schema/policies.sql` allowed self-service membership creation and self-role changes without admin gatekeeping.
+3. `schema/migrations/20261031_tenant_guardrails.sql` did not enforce RLS and strong tenant isolation against `default` values.
+
+### Corrective work implemented
+
+- Replaced legacy `X-User-Id` trust with verified `Authorization: Bearer <jwt>` validation in `nlp/api.py`.
+- Added strict bearer-token verification for Supabase JWTs (or a configured internal service secret) and reject legacy header-based identity before any tenant-scoped work runs.
+- Kept `company_members` membership checks bound to verified identity and rejected direct forged-header calls in the negative tests.
+- Reworked `schema/policies.sql` so only admins/managers can invite or change membership roles; self-insertion/self-promotion is rejected by policy.
+- Added RLS enablement and default-tenant invariant checks to the tenant guardrail migration and recorded the migration as fail-fast rather than silent data rewrite.
+- Removed shared `default` fallbacks from the schema definitions in `schema/schemas.sql` to prevent new tenant-scoped records from being created with an unsafe default.
+
+### Files changed
+
+- `nlp/api.py`
+- `nlp/tests/test_authz.py`
+- `nlp/pyproject.toml`
+- `nlp/requirements.txt`
+- `schema/policies.sql`
+- `schema/migrations/20261031_tenant_guardrails.sql`
+- `schema/schemas.sql`
+- `docs/backend-hardening/PROGRESS.md`
+- `docs/backend-hardening/ARCHITECTURE.md`
+- `docs/backend-hardening/SECURITY-DECISIONS.md`
+
+### Negative tests added
+
+- Verified JWT accepted with `SUPABASE_JWT_SECRET`.
+- Forged `X-User-Id` header rejected as an authentication bypass.
+- Invalid bearer token rejected.
+- Wrong-company membership lookup rejected even when the user exists.
+- Cross-tenant retrieval rejected.
+- Role-escalation/self-promotion and unauthorized membership changes remain blocked by policy and test coverage.
+
+### Commands executed and actual results
+
+1. `cd /home/nahom/Projects/personal/KMS/nlp && PYTHONPATH=. pytest tests/test_authz.py -q`
+   - Result: passed (`9 passed in 3.11s`).
+
+### Remaining risks and assumptions
+
+- The Python API now requires a configured JWT secret (`SUPABASE_JWT_SECRET` or `JWT_SECRET`) or an internal token secret (`INTERNAL_SERVICE_SECRET`). This is an external deployment dependency and must be provided in the live environment before the service is exposed.
+- The database policy review remains a live Supabase deployment concern; the SQL policy files are reviewed and hardened in code, but they still have to be applied in the actual project environment with an explicit migration review.
+- The broader frontend TypeScript project still contains unrelated type issues outside this corrective review. Those were not added by this patch and remain outside the security-review scope.
+
+### Status
+
+Batches 1 and 2: VERIFIED after corrective review and regression tests.
+
+### Historical recommended next batch
+
+Batch 4 — Go API protection and rate limiting. This recommendation was superseded by the corrective follow-up below; Batch 4 remains blocked.
+
+## Corrective review follow-up — 2026-10-31
+
+This section supersedes the earlier corrective-review status above. The earlier Batch 1/2 `VERIFIED` labels were too broad because they did not include database policy execution, verified JWT claims, or complete tenant retrieval checks.
+
+### Current status
+
+- Batch 1: **IMPLEMENTED**. Guardrails and RLS policies are **VERIFIED** against a disposable PostgreSQL 16 database; live Supabase inventory and production data preflight are **BLOCKED**.
+- Batch 2: **IMPLEMENTED**. JWT and membership behavior are **VERIFIED** by focused Python tests and disposable PostgreSQL policy tests. Production signing-key compatibility and invitation-flow verification are **BLOCKED**.
+- `ACCEPTED`: no unresolved security risk is marked accepted.
+- Batch 4: **BLOCKED**. Do not start rate limiting until blockers below are resolved or explicitly accepted.
+
+### Inventory and isolation policy
+
+The checked-in schema declares no views or materialized views. The current table and function inventory is documented in `docs/backend-hardening/ARCHITECTURE.md`. In summary:
+
+- Authenticated members read only their company rows in companies, memberships, repositories, codebase files/modules (through their parent repository), entity/edge graph, raw knowledge, playbooks, Ramp plans, and own Ramp progress.
+- Company admins manage company repository metadata, playbooks, Ramp plans, and membership roles. Managers may add member-role memberships, but cannot change roles.
+- `company_integrations` and unscoped legacy/audit tables (`events`, `contributions`, `pull_requests`, `issues`, `query_logs`) are service-only; authenticated and anon grants are revoked.
+- Workers and backend services use `service_role`, which bypasses RLS. Their reads and updates must therefore include explicit company filters; checked-in query/retrieval, Ramp, codebase, baseline, and backfill paths now carry those filters.
+- `match_documents` and `search_edges_by_entity` require a real company filter. The graph RPC and its removal of the historical global overload were exercised in PostgreSQL. The vector RPC was not executable locally because the test database did not have pgvector.
+- Membership policies call `public.is_company_member`, a fixed-search-path `SECURITY DEFINER` predicate, to avoid recursive RLS evaluation. Company and initial owner membership creation is one transactional authenticated RPC.
+
+### Migration safety and existing data
+
+- Guardrail and policy migrations are idempotent and were each run twice in the disposable database.
+- Migrations do not delete or silently remap rows. Existing `default`, blank, orphaned, or cross-company graph data causes an explicit error and transaction rollback.
+- The checked-in base schema previously omitted `raw_data.company_id`; the migration adds the column, then fails if any historical raw-data row is unmapped. Production operators must review and explicitly map existing data before retrying.
+- No migration was applied to live Supabase.
+
+### Tests and actual results
+
+1. `cd /home/nahom/Projects/personal/KMS/nlp && PYTHONPATH=. pytest tests/test_authz.py tests/test_ramp_v2.py tests/test_evidence_composition.py tests/test_query_engine_context.py -q`
+   - Passed: `35 passed`; third-party deprecation warnings only.
+2. `cd /home/nahom/Projects/personal/KMS && psql 'postgresql://postgres@127.0.0.1:55432/postgres' -f schema/tests/tenant_rls.sql`
+   - Passed on disposable PostgreSQL 16 with a mock `auth.uid()` implementation. Tested RLS visibility, membership policy recursion, owner creation, self-insertion/self-promotion, unauthorized cross-company role change, tenant reads/writes, graph RPC filtering, and service-role access.
+3. Migration fail-safe probe with an existing `companies.id = 'default'`.
+   - Expected failure observed; the default row remained and transaction changes were rolled back.
+
+### Blockers and deployment assumptions
+
+- **BLOCKED — live Supabase:** live objects, grants, existing policy inventory, and tenant data were not queried or modified.
+- **BLOCKED — JWT signing compatibility:** Python currently permits HS256 only. Before deployment, confirm Supabase issues HS256 tokens and configure `SUPABASE_JWT_SECRET`, matching issuer, and audience. Asymmetric/JWKS signing is not implemented.
+- **BLOCKED — raw-data tenant mapping:** if existing rows lack a verified company mapping, an operator-reviewed backfill is required before the guardrail migration can pass.
+- **BLOCKED — pgvector test:** `match_documents` was not executed in the disposable database because pgvector was unavailable. The SQL and application filters are present but this RPC remains unverified at runtime.
+- **BLOCKED — invitation lifecycle:** the repository has no persisted invitation table or complete invite-acceptance flow; the existing invite endpoint remains a placeholder. Database policies restrict direct membership additions and role changes, but the end-to-end invite token lifecycle is not verified.
+- The `service_role` bypass is intentional; service code must preserve the explicit company filters described above. Unknown live objects are outside the checked-in inventory and must be reconciled before rollout.
+
+### Next batch
+
+Batch 4 — **BLOCKED**. Do not begin rate limiting until the deployment/data/signing/invitation blockers are resolved or explicitly accepted.
+
+## Corrective review — Go ingress boundary — 2026-11-01
+
+Rate limiting remains **not started**. This corrective work closes the Go user-route authentication and tenant authorization gaps, hardens webhook processing, and implements the HTTP server lifecycle controls; it does not mark the overall rate-limiting batch complete.
+
+### Current status
+
+- Go user-triggered route protection: **IMPLEMENTED**, focused tests **VERIFIED**.
+- Webhook bounds/signature/timestamp and synchronous handler lifecycle: **IMPLEMENTED**, focused tests **VERIFIED**.
+- HTTP server limits and bounded graceful shutdown: **IMPLEMENTED**, focused tests **VERIFIED**.
+- Rate limiting: **BLOCKED / NOT STARTED**.
+- Production security: not claimed. Supabase/Auth availability, deployed route exposure, webhook delivery behavior, and production runtime settings were not exercised.
+- No live Supabase project was contacted or changed.
+
+### Routes and controls
+
+- `GET /health`: public health check.
+- `POST /slack/events` and trailing-slash alias: Slack-signed webhook; limited body; timestamp must be within five minutes in either direction; signature uses constant-time comparison.
+- `POST /github` and trailing-slash alias: GitHub HMAC-signed webhook; limited body; delivery ID must parse as UUID; existing event delivery ID uniqueness and idempotency check prevent repeat processing.
+- `POST /query`: requires Supabase-verified bearer token and exact `company_members` match before subscribing/publishing; rejects missing/default company; carries the authorized company ID in both job and payload.
+- `GET /github/sync-baseline`: requires the same token/membership check; resolves repository by exact repository ID or full name scoped by the authorized company; publishes only the canonical repository full name and company context.
+- No other internal HTTP service routes are registered. Redis streams are internal worker boundaries, not public routes.
+
+### Files changed
+
+- Go API: `api/domain/domain.go`, `api/domain/github.go`, `api/domain/slack.go`, `api/handlers/auth.go`, `api/handlers/codebase.go`, `api/handlers/github.go`, `api/handlers/query.go`, `api/handlers/routes.go`, `api/handlers/slack.go`, `api/handlers/webhook_body.go`, `api/main.go`, `api/repository/supabase.go`, `api/services/codebase.go`, `api/services/slack_bot.go`, `api/services/slack_verifier.go`.
+- Go tests: `api/handlers/security_test.go`, `api/handlers/tenant_test.go`, `api/main_test.go`, `api/repository/supabase_auth_test.go`, `api/services/codebase_test.go`, `api/services/core_test.go`, `api/services/slack_verifier_test.go`.
+- Frontend proxy: `kms-frontend/app/api/query/route.ts` now forwards the authenticated Supabase session token to Go and fails closed if it is absent.
+- Documentation: this file plus `ARCHITECTURE.md`, `SECURITY-DECISIONS.md`, and `TEST-MATRIX.md`.
+
+### Security behavior and limitations
+
+- Go validates bearer access tokens through Supabase Auth’s `/auth/v1/user`; user identity does not come from a caller-supplied ID or locally decoded unverified claims. Membership and repository checks use exact Supabase filters.
+- Auth service/network errors fail closed with 503; invalid/expired tokens return 401; missing membership and cross-company repository access are rejected.
+- Webhooks now process synchronously and respond only after processing returns. Slack AuthTest/API operations and Redis/query work receive request-bounded contexts; Slack event handling can wait up to 60 seconds for mentions and 30 seconds for ordinary messages. Failures are reported with 5xx to allow provider retry. This changes acknowledgement latency versus the prior fire-and-forget goroutines.
+- GitHub duplicates are acknowledged after the existing delivery-ID check finds the stored row. The schema declares `events.delivery_id` unique; no live schema was inspected.
+- HTTP server configuration: ReadHeaderTimeout 5s, ReadTimeout 30s, WriteTimeout 90s, IdleTimeout 120s, MaxHeaderBytes 1 MiB, graceful shutdown bounded to 15s. Redis is closed during process cleanup.
+- External Supabase Auth availability is now required for protected Go requests. No offline JWT verification fallback was added.
+
+### Commands executed and actual results
+
+1. `gofmt -w api && cd api && go test ./... && go test -race ./...`
+   - Passed: main, handlers, repository, and services packages; domain has no tests. Race detector passed for all packages.
+2. `cd api && go vet ./...`
+   - Passed with no diagnostics.
+3. `cd /home/nahom/Projects/personal/kms-frontend/kms-frontend && npx tsc --noEmit --pretty false`
+   - Passed with exit code 0.
+4. `git diff --check && git -C /home/nahom/Projects/personal/kms-frontend/kms-frontend diff --check`
+   - Passed.
+
+### Remaining risks and recommended next work
+
+- **BLOCKED — production verification:** no deployed Go API or live Supabase/Auth configuration was queried. Confirm API exposure, service key validity for `/auth/v1/user`, and production timeout behavior before claiming production security.
+- **BLOCKED — end-to-end webhook verification:** tests use signed local requests and strict fakes; no real Slack/GitHub delivery or retry lifecycle was exercised.
+- **BLOCKED — migration/schema parity:** repository ownership and delivery uniqueness rely on checked-in schema. Live table constraints/grants were not verified.
+- The new synchronous webhook processing may increase response latency; monitor provider retry timing and adjust only with measured evidence. If asynchronous handling is later restored, use a durable queue and never retain Gin request state.
+- Rate limiting remains **not started**. Do not begin until the Go ingress corrective review is accepted and production dependencies/assumptions are resolved.
+
+## Post-ingress review — service-role isolation, Slack reliability, rate-limit design — 2026-11-01
+
+Rate limiting implementation was **not started**. No live Supabase project was contacted and no live migration was applied.
+
+### Status
+
+- Service-role access paths: **IMPLEMENTED**, local application/query-filter checks **PARTIALLY VERIFIED**, deployed isolation **BLOCKED**.
+- Slack query subscription ordering and cleanup: **IMPLEMENTED and VERIFIED** by focused tests and Go race tests.
+- Contributions tenant ownership: **IMPLEMENTED** in base schema and an upgrade migration; migration/idempotency behavior **VERIFIED** against disposable PostgreSQL 16. Live data compatibility is **BLOCKED**.
+- Rate-limit design: **IMPLEMENTED as documentation only**, not code; proposed numbers are starting values and are not product-approved.
+- Production security: not claimed. Live Supabase schema/grants/key role and pgvector RPC runtime remain unverified.
+
+### Corrective work
+
+- Audited Go and Python Supabase table/RPC call sites, including authorization lookup, ingestion, query/retrieval, vector and graph RPCs, Ramp evidence/storage, playbooks, visualizer, baseline/incremental codebase workers, edge lifecycle updates, analytics, and embedding backfill.
+- Tightened Go `QueryKnowledgeGraphSupabase` to require a real company ID and apply it as a PostgREST query filter. Go contribution metrics now require company context; queries include both company and repository, writes include company, and conflict resolution is tenant-keyed. Generic Go contribution queries without both tenant and repository filters fail closed.
+- Restricted generic Go `Query` to the two active callers (`events` idempotency and tenant-scoped `contributions`), and removed `pull_requests` / `issues` from its generic insert allowlist because no active callers exist and those legacy tables have no tenant key. This does not remove a current application flow; those tables stay backend-only until modeled.
+- Added `20261101_contributions_tenant_scope.sql`. It maps legacy rows only if repository ownership uniquely resolves, validates company/repository consistency, adds a company foreign key, replaces the global contributor/repository uniqueness constraint with a company-scoped one, and aborts transactionally on unresolved, ambiguous, or default-tenant data. It does not delete data.
+- Scoped repository updates in baseline and incremental codebase workers with both the selected row ID and `company_id`.
+- Changed Slack mention query handling to subscribe and receive the Redis subscription acknowledgement before publishing the query job. The child timeout context is canceled on all exits; a closed result channel returns an error rather than an empty success. Redis closes an incomplete subscription if the initial subscribe acknowledgement fails.
+- Prepared a shared Redis rate-limit/concurrency design with per-user and per-company query controls, baseline-sync limits, integration-scoped webhook controls, retry metadata, and fail-closed Redis outage behavior. No rate-limit behavior was implemented.
+
+### Files changed
+
+- Go: `api/domain/domain.go`, `api/repository/supabase.go`, `api/repository/redis_stream.go`, `api/services/metrics.go`, `api/services/slack_bot.go`.
+- Go tests: `api/handlers/security_test.go`, `api/handlers/tenant_test.go`, `api/repository/supabase_auth_test.go`, `api/services/core_test.go`, `api/services/metrics_test.go`, `api/services/slack_bot_test.go`.
+- Python: `nlp/codebase/analyzer.py`, `nlp/codebase/baseline.py`; added `nlp/tests/test_repository_updates_are_scoped.py`.
+- SQL: `schema/schemas.sql`, added `schema/migrations/20261101_contributions_tenant_scope.sql`, and updated `schema/tests/tenant_rls.sql`.
+- Documentation: `docs/backend-hardening/PROGRESS.md`, `ARCHITECTURE.md`, `SECURITY-DECISIONS.md`, `TEST-MATRIX.md`.
+
+### Tests and exact results
+
+1. `cd api && go test -count=1 ./...`
+   - Passed: `api`, `handlers`, `repository`, and `services`; `domain` has no tests.
+2. `cd api && go test -race -count=1 ./...`
+   - Passed for all Go packages, including the Slack immediate/delayed response, publish failure, closed worker result channel, cancellation, timeout, and cleanup tests.
+3. `cd api && go vet ./...`
+   - Passed with no diagnostics.
+4. `cd nlp && PYTHONPATH=. pytest tests/test_authz.py tests/test_ramp_v2.py tests/test_evidence_composition.py tests/test_query_engine_context.py tests/test_relationships.py tests/test_repository_updates_are_scoped.py -q`
+   - Passed: 45 tests; 2 dependency deprecation warnings.
+5. `cd nlp && PYTHONPATH=. pytest tests/test_authz.py tests/test_ramp_v2.py tests/test_evidence_composition.py tests/test_query_engine_context.py tests/test_relationships.py tests/test_failure_semantics.py tests/test_repository_updates_are_scoped.py -q`
+   - Collection failed because `sentence_transformers` is missing for `tests/test_failure_semantics.py`. That unrelated package was not installed; the applicable focused suite above passed without this module.
+6. `PGPASSWORD=kms-local-review psql -h 127.0.0.1 -p 55432 -U postgres -d postgres -v ON_ERROR_STOP=1 -f schema/tests/tenant_rls.sql`
+   - Passed on a disposable PostgreSQL 16 container. The tenant migrations, access policies, graph RPC, and contributions migration were applied twice; the historical contribution mapped to exactly one company-owned repository. Container was stopped after the test.
+7. `git diff --check`
+   - Passed.
+
+### Isolation inventory and remaining risks
+
+- `company_integrations` is an intentional global lookup by provider plus external integration identity so signed webhooks can resolve a company; live uniqueness and mappings were not inspected.
+- Event delivery idempotency uses the globally unique delivery ID and reveals only whether a matching event exists. Company context is included on Go event writes, but `schema/schemas.sql` does not declare `events.company_id`; reconcile checked-in schema against the deployed schema before rollout.
+- `query_logs` contains system-wide query hashes and operational metrics only; it is not used as answer/retrieval context. `pull_requests` and `issues` have no active retrieval/write caller and remain backend-only legacy tables without company ownership.
+- `match_documents` was reviewed and has an explicit company predicate, but pgvector was unavailable in the disposable database; runtime cross-tenant RPC verification remains **BLOCKED**.
+- Live Supabase service-role bypass/grants, actual service-role key configuration, deployed schema, data mapping, and production query behavior are **BLOCKED**. Local tests do not establish production isolation.
+- Redis failure behavior, provider retry semantics, shared multi-instance enforcement, and final limit values are still design assumptions pending approval; no rate limiter exists.
+- The focused Python suite passed, but the wider test set including failure-semantics tests could not collect due the missing `sentence_transformers` dependency.
+
+### Next recommended batch
+
+Keep rate limiting **BLOCKED / NOT STARTED**. First reconcile the `events.company_id` schema mismatch, validate live schema/grants/key configuration with an operator-approved read-only inventory, and run `match_documents` against a disposable PostgreSQL instance with pgvector. Only then can service-role isolation be considered for VERIFIED status; no production security claim is made here.
+
+## Ingestion and tenant-context corrective work — 2026-10-31
+
+Rate limiting remains **BLOCKED / NOT STARTED**. No live Supabase project was contacted, queried, or changed.
+
+### Changes implemented
+
+- `events` is explicitly tenant-associated in the checked-in base schema. Fresh schemas require a non-blank, non-default `company_id` referencing `companies`.
+- Added `schema/migrations/20261101_events_company_scope.sql`. It maps historical events only through linked `raw_data` with exactly one non-default company, rejects unmapped, orphaned, conflicting, or duplicate delivery-ID data, adds/validates constraints idempotently, and preserves globally unique delivery IDs. It neither deletes rows nor guesses ownership. Operators must explicitly map existing events before retrying if the migration fails.
+- `CoreIngest` now derives its Redis publish timeout from the incoming context, preserving the 10-second maximum. Cancellation errors remain inspectable by callers.
+- Slack callback ingestion now uses the provider envelope `event_id` as the global delivery ID and rejects missing IDs; message timestamps remain event timestamps, not delivery identity.
+- Slack playbook generation receives the company resolved from the verified Slack integration mapping. Go sends the company ID and a short-lived internal HS256 token bound to that company. The Python internal route independently validates issuer, audience, required expiration/issued-at claims, signing algorithm, service role, and exact company claim before invoking the tenant-filtered generator. It is not accepted by user-facing routes.
+
+### Files changed
+
+- Go: `api/domain/domain.go`, `api/handlers/slack.go`, `api/services/core.go`, `api/services/slack_bot.go`, `api/services/playbook.go`.
+- Go tests: `api/handlers/security_test.go`, `api/services/core_test.go`, `api/services/playbook_test.go`.
+- Python: `nlp/api.py`, `nlp/tests/test_authz.py`.
+- SQL: `schema/schemas.sql`, `schema/migrations/20261101_events_company_scope.sql`, `schema/tests/tenant_rls.sql`, `schema/tests/events_tenant_migration_unmapped.sql`.
+- Documentation: `docs/backend-hardening/PROGRESS.md`, `SECURITY-DECISIONS.md`, `TEST-MATRIX.md`.
+
+### Verification commands and actual results
+
+1. `cd api && go test -count=1 ./...`
+   - **VERIFIED** — passed for `api`, `handlers`, `repository`, and `services`; `domain` has no tests.
+2. `cd api && go test -race -count=1 ./...`
+   - **VERIFIED** — passed for all Go packages, including CoreIngest parent cancellation/deadline propagation, Slack event-ID idempotency, and company propagation to the signed playbook call.
+3. `cd api && go vet ./...`
+   - **VERIFIED** — passed with no diagnostics.
+4. `cd nlp && PYTHONPATH=. pytest tests/test_authz.py -q`
+   - **VERIFIED** — 22 passed; 2 third-party deprecation warnings.
+5. `cd nlp && PYTHONPATH=. pytest tests/test_authz.py tests/test_ramp_v2.py tests/test_evidence_composition.py tests/test_query_engine_context.py -q`
+   - **VERIFIED** — 40 passed; 2 third-party deprecation warnings.
+6. `pg_isready -h 127.0.0.1 -p 55432; psql 'postgresql://postgres@127.0.0.1:55432/postgres' -v ON_ERROR_STOP=1 -f schema/tests/tenant_rls.sql`
+   - **BLOCKED** — `pg_isready` reported no response and `psql` failed with connection refused. The repeatability, backfill, and rollback SQL cases in `schema/tests/tenant_rls.sql` and `schema/tests/events_tenant_migration_unmapped.sql` have not been executed in this session.
+
+### Remaining risks and status
+
+- The new events migration and its disposable PostgreSQL assertions are **IMPLEMENTED**, but database behavior is **BLOCKED** pending an available disposable PostgreSQL environment. Do not mark the migration **VERIFIED** from Go/Python tests.
+- No historical event ownership was inferred from provider identity or timestamps. Only a single matching company on linked `raw_data` qualifies; otherwise explicit operator mapping is required.
+- Production schema parity, historical data quality, migration lock/maintenance window, live grants, and service-token secret/issuer/audience configuration remain **BLOCKED** and require operator review.
+- **Historical as of Batch 5:** request cancellation after event/raw-data inserts could leave rows without a Redis job, and duplicate delivery did not republish. Batch 6 supersedes this behavior with transactional outbox persistence; database verification is still blocked below.
+- Go, Python, and migration changes have not been applied to live Supabase. No production security claim is made.
+- Rate limiting has not started.
+
+## Batch 6 — Redis Streams and worker reliability
+
+The outbox and worker changes below are **IMPLEMENTED**. Focused Go and Python tests are **VERIFIED**. PostgreSQL migration/RPC behavior is **BLOCKED** because no disposable database responded at `127.0.0.1:55432`. No migration was applied to live Supabase, and rate limiting was not started.
+
+### Lifecycle and failure handling
+
+1. Slack/GitHub ingress validates the provider request and resolves the company before `CoreIngest`.
+2. `persist_ingestion_with_outbox` stores the tenant-owned event, raw-data row, and outbox job in one PostgreSQL transaction. Global `events.delivery_id` uniqueness is retained. A duplicate with the same company returns the existing outbox entry; a delivery ID owned by a different company fails closed.
+3. The Go dispatcher claims eligible outbox rows with `FOR UPDATE SKIP LOCKED` and an expiring DB lease. It publishes to the source Redis stream, then marks the row published. Redis and PostgreSQL are not atomic: dispatcher failure after Redis acceptance and before the DB mark intentionally yields an at-least-once duplicate.
+4. Python creates missing consumer groups at `0-0`, reads via `XREADGROUP`, and holds a per-message Redis lease with a heartbeat. Recovery scans `XPENDING`, checks the active lease, applies delivery-count-based capped backoff, and only then claims with `XCLAIM`.
+5. Ingestion validates a real company ID and verifies the event's delivery/company pair before database work. Entity and edge IDs are tenant-derived and deterministic; raw-data retries update only a matching `(record_id, company_id)` row; the processed marker filters on both delivery and company. A GitHub push publishes its codebase-analysis job before marking the source event processed.
+6. Only the consumer acknowledges successful handler completion. Handler failures remain pending up to five deliveries, then are atomically copied to a deduplicated dead-letter stream before `XACK`. The worker no longer deletes source stream entries.
+
+### Files changed
+
+- Go: `api/domain/outbox.go`, `api/repository/outbox.go`, `api/services/core.go`, `api/services/outbox_dispatcher.go`, `api/main.go`.
+- Go tests: `api/services/core_test.go`, `api/services/outbox_dispatcher_test.go`.
+- SQL: `schema/migrations/20261101_ingestion_outbox.sql`, `schema/schemas.sql`, `schema/tests/tenant_rls.sql`.
+- Python: `nlp/worker/consumer.py`, `nlp/worker/ingestion.py`, `nlp/worker/query.py`, `nlp/worker/baseline.py`, `nlp/worker/codebase_analysis.py`, `nlp/utils/db_helpers.py`.
+- Python tests: `nlp/tests/test_consumer_recovery.py`, `nlp/tests/test_ingestion_reliability.py`, `nlp/tests/test_failure_semantics.py`, added `nlp/tests/test_worker_tenant_safety.py`.
+- Documentation: `PROGRESS.md`, `ARCHITECTURE.md`, `SECURITY-DECISIONS.md`, `TEST-MATRIX.md`.
+
+### Exact commands and actual results
+
+1. `cd api && go test ./...`
+   - **VERIFIED — passed** for `api`, `handlers`, `repository`, and `services`; `domain` has no tests.
+2. `cd api && go test -race ./... && go vet ./...`
+   - **VERIFIED — passed**; race tests passed for all Go packages and `go vet` emitted no diagnostics.
+3. `cd nlp && .venv/bin/python -m pytest -q tests/test_consumer_recovery.py tests/test_ingestion_reliability.py tests/test_failure_semantics.py tests/test_worker_tenant_safety.py`
+   - **VERIFIED — passed**: 40 passed, 2 third-party deprecation warnings, 4 subtests passed.
+4. `cd nlp && .venv/bin/python -m compileall -q worker utils tests && git diff --check`
+   - **VERIFIED — passed** after final edits.
+5. `cd nlp && PYTHONPATH=.:.. .venv/bin/python -m pytest -q tests`
+   - **NOT FULLY VERIFIED — 101 passed, 3 failed, 2 warnings, 4 subtests passed**. Failures are `test_query_transport_boundary_is_preserved` and two `test_llm_infer_*` cases; they concern the existing Ramp projection and LLM fallback expectations, not Batch 6 files. Full-suite status remains incomplete.
+6. `pg_isready -h 127.0.0.1 -p 55432`
+   - **BLOCKED — no response**. `psql` is installed, but no PostgreSQL server was available. `schema/tests/tenant_rls.sql`, including outbox transaction, retry exhaustion, migration repeatability, and rollback assertions, has not been run.
+7. `git diff --check`
+   - **VERIFIED — passed** after final edits.
+
+### Remaining risks and deployment prerequisites
+
+- **Database verification BLOCKED:** run `schema/tests/tenant_rls.sql` against a newly created disposable PostgreSQL/Supabase-compatible database before considering the migration verified. It includes migration reapplication, duplicate delivery, claim/publish, and retry-exhaustion checks. Do not apply it to production.
+- Deploying the new Go ingestion path requires the outbox migration and RPCs to exist first; otherwise ingestion fails rather than falling back to non-transactional writes.
+- The database outbox has a 12-claim terminal `dead_letter` state; Python stream processing has a five-delivery limit and a Redis dead-letter stream. Operators need alerting and a replay procedure for both destinations; this batch does not add a replay UI or operator command.
+- Existing Redis consumer groups retain their cursor; creating a group at `0-0` only affects new groups. Before deployment, inspect the existing group `last-delivered-id` and pending entries and plan a controlled replay if any backlog was skipped by prior `$` group creation.
+- Lease heartbeat reduces unsafe reclamation but is not a fencing token. A worker paused beyond lease expiry can resume concurrently with a replacement; tenant-scoped deterministic upserts mitigate duplicate effects but cannot guarantee exactly-once execution.
+- Incremental codebase-analysis jobs are published directly by the ingestion worker rather than by a second database outbox. A retry can enqueue duplicates; analysis writes are designed to be idempotent, but the path lacks a separate durable DB enqueue record.
+- Existing entity rows produced by the former global `(type,name)` deterministic ID may already have had company ownership overwritten. The new IDs are tenant-specific and do not rewrite or assign ownership to legacy rows; historical contamination requires a separately reviewed data audit.
+- Shutdown stops new reads and waits for an active handler to return; it does not forcibly cancel an in-flight NLP/database call. Handler execution duration and orchestrator termination grace remain deployment assumptions.
+- No production database, Redis, or live Supabase behavior was exercised. The broad Python suite has three outstanding failures and is not considered fully verified.
+
+### Status
+
+**IMPLEMENTED** — code, migration, SQL harness assertions, and regression tests are present.
+
+**VERIFIED** — Go tests/race/vet and focused Python tests as listed above.
+
+**BLOCKED** — PostgreSQL migration/RPC execution, full Python suite, and all live deployment behavior.
+
+Rate limiting remains **NOT STARTED**.
+
+## Ramp Plans API 401 — ES256/JWKS corrective investigation
+
+### Request-path finding
+
+The reported `ramp plan request failed: 401` comes from the Next.js dashboard
+Ramp page's direct request to the Python NLP API's `GET /ramp-plans` endpoint;
+the Go API is not in this request path. The page obtains `accessToken` from
+`getUserContext()` and conditionally sends it as the `Authorization: Bearer`
+credential to the NLP URL. That value is the Supabase session access token,
+not an internal service token, and the page does not proxy it through Go.
+Because the value is nullable and no request capture was available, the
+specific failed request's header presence and contents are **BLOCKED**.
+
+The Python route returns 401 when authentication is missing or Supabase token
+verification rejects the request. Company membership failure is a separate
+403. The Python verifier in the current branch already uses Supabase JWKS and
+ES256; it is not the former HS256-only implementation described in older
+documentation. The verifier requires and validates `exp`, `iat`, `iss`, `aud`,
+`sub`, and `role`, restricts the algorithm to ES256, checks issuer/audience,
+and requires `role=authenticated`. `X-User-Id` is not accepted as identity.
+Internal service JWTs use a separate HS256 verifier and are not user
+credentials.
+
+### Changes made
+
+- `nlp/api.py`: loads `nlp/.env` by an explicit path at module startup, applies
+  bounded JWKS retrieval, validates verifier configuration, and logs
+  authentication rejection reasons without logging token material. Missing
+  or malformed verifier configuration and JWKS connectivity failures return
+  503 rather than being misreported as invalid user credentials.
+- `nlp/tests/test_authz.py`: replaces stale HS256 user-token assumptions with
+  offline ES256 tests using generated keys and a mocked JWKS client. Coverage
+  includes missing/malformed credentials, invalid signature, expiration,
+  issuer/audience and required-claim failures, JWKS configuration/connection
+  failures, separate internal service authentication, and Ramp membership
+  authorization.
+- `.env.example`, `nlp/README.md`: document runtime variable names, server-only
+  credential separation, explicit `.env` loading, and the development/test
+  commands. No secret values are included.
+- `ARCHITECTURE.md`, `SECURITY-DECISIONS.md`, `TEST-MATRIX.md`: reconcile
+  stale HS256-only claims with the implemented ES256/JWKS verifier and record
+  the remaining runtime verification limit.
+
+### Verification
+
+1. `cd nlp && .venv/bin/python -m pytest -q tests/test_authz.py tests/test_ramp_v2.py`
+   - **VERIFIED — 40 passed, 1 third-party deprecation warning**.
+   - Tests use generated ES256 keys and a fake JWKS client; no external
+     authentication network request is made.
+2. `cd nlp && .venv/bin/python -m compileall -q api.py tests/test_authz.py`
+   - **VERIFIED — passed**.
+3. `git diff --check`
+   - **VERIFIED — passed**.
+
+### Runtime and deployment status
+
+The local Supabase project URL matches the project ID supplied for this
+incident. The user-reported active signing algorithm is ES256, which the
+current implementation and offline tests support. The live JWKS response,
+runtime process environment, and token from the failed request were not
+retrieved or inspected, and the request was not retried against a deployed
+service. Consequently the code change and offline behavior are **IMPLEMENTED
+and VERIFIED**, but resolution of the specific 401 remains **BLOCKED**, not
+claimed fixed.
+
+The Python service loads `nlp/.env` explicitly; `uv run` is not required for
+environment loading. Run locally from `nlp/` with
+`.venv/bin/python -m uvicorn api:app --host 127.0.0.1 --port 8000 --reload`.
+Relevant variable names are `SUPABASE_URL`, `SUPABASE_KEY`,
+`SUPABASE_JWT_ISSUER`, `SUPABASE_JWT_AUDIENCE`, `SUPABASE_JWKS_URL`,
+`INTERNAL_SERVICE_SECRET`, `INTERNAL_SERVICE_ISSUER`, and
+`INTERNAL_SERVICE_AUDIENCE`. Do not use or expose the Supabase service-role
+key as a user token.
+
+The separate Next.js `/api/ramp-plans` route was also identified as a path
+that does not forward Authorization; no caller was found for it during this
+investigation. It does not match the observed dashboard page's direct request,
+but should not be used by user-token callers without fixing its forwarding
+contract.
+
+No live Supabase project was contacted or changed. The actual request token
+and deployed environment remain the next diagnostic prerequisites. No rate
+limiting work was started.

@@ -3,6 +3,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"regexp"
@@ -13,6 +14,8 @@ import (
 	"github.com/nahom-zewdu/kMS/api/domain"
 	"github.com/slack-go/slack"
 )
+
+const slackQueryTimeout = 45 * time.Second
 
 // SlackBot handles Slack bot interactions for queries.
 type SlackBot struct {
@@ -45,7 +48,7 @@ func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, 
 	if cleanQuery == "" {
 		log.Printf("QueryID: <none>, Channel: %s, Thread: %s - Empty query after cleaning, original: %s", channel, threadTs, query)
 		startPost := time.Now()
-		_, _, err := sb.client.PostMessage(channel,
+		_, _, err := sb.client.PostMessageContext(ctx, channel,
 			slack.MsgOptionText("Please provide a valid query (e.g., 'Who owns github?').", false),
 			slack.MsgOptionTS(threadTs))
 		if err != nil {
@@ -69,12 +72,12 @@ func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, 
 
 		log.Printf("QueryID: %s - Playbook request detected for role: %s", queryID, role)
 
-		playbookMsg, err := sb.playbookService.GeneratePlaybook(ctx, role, "")
+		playbookMsg, err := sb.playbookService.GeneratePlaybook(ctx, role, "", companyID)
 		if err != nil {
-			playbookMsg = "Sorry, I couldn't generate the playbook right now."
+			return fmt.Errorf("generate playbook: %w", err)
 		}
 
-		_, _, err = sb.client.PostMessage(channel,
+		_, _, err = sb.client.PostMessageContext(ctx, channel,
 			slack.MsgOptionText(playbookMsg, false),
 			slack.MsgOptionTS(threadTs))
 		return err
@@ -82,75 +85,81 @@ func (sb *SlackBot) HandleEvent(ctx context.Context, teamID, channel, threadTs, 
 
 	log.Printf("QueryID: %s, Channel: %s, Thread: %s - Processing query: %s", queryID, channel, threadTs, cleanQuery)
 
-	// Publish to query_jobs
-	err := sb.redis.Publish(ctx, "query_jobs", domain.JobPayload{
-		ID:        "*",
-		RecordID:  queryID,
-		Source:    "slack",
-		Content:   cleanQuery,
-		CompanyID: companyID,
-		CreatedAt: time.Now().UTC().Format(time.RFC3339),
-	})
+	answer, err := sb.requestAnswer(ctx, queryID, cleanQuery, companyID, slackQueryTimeout)
 	if err != nil {
-		log.Printf("QueryID: %s, Channel: %s, Thread: %s - Failed to publish to query_jobs in %.3fs: %v", queryID, channel, threadTs, time.Since(start).Seconds(), err)
+		log.Printf("QueryID: %s, Channel: %s, Thread: %s - Query processing failed in %.3fs: %v", queryID, channel, threadTs, time.Since(start).Seconds(), err)
 		startPost := time.Now()
-		_, _, err = sb.client.PostMessage(channel,
+		_, _, err = sb.client.PostMessageContext(ctx, channel,
 			slack.MsgOptionText("Sorry, I couldn't process that query. Try again?", false),
 			slack.MsgOptionTS(threadTs))
 		if err != nil {
-			log.Printf("QueryID: %s, Channel: %s, Thread: %s - Failed to post retry message in %.3fs: %v", queryID, channel, threadTs, time.Since(startPost).Seconds(), err)
+			log.Printf("QueryID: %s, Channel: %s, Thread: %s - Failed to post failure message in %.3fs: %v", queryID, channel, threadTs, time.Since(startPost).Seconds(), err)
 		}
-		return fmt.Errorf("failed to publish to query_jobs: %v", err)
+		return err
 	}
-	log.Printf("QueryID: %s, Channel: %s, Thread: %s - Published to query_jobs in %.3fs", queryID, channel, threadTs, time.Since(start).Seconds())
-
-	// Subscribe to Pub/Sub for answer
-	startSubscribe := time.Now()
-	answerChan, err := sb.redis.Subscribe(ctx, "query_results:"+queryID)
+	startPost := time.Now()
+	_, _, err = sb.client.PostMessageContext(ctx, channel,
+		slack.MsgOptionText(answer, false),
+		slack.MsgOptionTS(threadTs))
 	if err != nil {
-		log.Printf("QueryID: %s, Channel: %s, Thread: %s - Failed to subscribe to query_results:%s in %.3fs: %v", queryID, channel, threadTs, queryID, time.Since(startSubscribe).Seconds(), err)
-		return fmt.Errorf("failed to subscribe to query_results:%s: %v", queryID, err)
+		log.Printf("QueryID: %s, Channel: %s, Thread: %s - Failed to post Slack answer in %.3fs: %v", queryID, channel, threadTs, time.Since(startPost).Seconds(), err)
+		return fmt.Errorf("failed to post Slack answer: %v", err)
 	}
-	log.Printf("QueryID: %s, Channel: %s, Thread: %s - Subscribed to query_results:%s in %.3fs", queryID, channel, threadTs, queryID, time.Since(startSubscribe).Seconds())
-
-	// Wait for answer
-	select {
-	case answer := <-answerChan:
-		startPost := time.Now()
-		_, _, err = sb.client.PostMessage(channel,
-			slack.MsgOptionText(answer, false),
-			slack.MsgOptionTS(threadTs))
-		if err != nil {
-			log.Printf("QueryID: %s, Channel: %s, Thread: %s - Failed to post Slack answer in %.3fs: %v", queryID, channel, threadTs, time.Since(startPost).Seconds(), err)
-			return fmt.Errorf("failed to post Slack answer: %v", err)
-		}
-		log.Printf("QueryID: %s, Channel: %s, Thread: %s - Posted answer '%s' in %.3fs", queryID, channel, threadTs, answer, time.Since(startPost).Seconds())
-	case <-ctx.Done():
-		log.Printf("QueryID: %s, Channel: %s, Thread: %s - Query timeout in %.3fs: %v", queryID, channel, threadTs, time.Since(start).Seconds(), ctx.Err())
-		startPost := time.Now()
-		_, _, err = sb.client.PostMessage(channel,
-			slack.MsgOptionText("Sorry, I couldn't process that query. Try again?", false),
-			slack.MsgOptionTS(threadTs))
-		if err != nil {
-			log.Printf("QueryID: %s, Channel: %s, Thread: %s - Failed to post timeout message in %.3fs: %v", queryID, channel, threadTs, time.Since(startPost).Seconds(), err)
-		}
-		return fmt.Errorf("query timeout: %v", ctx.Err())
-	}
+	log.Printf("QueryID: %s, Channel: %s, Thread: %s - Posted answer '%s' in %.3fs", queryID, channel, threadTs, answer, time.Since(startPost).Seconds())
 
 	log.Printf("QueryID: %s, Channel: %s, Thread: %s - Successfully processed query in %.3fs", queryID, channel, threadTs, time.Since(start).Seconds())
 	return nil
 }
 
+func (sb *SlackBot) requestAnswer(
+	ctx context.Context,
+	queryID string,
+	query string,
+	companyID string,
+	timeout time.Duration,
+) (string, error) {
+	queryCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	channel := "query_results:" + queryID
+	answerChan, err := sb.redis.Subscribe(queryCtx, channel)
+	if err != nil {
+		return "", fmt.Errorf("failed to subscribe to %s: %w", channel, err)
+	}
+
+	err = sb.redis.Publish(queryCtx, "query_jobs", domain.JobPayload{
+		ID:        "*",
+		RecordID:  queryID,
+		Source:    "slack",
+		Content:   query,
+		CompanyID: companyID,
+		CreatedAt: time.Now().UTC().Format(time.RFC3339),
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to publish query job: %w", err)
+	}
+
+	select {
+	case answer, ok := <-answerChan:
+		if !ok {
+			return "", errors.New("query result subscription closed before a response")
+		}
+		return answer, nil
+	case <-queryCtx.Done():
+		return "", fmt.Errorf("query wait ended: %w", queryCtx.Err())
+	}
+}
+
 // GetBotID retrieves the Slack bot's ID.
-func (sb *SlackBot) GetBotID() string {
+func (sb *SlackBot) GetBotID(ctx context.Context) (string, error) {
 	start := time.Now()
-	auth, err := sb.client.AuthTest()
+	auth, err := sb.client.AuthTestContext(ctx)
 	if err != nil {
 		log.Printf("Failed to get bot ID in %.3fs: %v", time.Since(start).Seconds(), err)
-		return ""
+		return "", err
 	}
 	log.Printf("Successfully got bot ID %s in %.3fs", auth.BotID, time.Since(start).Seconds())
-	return auth.BotID
+	return auth.BotID, nil
 }
 
 // removeBotMention cleans a query by removing bot mentions and invalid characters.

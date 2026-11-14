@@ -3,8 +3,11 @@ package domain
 
 import (
 	"context"
+	"errors"
 	"time"
 )
+
+var ErrUnauthenticated = errors.New("unauthenticated")
 
 // IngestRequest represents a request to ingest an event from any source.
 type IngestRequest struct {
@@ -32,6 +35,7 @@ type JobPayload struct {
 // Contribution represents metrics for a PERSON in a PROJECT.
 type Contribution struct {
 	ID          string    `json:"id"`
+	CompanyID   string    `json:"company_id"`
 	PersonName  string    `json:"person_name"`
 	RepoName    string    `json:"repo_name"`
 	CommitCount int       `json:"commit_count"`
@@ -58,18 +62,21 @@ type RedisStream interface {
 type StoragePort interface {
 	Insert(ctx context.Context, table string, data map[string]interface{}) error
 	Query(ctx context.Context, table string, filter map[string]interface{}) ([]map[string]interface{}, error)
-	QueryKnowledgeGraphSupabase(ctx context.Context, query string) (string, error)
+	QueryKnowledgeGraphSupabase(ctx context.Context, query, companyID string) (string, error)
 	ResolveCompanyByIntegration(ctx context.Context, provider, externalID string) (string, error)
 	ResolveCompanyByInstallation(ctx context.Context, installationID string) (string, error)
+	AuthenticateUser(ctx context.Context, accessToken string) (string, error)
+	IsCompanyMember(ctx context.Context, userID, companyID string) (bool, error)
+	ResolveRepositoryForCompany(ctx context.Context, companyID, repository string) (string, error)
 }
 
 // MetricsService defines the interface for metrics computation.
 type MetricsService interface {
 	UpdateContributions(ctx context.Context, req IngestRequest) error
-	CalculateBusFactor(ctx context.Context, repoName string) (float64, error)
+	CalculateBusFactor(ctx context.Context, repoName, companyID string) (float64, error)
 }
 
 // PlaybookService defines the interface for generating onboarding playbooks.
 type PlaybookService interface {
-	GeneratePlaybook(ctx context.Context, role string, employeeName string) (string, error)
+	GeneratePlaybook(ctx context.Context, role, employeeName, companyID string) (string, error)
 }

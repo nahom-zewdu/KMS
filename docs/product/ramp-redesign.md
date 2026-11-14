@@ -1,9 +1,11 @@
 # Ramp Redesign — Engineering Onboarding Intelligence
 
-**Status:** Accepted direction / pre-implementation design
-**Branch:** `feat/ramp`
-**Last updated:** 2026-09-12
+**Status:** Accepted design direction (not an execution ledger)
+**Branch written:** `feat/ramp` (2026-09-12). Current work: `feat/implementation-relations`.
+**Last updated:** 2026-09-21 (status pointers only; design content retained)
 **Scope:** Ramp generation and the knowledge model it depends on
+
+Execution state lives in `docs/development/roadmap.md`. Current architecture: `docs/architecture/ramp.md`. Import vs workflow: `docs/decisions/ADR-004-imports-are-not-workflows.md`.
 
 ## 1. Why this document exists
 
@@ -11,9 +13,7 @@ The first Ramp implementation proved that KMS can assemble a company-scoped, rol
 
 It also exposed a more important problem: those capabilities do not automatically produce useful onboarding.
 
-The current generator primarily selects codebase modules/directories using importance, role-word matches, ownership, file counts, and safe/risky path heuristics, then turns those selections into prose. That is useful infrastructure, but it is not yet a sufficiently intelligent model of how a new engineer learns an unfamiliar system and reaches a first meaningful contribution.
-
-This document freezes the redesign direction before more generator features are implemented.
+As of 2026-09-12 this document froze the redesign **before** the intelligence rewrite. That rewrite is now in progress (`RampPlanner`). The module-first generator described below is historical: it is no longer on the production path. The design rules in this file remain the target. They are not a description of live candidate quality.
 
 ## 2. The product outcome
 
@@ -197,7 +197,7 @@ A stack item is a technology.
 
 A Ramp step is an onboarding outcome that may reference any combination of those entities.
 
-Confusing these levels is the main reason the current generator produces directory-oriented onboarding.
+Confusing these levels is the main reason the first generator produced directory-oriented onboarding. Treating import paths as workflows is the corresponding failure mode of the current candidate layer.
 
 ## 8. Generation pipeline
 
@@ -364,20 +364,20 @@ A contribution candidate should be generated only when KMS can establish enough 
 
 If the evidence is insufficient, the Ramp should end in **readiness**, not fabricate a first contribution.
 
-## 11. What should happen to the current generator
+## 11. What happened to the first generator
 
-Do not incrementally decorate the current directory-selection algorithm with more prose fields.
+Do not restore or incrementally decorate the directory-selection algorithm.
 
-Instead:
+The 2026-09-12 plan was:
 
-1. Preserve the current stable plan/step contract where doing so avoids unnecessary UI churn.
+1. Preserve the stable plan/step contract where doing so avoids unnecessary UI churn.
 2. Introduce a richer internal candidate/evidence model behind that contract.
 3. Replace directory-first selection with outcome-first candidate generation.
 4. Add real implementation/workflow signals incrementally.
 5. Keep existing evidence-grounding, company scoping, ownership, stable IDs, progress, and Ask capabilities.
 6. Retire path-name heuristics when stronger evidence can replace them.
 
-The existing generator is therefore treated as a **foundation/prototype**, not as the conceptual model to optimize indefinitely.
+Items 1–3 and 5 are implemented at the code boundary (`RampPlanner`). Item 4 is only `IMPORTS` paths so far. Item 6 is not done (role tokens still use path keywords). Status: `docs/development/roadmap.md`.
 
 ## 12. What not to build yet
 
@@ -393,9 +393,11 @@ Do not begin by building:
 
 The first redesign implementation should prove that richer reasoning produces materially better Ramp candidates on a real repository.
 
-## 13. The next execution phase
+## 13. Execution phase (historical plan)
 
-The next phase is **Ramp Intelligence Discovery**, not another UI or persistence batch.
+The 2026-09-12 phase was **Ramp Intelligence Discovery**. RID-01 through RID-04 are accepted. RID-05 is in progress. RID-06 as a legacy before/after fixture is rejected (legacy generator gone). Live import-path quality is in `docs/product/ramp-candidate-evaluation-2026-09-20.md`. The selected next task is RID-07 in `docs/development/roadmap.md`.
+
+Do not treat the RID list below as current status. It is the original discovery plan, retained for history.
 
 ### RID-01 — Define the target evidence model
 
@@ -431,22 +433,11 @@ Specify the minimum deterministic scoring model before implementation.
 
 ### RID-05 — Define a narrow implementation slice
 
-Choose the smallest generator change that can prove the new model is better than the current module-first generator.
+Choose the smallest generator change that can prove the new model is better than the module-first generator (now removed).
 
 ### RID-06 — Create a before/after evaluation fixture
 
-For the same company and role, compare old and redesigned output using explicit criteria:
-
-- meaningfulness;
-- role relevance;
-- workflow coherence;
-- evidence strength;
-- actionability;
-- contribution readiness;
-- unsupported claims;
-- cognitive load.
-
-No broad refactor should begin until this fixture can expose whether the redesign actually improves output.
+Originally: compare old and redesigned output on meaningfulness, role relevance, workflow coherence, evidence strength, actionability, contribution readiness, unsupported claims, and cognitive load. That comparison is no longer executable.
 
 ## 14. Acceptance bar for the redesign
 

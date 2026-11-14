@@ -1,9 +1,11 @@
 # Ramp Candidate Scoring and Sequencing
 
-**Status:** RID-04 accepted / implementation not started  
-**Branch:** `feat/ramp`  
-**Last updated:** 2026-09-12  
+**Status:** RID-04 accepted as spec; subset implemented on `feat/implementation-relations`  
+**Branch:** `feat/implementation-relations`  
+**Last updated:** 2026-09-21  
 **Scope:** Deterministic ranking, sequencing, and contribution eligibility for Ramp candidates
+
+This is the scoring **specification**. Runtime objects and current code behavior are in `docs/product/ramp-intelligence-model.md` and `nlp/ramp/candidates.py` / `nlp/ramp/models.py`. Execution status is in `docs/development/roadmap.md`.
 
 ## 1. Purpose
 
@@ -310,7 +312,9 @@ Selected workflow candidate W1 because:
 
 The deterministic model remains authoritative.
 
-## 11. KMS proof under RID-04
+## 11. KMS proof under RID-04 (spec expectation)
+
+This section is the RID-04 **intended** ranking for a manually established GitHub ingestion workflow. It is not a claim that `WorkflowDiscoverer` currently emits that candidate from `IMPORTS` edges. Live generated candidates: `docs/product/ramp-candidate-evaluation-2026-09-20.md`.
 
 For the existing GitHub ingestion example:
 
@@ -343,11 +347,34 @@ Reason:
 
 The system must not convert a high-level engineering idea into a contribution merely because it sounds plausible.
 
-## 12. Implementation boundary for RID-05
+## 11a. Implemented subset and gaps (2026-09-21)
 
-RID-04 intentionally does **not** require replacing the whole generator.
+Present in code:
 
-The smallest implementation target should be:
+- learning score weights in `RampCandidate.score_breakdown` (same 0–100 dimensions as §4);
+- learning eligibility in `RampCandidateEngine.eligible`;
+- contribution eligibility in `contribution_eligible` (stricter than §3.2 on numeric thresholds: evidence ≥ 0.8, verification ≥ 0.8, history ≥ 0.6, `risk == "low"`);
+- prerequisite + stage-order selection;
+- no contribution candidates emitted by `RampPlanner`;
+- `machine` metadata on serialized steps (`candidate_id`, score, breakdown, prerequisites, eligibility, evidence refs).
+
+Not present in code (spec still desired; do not treat as done):
+
+- corroboration bonus in §4.1 (strongest relation strength is used instead);
+- role-relevance trust order in §4.2 (path/module keyword tokens only);
+- contribution readiness score and 70/100 threshold in §5;
+- redundancy penalty and shorter-sequence preference in §6.3–6.4 (`select` keeps every eligible candidate with satisfied prerequisites);
+- LLM presentation in §10 (`polish_why` unused).
+
+Role keyword matching remains a weak signal. The planner's role-surface action text tells the engineer not to treat it as ownership proof; the numeric `role_relevance` for a keyword match is still 1.0.
+
+---
+
+## 12. Implementation boundary for RID-05 (historical)
+
+Written when RID-05 had not started. The planner rewrite later exceeded this slice. Remaining gaps are listed in §11a and `docs/development/roadmap.md`.
+
+The original smallest implementation target was:
 
 ```text
 existing KMS evidence

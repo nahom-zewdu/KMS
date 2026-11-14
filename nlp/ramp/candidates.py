@@ -54,13 +54,12 @@ class RampCandidateEngine:
         return candidate.evidence_strength > 0.0
 
     def contribution_eligible(self, candidate: RampCandidate) -> bool:
-        """Require stronger evidence before a candidate proposes real code changes."""
+        """Require explicit scope, company evidence, and a verifiable outcome for a contribution lead."""
         return (
             candidate.company_scoped
             and candidate.contribution_candidate
             and candidate.evidence_strength >= 0.8
             and candidate.verification_strength >= 0.8
-            and candidate.history_strength >= 0.6
             and candidate.risk == "low"
             and bool(candidate.implementation_refs)
             and bool(candidate.concrete_action)

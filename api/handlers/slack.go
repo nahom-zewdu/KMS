@@ -1,13 +1,12 @@
 // handlers/slack.go
 // Package handlers provides the Slack webhook handler for KnowSphere, processing message and app_mention
 // events with HMAC-SHA256 verification. It ingests user messages, handles bot mentions for queries, and
-// ensures idempotency using event_ts as record_id. Supports edge cases like bot messages, timeouts, and
+// ensures idempotency using the provider event_id as record_id. Supports edge cases like bot messages, timeouts, and
 // retries for reliability.
 
 package handlers
 
 import (
-	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -15,7 +14,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -76,14 +74,10 @@ func (h *SlackHandler) HandleSlackWebhook(c *gin.Context) {
 		return
 	}
 
-	// Read and preserve request body
-	body, err := io.ReadAll(c.Request.Body)
-	if err != nil {
-		log.Printf("Failed to read request body in %.3fs: %v", time.Since(start).Seconds(), err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read request body"})
+	body, ok := readWebhookBody(c)
+	if !ok {
 		return
 	}
-	c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
 
 	// Verify Slack signature
 	timestamp := c.GetHeader("X-Slack-Request-Timestamp")
@@ -126,6 +120,18 @@ func (h *SlackHandler) HandleSlackWebhook(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Unsupported event type"})
 		return
 	}
+	var callbackMetadata struct {
+		EventID string `json:"event_id"`
+	}
+	if err := json.Unmarshal(body, &callbackMetadata); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid callback metadata"})
+		return
+	}
+	eventID := strings.TrimSpace(callbackMetadata.EventID)
+	if eventID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Slack event_id is required"})
+		return
+	}
 
 	innerEvent := eventsAPIEvent.InnerEvent
 	companyID, tenantErr := resolveSlackTenant(c.Request.Context(), h.storage, eventsAPIEvent.TeamID)
@@ -148,82 +154,96 @@ func (h *SlackHandler) HandleSlackWebhook(c *gin.Context) {
 			return
 		}
 		log.Printf("RecordID: %s - Handling app_mention event: %s", ev.TimeStamp, ev.Text)
-		go func() {
-			// Use new context to avoid HTTP request cancellation
-			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-			defer cancel()
-
-			// Retry logic for HandleEvent
-			for attempt := 1; attempt <= 3; attempt++ {
-				err := h.slackBot.HandleEvent(ctx, eventsAPIEvent.TeamID, ev.Channel, ev.ThreadTimeStamp, ev.Text, ev.TimeStamp, companyID)
-				if err == nil {
-					log.Printf("RecordID: %s - Successfully handled app_mention in %.3fs (attempt %d)", ev.TimeStamp, time.Since(start).Seconds(), attempt)
-					return
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
+		defer cancel()
+		var processingErr error
+		for attempt := 1; attempt <= 3; attempt++ {
+			processingErr = h.slackBot.HandleEvent(ctx, eventsAPIEvent.TeamID, ev.Channel, ev.ThreadTimeStamp, ev.Text, ev.TimeStamp, companyID)
+			if processingErr == nil {
+				break
+			}
+			log.Printf("RecordID: %s - Failed to handle app_mention (attempt %d): %v", ev.TimeStamp, attempt, processingErr)
+			if attempt < 3 {
+				select {
+				case <-ctx.Done():
+					processingErr = ctx.Err()
+					attempt = 3
+				case <-time.After(time.Duration(attempt*attempt) * 100 * time.Millisecond):
 				}
-				log.Printf("RecordID: %s - Failed to handle app_mention in %.3fs (attempt %d): %v", ev.TimeStamp, time.Since(start).Seconds(), attempt, err)
-				time.Sleep(time.Duration(attempt*attempt) * 100 * time.Millisecond) // Exponential backoff
 			}
-
-			// Post fallback message on failure
-			_, _, err = h.slackClient.PostMessageContext(ctx, ev.Channel,
-				slack.MsgOptionText("Sorry, I couldn't process that query. Try again?", false),
-				slack.MsgOptionTS(ev.ThreadTimeStamp))
-			if err != nil {
-				log.Printf("RecordID: %s - Failed to post fallback message in %.3fs: %v", ev.TimeStamp, time.Since(start).Seconds(), err)
+		}
+		if processingErr != nil {
+			if h.slackClient != nil {
+				if _, _, err := h.slackClient.PostMessageContext(ctx, ev.Channel,
+					slack.MsgOptionText("Sorry, I couldn't process that query. Try again?", false),
+					slack.MsgOptionTS(ev.ThreadTimeStamp)); err != nil {
+					log.Printf("RecordID: %s - Failed to post fallback message: %v", ev.TimeStamp, err)
+				}
 			}
-		}()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process message"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "event received"})
+		return
 
 	case *slackevents.MessageEvent:
-		// Validate event_ts
-		if ev.TimeStamp == "" || !strings.Contains(ev.TimeStamp, ".") {
+		eventTime, validTimestamp := parseSlackTimestamp(ev.TimeStamp)
+		if !validTimestamp {
 			log.Printf("RecordID: <none> - Invalid or empty Slack event_ts in %.3fs", time.Since(start).Seconds())
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid or empty event timestamp"})
 			return
 		}
 
-		go func() {
-			// Use new context to avoid HTTP request cancellation
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
-			// Ingest only non-bot, non-mention messages
-			botID := h.slackBot.GetBotID()
-			if ev.BotID == "" && ev.User != botID && !strings.Contains(ev.Text, "<@") && ev.User != "" {
-				log.Printf("RecordID: %s - Handling message event: %s", ev.TimeStamp, ev.Text)
-				// Create ingest request with event_ts as record_id
-				ingestReq := domain.IngestRequest{
-					Source:    "slack",
-					EventType: "message",
-					Content:   strings.TrimSpace(ev.Text),
-					Payload: map[string]interface{}{
-						"user":      ev.User,
-						"channel":   ev.Channel,
-						"thread_ts": ev.ThreadTimeStamp,
-						"text":      ev.Text,
-					},
-					RecordID:  ev.TimeStamp,
-					CompanyID: companyID,
-					CreatedAt: slackTimestampToTime(ev.TimeStamp),
-				}
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+		defer cancel()
+		botID, err := h.slackBot.GetBotID(ctx)
+		if err != nil {
+			log.Printf("RecordID: %s - Failed to verify Slack bot identity: %v", ev.TimeStamp, err)
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Unable to process message"})
+			return
+		}
+		if ev.BotID != "" || ev.User == botID || strings.Contains(ev.Text, "<@") || ev.User == "" {
+			log.Printf("RecordID: %s - Skipping message event (bot or mention)", ev.TimeStamp)
+			c.JSON(http.StatusOK, gin.H{"status": "skipped bot/mention"})
+			return
+		}
 
-				// Retry ingestion
-				for attempt := 1; attempt <= 3; attempt++ {
-					if err := h.slackIngest.IngestSlackEvent(ctx, ingestReq); err != nil {
-						log.Printf("RecordID: %s - Failed to ingest message in %.3fs (attempt %d): %v", ev.TimeStamp, time.Since(start).Seconds(), attempt, err)
-						if attempt == 3 {
-							c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process message"})
-							return
-						}
-						time.Sleep(time.Duration(attempt*attempt) * 100 * time.Millisecond)
-						continue
-					}
-					log.Printf("RecordID: %s - Successfully ingested message in %.3fs", ev.TimeStamp, time.Since(start).Seconds())
-					break
-				}
-			} else {
-				log.Printf("RecordID: %s - Skipping message event (bot or mention) in %.3fs", ev.TimeStamp, time.Since(start).Seconds())
-				c.JSON(http.StatusOK, gin.H{"status": "skipped bot/mention"})
+		ingestReq := domain.IngestRequest{
+			Source:    "slack",
+			EventType: "message",
+			Content:   strings.TrimSpace(ev.Text),
+			Payload: map[string]interface{}{
+				"user":      ev.User,
+				"channel":   ev.Channel,
+				"thread_ts": ev.ThreadTimeStamp,
+				"text":      ev.Text,
+			},
+			RecordID:  eventID,
+			CompanyID: companyID,
+			CreatedAt: eventTime,
+		}
+		var processingErr error
+		for attempt := 1; attempt <= 3; attempt++ {
+			processingErr = h.slackIngest.IngestSlackEvent(ctx, ingestReq)
+			if processingErr == nil {
+				break
 			}
-		}()
+			log.Printf("RecordID: %s - Failed to ingest Slack message (attempt %d): %v", ev.TimeStamp, attempt, processingErr)
+			if attempt < 3 {
+				select {
+				case <-ctx.Done():
+					processingErr = ctx.Err()
+					attempt = 3
+				case <-time.After(time.Duration(attempt*attempt) * 100 * time.Millisecond):
+				}
+			}
+		}
+		if processingErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process message"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "event received"})
+		return
 	}
 
 	log.Printf("Successfully handled Slack webhook of type %s in %.3fs", eventsAPIEvent.Type, time.Since(start).Seconds())
@@ -241,10 +261,12 @@ func (h *SlackHandler) HandleSlackWebhook(c *gin.Context) {
 //
 //	True if signature is valid, false otherwise.
 func (h *SlackHandler) verifySlackSignature(timestamp, signature string, body []byte) bool {
-	start := time.Now()
 	ts, err := strconv.ParseInt(timestamp, 10, 64)
-	if err != nil || time.Now().Unix()-ts > 5*60 {
-		log.Printf("Invalid Slack timestamp: %s in %.3fs", timestamp, time.Since(start).Seconds())
+	if err != nil {
+		return false
+	}
+	delta := time.Since(time.Unix(ts, 0))
+	if delta < -5*time.Minute || delta > 5*time.Minute {
 		return false
 	}
 
@@ -252,12 +274,7 @@ func (h *SlackHandler) verifySlackSignature(timestamp, signature string, body []
 	hash := hmac.New(sha256.New, []byte(h.signKey))
 	hash.Write([]byte(sigBase))
 	expectedSignature := "v0=" + hex.EncodeToString(hash.Sum(nil))
-	if signature != expectedSignature {
-		log.Printf("Signature mismatch in %.3fs", time.Since(start).Seconds())
-		return false
-	}
-	log.Printf("Successfully verified Slack signature in %.3fs", time.Since(start).Seconds())
-	return true
+	return hmac.Equal([]byte(signature), []byte(expectedSignature))
 }
 
 // slackTimestampToTime converts a Slack timestamp string to time.Time in UTC.
@@ -268,12 +285,20 @@ func (h *SlackHandler) verifySlackSignature(timestamp, signature string, body []
 // Returns:
 //
 //	Converted time.Time or current time on error.
-func slackTimestampToTime(ts string) time.Time {
+func parseSlackTimestamp(ts string) (time.Time, bool) {
 	parts := strings.Split(ts, ".")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return time.Time{}, false
+	}
 	sec, err := strconv.ParseInt(parts[0], 10, 64)
 	if err != nil {
-		log.Printf("Failed to parse Slack timestamp %s: %v, using current time", ts, err)
-		return time.Now().UTC()
+		return time.Time{}, false
 	}
-	return time.Unix(sec, 0).UTC()
+	if _, err := strconv.ParseInt(parts[1], 10, 64); err != nil {
+		return time.Time{}, false
+	}
+	if sec < 0 {
+		return time.Time{}, false
+	}
+	return time.Unix(sec, 0).UTC(), true
 }

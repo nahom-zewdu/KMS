@@ -12,13 +12,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/nahom-zewdu/kMS/api/domain"
 )
 
@@ -54,7 +54,10 @@ func extractRichContent(eventType string, payload map[string]interface{}) string
 		}
 
 		for _, c := range commits {
-			commit := c.(map[string]interface{})
+			commit, ok := c.(map[string]interface{})
+			if !ok {
+				continue
+			}
 			message := strings.Split(getString(commit, "message"), "\n")[0]
 			author := getString(commit, "author", "name")
 			if author == "" {
@@ -81,24 +84,36 @@ func extractRichContent(eventType string, payload map[string]interface{}) string
 		}
 
 	case "pull_request":
-		pr := payload["pull_request"].(map[string]interface{})
-		action := payload["action"].(string)
-		number := int(pr["number"].(float64))
-		title := pr["title"].(string)
+		pr, ok := payload["pull_request"].(map[string]interface{})
+		if !ok {
+			return ""
+		}
+		action, _ := payload["action"].(string)
+		number, ok := pr["number"].(float64)
+		if !ok {
+			return ""
+		}
+		title, _ := pr["title"].(string)
 		user := getString(pr, "user", "login")
 		repo := getString(payload, "repository", "full_name")
 
-		sentences = append(sentences, fmt.Sprintf("%s %s pull request #%d: \"%s\" in %s", user, action, number, title, repo))
+		sentences = append(sentences, fmt.Sprintf("%s %s pull request #%d: \"%s\" in %s", user, action, int(number), title, repo))
 
 	case "issues":
-		issue := payload["issue"].(map[string]interface{})
-		action := payload["action"].(string)
-		number := int(issue["number"].(float64))
-		title := issue["title"].(string)
+		issue, ok := payload["issue"].(map[string]interface{})
+		if !ok {
+			return ""
+		}
+		action, _ := payload["action"].(string)
+		number, ok := issue["number"].(float64)
+		if !ok {
+			return ""
+		}
+		title, _ := issue["title"].(string)
 		user := getString(issue, "user", "login")
 		repo := getString(payload, "repository", "full_name")
 
-		sentences = append(sentences, fmt.Sprintf("%s %s issue #%d: \"%s\" in %s", user, action, number, title, repo))
+		sentences = append(sentences, fmt.Sprintf("%s %s issue #%d: \"%s\" in %s", user, action, int(number), title, repo))
 	}
 
 	if len(sentences) == 0 {
@@ -106,6 +121,54 @@ func extractRichContent(eventType string, payload map[string]interface{}) string
 	}
 
 	return strings.Join(sentences, ". ") + "."
+}
+
+// extractIssueSnapshot retains only bounded issue fields needed for contribution discovery.
+func extractIssueSnapshot(issue map[string]interface{}) map[string]interface{} {
+	return map[string]interface{}{
+		"number":     issue["number"],
+		"title":      getString(issue, "title"),
+		"body":       truncateText(getString(issue, "body"), 10000),
+		"state":      getString(issue, "state"),
+		"html_url":   getString(issue, "html_url"),
+		"created_at": issue["created_at"],
+		"updated_at": issue["updated_at"],
+		"labels":     extractIssueLabels(issue["labels"], 20),
+		"assignee":   getString(issue, "assignee", "login"),
+	}
+}
+
+// truncateText bounds webhook metadata retained for downstream indexing.
+func truncateText(value string, maxRunes int) string {
+	runes := []rune(value)
+	if len(runes) <= maxRunes {
+		return value
+	}
+	return string(runes[:maxRunes])
+}
+
+// extractIssueLabels keeps only label names; full webhook objects are unnecessary for Ramp.
+func extractIssueLabels(value interface{}, limit int) []string {
+	items, ok := value.([]interface{})
+	if !ok {
+		return []string{}
+	}
+	labels := make([]string, 0, min(len(items), limit))
+	for _, item := range items {
+		label, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		name, ok := label["name"].(string)
+		if !ok || strings.TrimSpace(name) == "" {
+			continue
+		}
+		labels = append(labels, strings.TrimSpace(name))
+		if len(labels) == limit {
+			break
+		}
+	}
+	return labels
 }
 
 // Helper: safely extract nested string
@@ -196,13 +259,10 @@ func (h *GitHubHandler) HandleGitHubWebhook(c *gin.Context) {
 		return
 	}
 
-	body, err := io.ReadAll(c.Request.Body)
-	if err != nil {
-		log.Printf("Failed to read request body in %.3fs: %v", time.Since(start).Seconds(), err)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to read request body"})
+	body, ok := readWebhookBody(c)
+	if !ok {
 		return
 	}
-	c.Request.Body = io.NopCloser(strings.NewReader(string(body)))
 
 	signature := c.GetHeader("X-Hub-Signature-256")
 	if !h.verifyGitHubSignature(signature, body) {
@@ -215,6 +275,10 @@ func (h *GitHubHandler) HandleGitHubWebhook(c *gin.Context) {
 	if deliveryID == "" {
 		log.Printf("Missing GitHub delivery ID in %.3fs", time.Since(start).Seconds())
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing delivery ID"})
+		return
+	}
+	if _, err := uuid.Parse(deliveryID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid delivery ID"})
 		return
 	}
 
@@ -243,6 +307,13 @@ func (h *GitHubHandler) HandleGitHubWebhook(c *gin.Context) {
 		"ref":         payload["ref"],
 	}
 
+	if eventType == "issues" {
+		if issue, ok := payload["issue"].(map[string]interface{}); ok {
+			minimalPayload["action"] = getString(payload, "action")
+			minimalPayload["issue"] = extractIssueSnapshot(issue)
+		}
+	}
+
 	if eventType == "push" {
 		// Full commits list (useful for multi-commit pushes)
 		if commits, ok := payload["commits"].([]interface{}); ok {
@@ -256,7 +327,10 @@ func (h *GitHubHandler) HandleGitHubWebhook(c *gin.Context) {
 
 		if commits, ok := payload["commits"].([]interface{}); ok {
 			for _, c := range commits {
-				commit := c.(map[string]interface{})
+				commit, ok := c.(map[string]interface{})
+				if !ok {
+					continue
+				}
 				allAdded = append(allAdded, interfaceSlice(commit["added"])...)
 				allModified = append(allModified, interfaceSlice(commit["modified"])...)
 				allRemoved = append(allRemoved, interfaceSlice(commit["removed"])...)

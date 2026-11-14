@@ -1,9 +1,18 @@
 import json
+import pytest
 from unittest.mock import Mock, patch
 
 from openai import BadRequestError
 
 from engine.llm import llm_infer
+
+
+@pytest.fixture(autouse=True)
+def clear_llm_inference_cache():
+    # Each test must exercise its own mocked provider responses.
+    llm_infer.cache_clear()
+    yield
+    llm_infer.cache_clear()
 
 
 def _json_validation_error():

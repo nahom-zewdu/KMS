@@ -18,10 +18,6 @@ class QueryHandler:
     def process(self, job: dict, stream: str, msg_id: str, redis_client):
         try:
             self.query_engine.handle_query(job)
-            
-            # Only ack if success (already handled inside QueryEngine via publish)
-            redis_client.xack(stream, "kms", msg_id)
-            redis_client.xdel(stream, msg_id)
         except Exception as e:
             logging.error(f"QueryHandler failed: {e}")
             raise  # Let consumer retry

@@ -3,7 +3,6 @@
 -- Create profiles table for user metadata
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID REFERENCES auth.users(id) PRIMARY KEY,
-  company_id TEXT DEFAULT 'default',
   name TEXT,
   role TEXT DEFAULT 'member',
   created_at TIMESTAMPTZ DEFAULT NOW()

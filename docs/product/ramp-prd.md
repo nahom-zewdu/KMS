@@ -1,9 +1,9 @@
 # Ramp — Customer Workflow PRD
 
 **Status:** Active product specification  
-**Branch baseline:** `feat/ramp`  
+**Branch baseline:** `feat/ramp` (product contract). Implementation baseline: `feat/implementation-relations`.  
 **Scope:** First customer-facing KMS workflow to validate the product  
-**Last updated:** 2026-08-31
+**Last updated:** 2026-09-21 (implementation-baseline pointers only)
 
 ## 1. Purpose
 
@@ -234,16 +234,17 @@ A real customer test should be possible without manual intervention from the dev
 
 ## 13. Current implementation baseline
 
-The current `feat/ramp` implementation already provides the foundation for this workflow:
+The current backend implementation provides foundation for this workflow, not proof that the workflow is useful:
 
-- Company/role-scoped Ramp plans
-- `RampPlanGenerator`
+- Company/role-scoped Ramp plans via `RampPlanner` (`nlp/ramp/generator_v2.py`)
 - Structured steps with fields including title, rationale, risk tier, owners, target, summary, resources, checklist, evidence, machine data, and overrides
 - Stable step identity intended for workspace/deep-link use
-- Frontend Ramp workspace and role-scoped routes
-- Existing codebase/ownership signals used during generation
+- Codebase/ownership/`IMPORTS` signals used during generation
+- Frontend Ramp workspace (separate `kms-frontend` repository; rendering correctness unverified from this repo)
 
-These existing capabilities are implementation facts, not reasons to preserve weak behavior. The implementation should be changed when required to satisfy this PRD.
+These capabilities are not reasons to preserve weak onboarding behavior. Import-path candidates are not validated workflows. Customer-ready acceptance in §12 is **not** met: there is no repository evidence of a real engineer using Ramp on an unfamiliar codebase.
+
+Architecture: `docs/architecture/ramp.md`. Execution: `docs/development/roadmap.md`.
 
 ## 14. Product-quality bar
 
@@ -293,6 +294,8 @@ These must remain hypotheses until tested:
 - `docs/product/personas.md` — broader user/persona context
 - `docs/product/metrics.md` — product measurement context
 - `docs/architecture/ramp.md` — technical architecture of the current Ramp implementation
+- `docs/development/roadmap.md` — execution status and selected next task
+- `docs/product/ramp-intelligence-model.md` — evidence/candidate semantics
 
 This PRD defines the **customer outcome and product scope**. `docs/architecture/ramp.md` defines how the current system implements it. Neither should silently replace the other.
 

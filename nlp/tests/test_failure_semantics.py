@@ -25,6 +25,25 @@ class FailingSupabase:
         return FailingTable()
 
 
+class EmptySelectTable:
+    def select(self, *_args):
+        return self
+
+    def eq(self, *_args):
+        return self
+
+    def limit(self, *_args):
+        return self
+
+    def execute(self):
+        return type("Response", (), {"data": []})()
+
+
+class EmptySelectSupabase:
+    def table(self, _name):
+        return EmptySelectTable()
+
+
 class FallbackTable:
     def upsert(self, *args, **kwargs):
         raise RuntimeError("upsert unavailable")
@@ -46,8 +65,9 @@ class FailureSemanticsTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "entity persistence failed"):
             db_helpers.insert_entities(FailingSupabase(), [{"id": "1"}])
 
-    def test_successful_entity_fallback_is_success(self):
-        db_helpers.insert_entities(FallbackSupabase(), [{"id": "1"}])
+    def test_entity_upsert_failure_propagates(self):
+        with self.assertRaisesRegex(RuntimeError, "entity persistence failed"):
+            db_helpers.insert_entities(FallbackSupabase(), [{"id": "1"}])
 
 
     def test_embedding_failure_propagates(self):
@@ -55,7 +75,10 @@ class FailureSemanticsTests(unittest.TestCase):
         db_helpers.embed_content = lambda _content: (_ for _ in ()).throw(RuntimeError("embed"))
         self.addCleanup(setattr, db_helpers, "embed_content", original)
         with self.assertRaisesRegex(RuntimeError, "embedding generation failed"):
-            db_helpers.insert_raw_data(FailingSupabase(), {"record_id": "r1", "content": "text"})
+            db_helpers.insert_raw_data(
+                EmptySelectSupabase(),
+                {"record_id": "r1", "company_id": "company-1", "content": "text"},
+            )
 
 
     def test_ner_llm_failure_propagates(self):

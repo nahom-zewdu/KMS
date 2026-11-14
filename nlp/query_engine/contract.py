@@ -144,8 +144,6 @@ def owners_from_chunks(chunks: List[Dict[str, Any]]) -> List[str]:
         if len(parts) >= 3 and parts[1].upper() in (
             "OWNS",
             "MAINTAINS",
-            "ASSIGNED_TO",
-            "FIXES",
         ):
             name = parts[0].strip()
             if name and name.lower() != "unknown" and name not in owners:

@@ -90,6 +90,7 @@ class RampCandidate:
     concrete_action: str
     verification_method: str
     contribution_candidate: bool = False
+    history_strength: float = 0.0
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     @property

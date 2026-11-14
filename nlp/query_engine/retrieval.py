@@ -19,7 +19,7 @@ class AdaptiveRetriever:
     def _normalize_entity(self, text: str) -> str:
         return re.sub(r"\s+", " ", text.strip())
 
-    def _find_entity_candidates(self, question: str, company_id: str = "default", limit: int = 6) -> List[str]:
+    def _find_entity_candidates(self, question: str, company_id: str, limit: int = 6) -> List[str]:
         """Fallback entity candidates from the knowledge graph."""
         candidates: List[str] = []
         if not question:
@@ -62,7 +62,7 @@ class AdaptiveRetriever:
 
         return list(dict.fromkeys(self._normalize_entity(c) for c in candidates if c))
 
-    def _search_edges_by_entity(self, entity: str, relation_types: Any, company_id: str = "default") -> List[Dict[str, Any]]:
+    def _search_edges_by_entity(self, entity: str, relation_types: Any, company_id: str) -> List[Dict[str, Any]]:
         chunks: List[Dict[str, Any]] = []
         entity = self._normalize_entity(entity)
         if not entity:
@@ -81,7 +81,7 @@ class AdaptiveRetriever:
                     {
                         "search_term": entity,
                         "relation_types": relation_types,
-                        "company_id": company_id
+                        "filter_company_id": company_id,
                     }
                 )
                 .execute()
@@ -140,6 +140,7 @@ class AdaptiveRetriever:
                         self.supabase.table("entities")
                         .select("id,name")
                         .in_("id", list(missing_ids))
+                        .eq("company_id", company_id)
                         .execute()
                     )
                     for row in missing_rows.data or []:
@@ -165,7 +166,7 @@ class AdaptiveRetriever:
 
         return chunks
 
-    def _entity_context_chunks(self, entities: List[str], company_id: str = "default") -> List[Dict[str, Any]]:
+    def _entity_context_chunks(self, entities: List[str], company_id: str) -> List[Dict[str, Any]]:
         chunks: List[Dict[str, Any]] = []
         seen_names = set()
         for entity in entities[:6]:
@@ -199,7 +200,9 @@ class AdaptiveRetriever:
                 logger.debug("Entity context lookup failed for '%s': %s", entity, e)
         return chunks
 
-    def retrieve(self, question: str, company_id: str = "default") -> List[Dict]:
+    def retrieve(self, question: str, company_id: str | None = None) -> List[Dict]:
+        if not company_id or company_id.strip().lower() == "default":
+            raise ValueError("A real company_id is required for knowledge retrieval")
         analysis = analyze_query(question)
         logger.info(f"Query analysis: {analysis} | company={company_id}")
 
@@ -228,8 +231,7 @@ class AdaptiveRetriever:
                 company_id=company_id,  # if VectorRetriever supports it; else filter after
             )
             for c in vec_chunks:
-                # Soft filter if RPC is still global
-                if c.get("company_id") and c.get("company_id") not in (company_id, "default"):
+                if c.get("company_id") != company_id:
                     continue
                 chunks.append({
                     "content": c.get("content", "")[:900],

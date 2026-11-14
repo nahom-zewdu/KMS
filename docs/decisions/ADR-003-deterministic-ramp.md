@@ -1,7 +1,9 @@
 # ADR-003: Deterministic Ramp Generation
 
 ## Status
-Accepted, with scope clarified 2026-09-12
+Accepted, with scope clarified 2026-09-12.
+
+Unchanged by later import-path work. What an `IMPORTS` edge is allowed to prove is recorded separately in `docs/decisions/ADR-004-imports-are-not-workflows.md` (accepted 2026-09-21). Do not read this ADR as if it had defined import-path candidates.
 
 ## Context
 
@@ -41,5 +43,7 @@ Determinism is a means to trustworthiness, not the product itself. The redesigne
 ## Related documentation
 
 - `docs/product/ramp-prd.md` — customer outcome and product contract
-- `docs/product/ramp-redesign.md` — target intelligence model and execution plan
-- `docs/architecture/ramp.md` — technical architecture and migration strategy
+- `docs/product/ramp-redesign.md` — target intelligence model (design intent)
+- `docs/architecture/ramp.md` — current Ramp runtime
+- `docs/decisions/ADR-004-imports-are-not-workflows.md` — import edges vs workflows
+- `docs/development/roadmap.md` — execution status

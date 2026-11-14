@@ -1,6 +1,6 @@
 # Architecture Overview
 
-> Current-state snapshot: `feat/ramp`, 2026-08-30. This document describes the system as it exists, not an aspirational architecture.
+> Current-state snapshot: `feat/implementation-relations`, reviewed 2026-11-14. This describes the current repository architecture; it is not a claim that every quality/security guarantee is verified. Ramp intelligence detail: `docs/architecture/ramp.md`. Knowledge-pipeline audit and target direction: `docs/architecture/knowledge-reliability.md`.
 
 ## System boundary
 
@@ -47,7 +47,7 @@ Owns HTTP ingress, Slack/GitHub webhook verification, company resolution, event 
 
 Owns Redis consumption, NER/relation extraction, knowledge-graph writes, embeddings/query processing, codebase analysis, baseline synchronization, playbook generation, visualizer data, and Ramp generation/fetching.
 
-The current `feat/ramp` branch includes the durable codebase-analysis stream design: GitHub push ingestion publishes a `codebase_analysis_jobs` job, and `processor.py` registers a dedicated handler. This is part of the current branch rather than merely a planned design.
+GitHub push ingestion publishes a `codebase_analysis_jobs` job, and `processor.py` registers a dedicated handler. Baseline sync also indexes Python/Go `IMPORTS` edges. That is implemented, not merely planned.
 
 ### Frontend
 
@@ -67,7 +67,7 @@ The broader KMS knowledge-query capability also exists in the backend architectu
 
 ## Current state versus intended state
 
-Some reliability/security/schema work has already landed on `feat/ramp`; some earlier reports describe branches that no longer exist separately. The branch itself is authoritative for what is currently implemented.
+Some reliability/security/schema work landed on `feat/ramp` before it merged. Current Ramp relationship work is on `feat/implementation-relations`. The current branch is authoritative for what is implemented.
 
 Do not assume these properties merely because older README text claims them:
 
@@ -82,3 +82,12 @@ These are engineering/product claims that require executable or live-system evid
 ## Architectural principle
 
 KMS should remain small while customer value is being validated. New infrastructure must solve a demonstrated problem. Correctness and security issues that directly affect customer data or a core user flow are exceptions and should be fixed when encountered.
+
+
+## Knowledge pipeline status (2026-11-14)
+
+The current system stores raw engineering records, graph entities/edges, repository/file/module metadata, and embeddings for raw event records. It does not yet have a durable code-chunk embedding index or a unified hybrid retrieval planner. Code-source retrieval remains a separate bounded path that selects indexed files and fetches source from GitHub at query time.
+
+The current code intelligence includes Python/Go import relationships and read-only Go route/handler/direct-operation evidence. Import relationships are structural facts, not runtime traces. The route/handler evidence composition is not yet a general cross-language call graph or proof of complete runtime behavior.
+
+See `docs/architecture/knowledge-reliability.md` for the detailed audit, known security risks, target retrieval architecture, and implementation gates. Do not infer tenant isolation from company_id columns alone; verify RLS, grants, RPC contracts, and application authorization against the live system.

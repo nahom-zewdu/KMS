@@ -10,13 +10,15 @@ By connecting scattered signals across tools, KMS eliminates onboarding friction
 
 ## Current Status MVP (Working End-to-End)
 
-- Slack & GitHub event ingestion (exactly-once)
-- Production-grade entity & relation extraction (grounded to UUIDs)
-- Real-time Slack bot (`@KMS`) with query → answer loop
-- Resilient Redis Streams + consumer groups
+- Slack & GitHub event ingestion with asynchronous Redis Stream processing
+- Entity/relation extraction with UUID-backed graph records
+- Slack query loop (`@KMS`) and Python query engine
+- Redis Streams consumer groups with retry/recovery behavior
 - Supabase-backed knowledge graph (`entities`, `edges`, `raw_data`, `events`)
-- Full referential integrity (no dangling edges)
-- Full multitanent and RBAC support
+- Company-scoped application data paths (database-wide tenant isolation remains under security verification)
+- Codebase file/module indexing and Ramp onboarding intelligence (current evidence limitations are documented under `docs/`)
+
+**Important:** delivery semantics, complete tenant isolation, and answer quality are not blanket guarantees. See `docs/architecture/knowledge-reliability.md` and `docs/data/schema.md` for current limitations and verification requirements.
 
 This repository contains:
 
@@ -70,6 +72,10 @@ Slack / GitHub webhooks
 
 ## Environment
 
+The root [`.env.example`](./.env.example) lists all environment variables read by
+the Go API, NLP worker, and NLP services. The GitHub API token is optional and is
+used for baseline tree walks.
+
 ### `api/`
 
 ```bash
@@ -80,7 +86,7 @@ REDIS_PASSWORD=
 SLACK_BOT_TOKEN=
 SLACK_SIGNING_SECRET=
 GITHUB_WEBHOOK_SECRET=
-PORT=9090
+PORT=8080
 ```
 
 ### `nlp/`

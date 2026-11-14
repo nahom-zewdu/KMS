@@ -51,7 +51,9 @@ class VisualizerService:
             logger.warning("files_for_company failed: %s", e)
             return []
 
-    def build_for_role(self, role: str, company_id: str = "default") -> Dict:
+    def build_for_role(self, role: str, company_id: str) -> Dict:
+        if not company_id or company_id.strip().lower() == "default":
+            raise ValueError("A real company_id is required for visualizer retrieval")
         try:
             architecture = self._build_architecture(company_id)
             modules = self._build_modules(role, company_id)
@@ -76,7 +78,7 @@ class VisualizerService:
             logger.error(f"Visualizer build failed for role '{role}': {e}", exc_info=True)
             return {"error": "Failed to load visualizer data"}
 
-    def _build_architecture(self, company_id: str = "default") -> List[Dict]:
+    def _build_architecture(self, company_id: str) -> List[Dict]:
         """Top-level architecture layers from codebase files."""
         try:
             rows = self._files_for_company(company_id, limit=200)
@@ -101,12 +103,15 @@ class VisualizerService:
             logger.warning(f"Architecture build failed: {e}")
             return [{"name": "Core Application", "description": "Main systems", "importance": 0.9}]
 
-    def _build_modules(self, role: str, company_id: str = "default") -> List[Dict]:
+    def _build_modules(self, role: str, company_id: str) -> List[Dict]:
         """Real modules from codebase_modules table with role boost."""
         try:
+            repo_ids = self._repo_ids_for_company(company_id)
+            if not repo_ids:
+                return []
             res = self.supabase.table("codebase_modules")\
                 .select("*")\
-                .eq("company_id", company_id)\
+                .in_("repository_id", repo_ids)\
                 .order("importance_score", desc=True)\
                 .limit(15).execute()
 
@@ -127,9 +132,9 @@ class VisualizerService:
             return modules
         except Exception as e:
             logger.warning(f"Modules query failed, falling back: {e}")
-            return self._fallback_modules(role)
+            return self._fallback_modules(role, company_id)
 
-    def _fallback_modules(self, role: str, company_id: str = "default") -> List[Dict]:
+    def _fallback_modules(self, role: str, company_id: str) -> List[Dict]:
         try:
             rows = self._files_for_company(company_id, limit=300)
             module_map = {}
@@ -150,7 +155,7 @@ class VisualizerService:
         except Exception:
             return []
 
-    def _build_key_files(self, role: str, company_id: str = "default") -> List[Dict]:
+    def _build_key_files(self, role: str, company_id: str) -> List[Dict]:
         """Key files for the role, based on recent activity and module mapping."""
         rows = self._files_for_company(company_id, limit=25)
         return [
@@ -165,7 +170,7 @@ class VisualizerService:
             if f.get("file_path")
         ]
 
-    def _build_learning_path(self, role: str, modules: List[Dict], company_id: str = "default") -> List[Dict]:
+    def _build_learning_path(self, role: str, modules: List[Dict], company_id: str) -> List[Dict]:
         """Role-aware prioritized learning path."""
         sorted_modules = sorted(modules, key=lambda m: m.get("importance", 0), reverse=True)
         return [
@@ -179,7 +184,7 @@ class VisualizerService:
             for i, mod in enumerate(sorted_modules[:7])
         ]
 
-    def _build_safe_zones(self, company_id: str = "default") -> Dict:
+    def _build_safe_zones(self, company_id: str) -> Dict:
         """Low-risk files for new engineers to explore."""
         try:
             rows = self._files_for_company(company_id, limit=120)
@@ -194,7 +199,7 @@ class VisualizerService:
         except Exception:
             return {"safe_first": [], "high_risk": []}
 
-    def _build_dependency_impact(self, company_id: str = "default") -> List[Dict]:
+    def _build_dependency_impact(self, company_id: str) -> List[Dict]:
         """Files with high downstream impact based on PART_OF edges."""
         rows = self._files_for_company(company_id, limit=40)
         # Heuristic: deeper / core paths
@@ -214,7 +219,7 @@ class VisualizerService:
             {"file": "(none indexed yet)", "impact": "Run baseline sync for this company", "downstream": []}
         ]
 
-    def _build_ownership(self, role: str, company_id: str = "default") -> Dict:
+    def _build_ownership(self, role: str, company_id: str) -> Dict:
         """Key ownership edges for the role, derived from KG."""
         try:
             res = (

@@ -8,8 +8,10 @@ Tests focus on:
 3. Failure semantics
 """
 
+import asyncio
 import pytest
 import json
+from types import SimpleNamespace
 from unittest.mock import Mock, patch, MagicMock, AsyncMock
 from datetime import datetime, timezone
 
@@ -88,6 +90,28 @@ class TestBaselineFailureSemanticsv2:
         with pytest.raises(ValueError, match="company_id is required"):
             handler.process(job, "codebase_baseline_jobs", "msg-1", redis_client)
 
+    def test_baseline_default_company_id_is_rejected(self):
+        handler = BaselineHandler()
+        job = {
+            "record_id": "test-baseline-123",
+            "company_id": "default",
+            "payload": {"repo": "org/repo"},
+        }
+
+        with pytest.raises(ValueError, match="real company_id"):
+            handler.process(job, "codebase_baseline_jobs", "msg-1", Mock())
+
+    def test_codebase_analysis_default_company_id_is_rejected(self):
+        handler = CodebaseAnalysisHandler()
+        job = {
+            "record_id": "delivery-123",
+            "company_id": "default",
+            "payload": {},
+        }
+
+        with pytest.raises(ValueError, match="company_id is required"):
+            asyncio.run(handler.process(job, "codebase_analysis_jobs", "msg-1", Mock()))
+
 
 class TestCodebaseAnalysisDurability:
     """Codebase analysis must be published to durable Redis stream, not daemon thread."""
@@ -111,6 +135,7 @@ class TestCodebaseAnalysisDurability:
         
         with patch('worker.ingestion.supabase') as mock_db, \
              patch('worker.ingestion.redis_client') as mock_redis, \
+             patch('worker.ingestion.ensure_event_tenant'), \
              patch('worker.ingestion.extract_entities', return_value=[]), \
              patch('worker.ingestion.insert_raw_data'), \
              patch('worker.ingestion.mark_event_processed'):
@@ -143,6 +168,7 @@ class TestCodebaseAnalysisDurability:
         
         with patch('worker.ingestion.supabase') as mock_db, \
              patch('worker.ingestion.redis_client') as mock_redis, \
+             patch('worker.ingestion.ensure_event_tenant'), \
              patch('worker.ingestion.extract_entities', return_value=[]), \
              patch('worker.ingestion.insert_raw_data'), \
              patch('worker.ingestion.mark_event_processed'):
@@ -168,6 +194,7 @@ class TestCodebaseAnalysisDurability:
         
         with patch('worker.ingestion.supabase') as mock_db, \
              patch('worker.ingestion.redis_client') as mock_redis, \
+             patch('worker.ingestion.ensure_event_tenant'), \
              patch('worker.ingestion.extract_entities', return_value=[]), \
              patch('worker.ingestion.insert_raw_data'), \
              patch('worker.ingestion.mark_event_processed'):
@@ -177,12 +204,59 @@ class TestCodebaseAnalysisDurability:
             # xadd should NOT be called for Slack events
             mock_redis.xadd.assert_not_called()
 
+    def test_entity_ids_are_scoped_by_company(self):
+        handler = IngestionHandler()
+        job = {
+            "record_id": "delivery-entity",
+            "source": "slack",
+            "event_type": "message",
+            "company_id": "company-a",
+            "payload": {},
+            "content": "alice owns the service",
+        }
+        entity = SimpleNamespace(
+            to_db_record=lambda: {
+                "id": "shared-name-id",
+                "name": "alice",
+                "metadata": {},
+                "created_at": "2026-01-01T00:00:00Z",
+            },
+            model_dump=lambda: {"text": "alice", "type": "PERSON"},
+        )
+
+        with patch("worker.ingestion.ensure_event_tenant"), \
+             patch("worker.ingestion.extract_entities", return_value=[entity]), \
+             patch("worker.ingestion.extract_relations", return_value=[]), \
+             patch("worker.ingestion.insert_entities") as insert_entities, \
+             patch("worker.ingestion.insert_raw_data"), \
+             patch("worker.ingestion.mark_event_processed"):
+            handler._process_sync(job)
+            company_a_id = insert_entities.call_args.args[1][0]["id"]
+
+            job["company_id"] = "company-b"
+            handler._process_sync(job)
+            company_b_id = insert_entities.call_args.args[1][0]["id"]
+
+        assert company_a_id != company_b_id
+
+    def test_ingestion_rejects_default_company_before_database_access(self):
+        handler = IngestionHandler()
+        with patch("worker.ingestion.ensure_event_tenant") as verify_event:
+            with pytest.raises(ValueError, match="real company_id"):
+                handler._process_sync({
+                    "record_id": "delivery-1",
+                    "source": "slack",
+                    "company_id": "default",
+                    "payload": {},
+                    "content": "text",
+                })
+        verify_event.assert_not_called()
+
 
 class TestCodebaseAnalysisHandler:
     """CodebaseAnalysisHandler processes analysis jobs from Redis stream."""
 
-    @pytest.mark.asyncio
-    async def test_codebase_analysis_success(self):
+    def test_codebase_analysis_success(self):
         """Successful codebase analysis completes normally."""
         handler = CodebaseAnalysisHandler()
         
@@ -195,19 +269,19 @@ class TestCodebaseAnalysisHandler:
             },
         }
         
-        with patch('worker.codebase_analysis.analyzer') as mock_analyzer:
+        with patch('worker.codebase_analysis.ensure_event_tenant'), \
+             patch('worker.codebase_analysis.analyzer') as mock_analyzer:
             mock_analyzer.process_push_event = AsyncMock(return_value=True)
             
             redis_client = Mock()
             
             # Should complete without raising
-            await handler.process(job, "codebase_analysis_jobs", "msg-1", redis_client)
+            asyncio.run(handler.process(job, "codebase_analysis_jobs", "msg-1", redis_client))
             
             # Verify analyzer was called
             mock_analyzer.process_push_event.assert_called_once()
 
-    @pytest.mark.asyncio
-    async def test_codebase_analysis_failure_raises_exception(self):
+    def test_codebase_analysis_failure_raises_exception(self):
         """Failed codebase analysis raises exception."""
         handler = CodebaseAnalysisHandler()
         
@@ -220,17 +294,17 @@ class TestCodebaseAnalysisHandler:
             },
         }
         
-        with patch('worker.codebase_analysis.analyzer') as mock_analyzer:
+        with patch('worker.codebase_analysis.ensure_event_tenant'), \
+             patch('worker.codebase_analysis.analyzer') as mock_analyzer:
             mock_analyzer.process_push_event = AsyncMock(return_value=False)
             
             redis_client = Mock()
             
             # Should raise exception when analysis returns False
             with pytest.raises(RuntimeError, match="returned false"):
-                await handler.process(job, "codebase_analysis_jobs", "msg-1", redis_client)
+                asyncio.run(handler.process(job, "codebase_analysis_jobs", "msg-1", redis_client))
 
-    @pytest.mark.asyncio
-    async def test_codebase_analysis_missing_company_id(self):
+    def test_codebase_analysis_missing_company_id(self):
         """Missing company_id raises exception."""
         handler = CodebaseAnalysisHandler()
         
@@ -243,10 +317,9 @@ class TestCodebaseAnalysisHandler:
         redis_client = Mock()
         
         with pytest.raises(ValueError, match="company_id is required"):
-            await handler.process(job, "codebase_analysis_jobs", "msg-1", redis_client)
+            asyncio.run(handler.process(job, "codebase_analysis_jobs", "msg-1", redis_client))
 
-    @pytest.mark.asyncio
-    async def test_codebase_analysis_exception_propagates(self):
+    def test_codebase_analysis_exception_propagates(self):
         """Exceptions during analysis propagate."""
         handler = CodebaseAnalysisHandler()
         
@@ -256,7 +329,8 @@ class TestCodebaseAnalysisHandler:
             "payload": {},
         }
         
-        with patch('worker.codebase_analysis.analyzer') as mock_analyzer:
+        with patch('worker.codebase_analysis.ensure_event_tenant'), \
+             patch('worker.codebase_analysis.analyzer') as mock_analyzer:
             mock_analyzer.process_push_event = AsyncMock(
                 side_effect=RuntimeError("Network error")
             )
@@ -264,4 +338,4 @@ class TestCodebaseAnalysisHandler:
             redis_client = Mock()
             
             with pytest.raises(RuntimeError, match="Network error"):
-                await handler.process(job, "codebase_analysis_jobs", "msg-1", redis_client)
+                asyncio.run(handler.process(job, "codebase_analysis_jobs", "msg-1", redis_client))

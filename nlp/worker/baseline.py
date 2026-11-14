@@ -19,14 +19,30 @@ class BaselineHandler:
     def process(self, job: dict, stream: str, msg_id: str, redis_client):
         """ Process a baseline sync job from the Redis stream."""
         repo = job.get("payload", {}).get("repo")
-        company_id = job.get("company_id") or job.get("payload", {}).get("company_id") or ""
-        if not company_id:
-            raise ValueError("company_id is required for baseline sync")
+        company_id = (job.get("company_id") or job.get("payload", {}).get("company_id") or "").strip()
+        if not company_id or company_id.lower() == "default":
+            raise ValueError("a real company_id is required for baseline sync")
         if not repo:
             logger.error("No repo in baseline job")
             raise ValueError("repo is required for baseline sync")
-        logger.info(f"Starting baseline sync for {repo} | company={company_id}")
+        record_id = job.get("record_id") or "unknown"
+        logger.info(
+            "Starting baseline sync | stream=%s | message_id=%s | "
+            "record_id=%s | repo=%s | company=%s",
+            stream,
+            msg_id,
+            record_id,
+            repo,
+            company_id,
+        )
         success = baseline_sync.sync_repository(repo, company_id=company_id)
         if not success:
             raise RuntimeError(f"Baseline sync failed for {repo}")
-        logger.info(f"Baseline sync completed for {repo}")
+        logger.info(
+            "Baseline sync completed | stream=%s | message_id=%s | "
+            "record_id=%s | repo=%s",
+            stream,
+            msg_id,
+            record_id,
+            repo,
+        )

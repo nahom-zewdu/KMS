@@ -20,7 +20,7 @@ func (s tenantStorage) Insert(context.Context, string, map[string]interface{}) e
 func (s tenantStorage) Query(context.Context, string, map[string]interface{}) ([]map[string]interface{}, error) {
 	return nil, nil
 }
-func (s tenantStorage) QueryKnowledgeGraphSupabase(context.Context, string) (string, error) {
+func (s tenantStorage) QueryKnowledgeGraphSupabase(context.Context, string, string) (string, error) {
 	return "", nil
 }
 func (s tenantStorage) ResolveCompanyByIntegration(context.Context, string, string) (string, error) {
@@ -28,6 +28,13 @@ func (s tenantStorage) ResolveCompanyByIntegration(context.Context, string, stri
 }
 func (s tenantStorage) ResolveCompanyByInstallation(context.Context, string) (string, error) {
 	return s.installation, nil
+}
+func (tenantStorage) AuthenticateUser(context.Context, string) (string, error) { return "", nil }
+func (tenantStorage) IsCompanyMember(context.Context, string, string) (bool, error) {
+	return false, nil
+}
+func (tenantStorage) ResolveRepositoryForCompany(context.Context, string, string) (string, error) {
+	return "", nil
 }
 
 var _ domain.StoragePort = tenantStorage{}
@@ -43,6 +50,11 @@ func TestResolveTenantRejectsDefault(t *testing.T) {
 	companyID, err := resolveSlackTenant(context.Background(), tenantStorage{owner: " default "}, "T1")
 	if !errors.Is(err, errTenantNotFound) || companyID != "" {
 		t.Fatalf("expected default tenant to be rejected, got company=%q err=%v", companyID, err)
+	}
+
+	companyID, err = resolveSlackTenant(context.Background(), tenantStorage{owner: "DEFAULT"}, "T1")
+	if !errors.Is(err, errTenantNotFound) || companyID != "" {
+		t.Fatalf("expected uppercase default tenant to be rejected, got company=%q err=%v", companyID, err)
 	}
 
 	companyID, err = resolveGitHubTenant(context.Background(), tenantStorage{installation: "default"}, "I1", "")

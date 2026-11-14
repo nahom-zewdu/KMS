@@ -1,8 +1,12 @@
 # Ramp Architecture
 
-**Status:** Clean intelligence rewrite in progress
-**Branch:** `feat/ramp`
-**Last updated:** 2026-09-12
+**Status:** Clean intelligence rewrite in progress (RID-05)
+**Branch:** `feat/implementation-relations`
+**Last updated:** 2026-11-14
+
+Product contract: `docs/product/ramp-prd.md`.
+Evidence/candidate semantics: `docs/product/ramp-intelligence-model.md`.
+Execution status: `docs/development/roadmap.md`.
 
 ## 1. Boundary
 
@@ -11,7 +15,7 @@ Ramp has two separate concerns:
 1. **Intelligence** — determine what a new engineer should understand/do next from company evidence.
 2. **Persistence/API** — save plans, hydrate progress, and expose the existing frontend contract.
 
-The old module-first generator is not part of the intelligence architecture.
+The deleted module-first generator is not part of the intelligence architecture. There is no `nlp/ramp/generator.py` on this branch.
 
 ## 2. Target architecture
 
@@ -61,11 +65,11 @@ The old module-first generator is not part of the intelligence architecture.
 
 ### Candidates own reasoning
 
-Candidates represent bounded outcomes. A candidate may reference files/modules/workflows, but those entities are not themselves onboarding steps.
+Candidates represent bounded outcomes. A candidate may reference files/modules/import paths, but those entities are not themselves onboarding steps.
 
 ### Deterministic selection owns trust
 
-Eligibility, risk, evidence strength, score, prerequisites, ordering, and contribution readiness are deterministic. LLM output cannot override them.
+Eligibility, risk, evidence strength, score, prerequisites, ordering, and contribution readiness are deterministic. LLM output cannot override them. `polish_why` is accepted by `POST /ramp-plans/generate` and is unused by `RampPlanner`.
 
 ### Persistence is an adapter
 
@@ -76,32 +80,51 @@ Eligibility, risk, evidence strength, score, prerequisites, ordering, and contri
 `nlp/ramp/` contains:
 
 - `models.py` — normalized reasoning objects;
-- `evidence.py` — company-scoped evidence extraction;
-- `workflows.py` — workflow candidate discovery;
+- `evidence.py` — company-scoped evidence extraction, including FILE-to-FILE graph edges;
+- `workflows.py` — bounded directed-path candidate discovery;
 - `candidates.py` — candidate gates/scoring/sequence;
 - `store.py` — persistence/progress;
 - `generator_v2.py` — `RampPlanner` orchestration.
 
-`nlp/api.py` uses `RampPlanner` directly.
+`nlp/api.py` instantiates `RampPlanner` directly.
 
-`nlp/ramp/generator.py` contains no legacy intelligence; it is only a compatibility import surface. The historical `evidence_generator.py` has been removed.
+Implementation relationships are extracted during baseline sync:
+
+- `nlp/codebase/relationships.py` — Python AST imports and Go `import` paths resolved against the file inventory;
+- `nlp/codebase/relationship_indexer.py` — rebuilds company-scoped `IMPORTS` edges for one repository;
+- called from `nlp/codebase/baseline.py` after file/module indexing.
+
+`WorkflowDiscoverer` decomposes FILE-to-FILE relations into deterministic directed paths rather than treating each weakly connected component as one workflow. Paths are limited to eight files and eight candidates per component; each candidate keeps only the relationship evidence on its path. Cycles use deterministic fallback starts, isolated surfaces are ignored, and inferred-only relationships do not produce candidates.
 
 ## 5. Current evidence boundary
 
-The first workflow implementation uses indexed structural evidence. For example, multiple GitHub/webhook/ingestion/Redis implementation surfaces can form a **workflow candidate**. The workflow relationship is still an inferred signal until source-level implementation relationship extraction exists.
+Indexed `IMPORTS` edges are **direct structural facts** when extraction resolved both endpoints. They are not runtime traces.
 
-The user-facing action therefore asks the engineer to verify the actual control/data flow in source and explicitly mark unsupported links as unknown.
+`RampEvidenceStore.implementation_relationships()` maps FILE entity IDs to paths, skips `PART_OF` and `OWNS`, and classifies remaining edges by stored confidence (`≥ 0.8` direct, `≥ 0.6` derived, else inferred). The extractor writes `IMPORTS` at confidence `1.0`, so live import evidence is classified **direct**.
 
-This is intentional epistemic behavior, not a hidden fallback.
+That does **not** upgrade a path into a verified workflow. See `docs/decisions/ADR-004-imports-are-not-workflows.md`.
+
+Go imports resolve to the first sorted non-test `.go` file in the imported package. Python unresolved/external imports are omitted.
+
+The user-facing workflow action asks the engineer to follow only observed implementation relationships, verify each boundary in source, and mark missing control/data-flow links as unknown.
+
+Live quality of the resulting candidates (one company, 2026-09-20) is recorded in `docs/product/ramp-candidate-evaluation-2026-09-20.md`. That snapshot is not customer validation.
 
 ## 6. Contribution boundary
 
-Ramp must not generate a first coding task merely because a file looks relevant. Contribution candidates require bounded change evidence, verification, controlled risk, credible help, and sufficient history/change precedent.
+Ramp must not generate a first coding task merely because a file looks relevant or is imported. Contribution candidates require bounded change evidence, verification, controlled risk, credible help, and sufficient history/change precedent.
 
-Until those signals exist, Ramp should stop at investigation/readiness.
+Until those signals exist, Ramp should stop at investigation/readiness. The current planner emits no contribution candidates.
 
 ## 7. Migration rule
 
-Do not add new features to the former module-first generator. If a useful behavior is discovered there, reimplement the behavior against the new evidence/candidate model or deliberately discard it.
+Do not add features to a restored module-first generator. If a useful behavior is needed, implement it against the evidence/candidate model or discard it.
 
 Working infrastructure—Supabase, ingestion, progress persistence, API routes, and the existing frontend workspace—is preserved because it is infrastructure, not the old Ramp reasoning model.
+
+
+## 8. Current branch handoff
+
+The route/handler/direct-operation evidence work has progressed beyond the initial import-only model, but the composed evidence remains read-only and unintegrated into the production planner/index. RID-09 still requires local verification and human usefulness evaluation. Do not describe the current candidates as verified runtime workflows.
+
+The next platform milestone is KRT (Knowledge Reliability & Trust), specified in `docs/development/milestones/2026-11-14-knowledge-reliability.md`. It is intentionally scheduled after `feat/implementation-relations` is merged into `feat/ramp`; no KRT implementation belongs on the current branch.

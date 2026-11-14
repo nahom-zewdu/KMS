@@ -6,6 +6,7 @@ Uses query understanding + adaptive retrieval + reasoning.
 import hashlib
 import time
 import logging
+import re
 from typing import Dict, Any, List
 import json
 from supabase import Client
@@ -16,6 +17,8 @@ from .retrieval import AdaptiveRetriever
 from .synthesizer import reasoning_synthesize
 from .cache import QueryCache
 from .analytics import log_query
+from .structured import answer_structured_question
+from .source_retriever import retrieve_source_chunks
 
 logger = logging.getLogger("kms.core")
 
@@ -55,7 +58,17 @@ class QueryEngine:
         if ramp_context is not None:
             ramp_context = str(ramp_context).strip() or None
 
-        company_id = (job.get("company_id") or payload.get("company_id") or "default").strip() or "default"
+        company_id = str(job.get("company_id") or payload.get("company_id") or "").strip()
+        if not company_id or company_id.lower() == "default":
+            raise ValueError("A real company_id is required for query processing")
+
+        conversation_history = payload.get("conversation_history") or []
+        if not isinstance(conversation_history, list):
+            conversation_history = []
+        conversation_history = [
+            item for item in conversation_history[-8:]
+            if isinstance(item, dict) and item.get("role") in {"user", "assistant"}
+        ]
 
         logger.info(f"Query {query_id} | company={company_id} | question={question} | ramp_context_present={bool(ramp_context)}")
 
@@ -65,7 +78,114 @@ class QueryEngine:
             self.redis.publish(f"query_results:{query_id}", final_answer)
             return final_answer
 
-        cache_key = self._cache_key(question, company_id, ramp_context)
+        # Resolve short acknowledgements against the immediately preceding user turn.
+        # This preserves conversational continuity without asking the LLM to invent facts.
+        effective_question = question
+        if question.lower().strip(" .!?") in {"yes", "yeah", "yea", "yep", "sure", "go on", "tell me more"}:
+            previous_user = next(
+                (str(item.get("content") or "").strip()
+                 for item in reversed(conversation_history)
+                 if item.get("role") == "user"
+                 and str(item.get("content") or "").strip()
+                 and str(item.get("content") or "").strip() != question),
+                "",
+            )
+            if previous_user:
+                effective_question = previous_user
+
+        # A bare "what?" is ambiguous; avoid unrelated graph/vector retrieval.
+        if question.lower().strip(" .!?") in {"what", "huh"}:
+            answer_json = {
+                "answer": "What would you like me to clarify from my previous answer?",
+                "confidence": "low",
+                "sources": [],
+                "owners": [],
+                "abstain_reason": "ambiguous_follow_up",
+            }
+            final_answer = json.dumps(answer_json, indent=2)
+            self.redis.publish(f"query_results:{query_id}", final_answer)
+            return final_answer
+
+        if question.lower().strip(" .!?") in {"thank you", "thanks", "thx"}:
+            answer_json = {
+                "answer": "You're welcome.",
+                "confidence": "high",
+                "sources": [],
+                "owners": [],
+                "abstain_reason": None,
+            }
+            final_answer = json.dumps(answer_json, indent=2)
+            self.redis.publish(f"query_results:{query_id}", final_answer)
+            return final_answer
+
+        # For file-explanation questions, retrieve bounded source text from files
+        # already indexed under this company before asking the model to explain them.
+        try:
+            source_chunks = retrieve_source_chunks(
+                self.supabase, company_id, effective_question, ramp_context,
+                conversation_history=conversation_history,
+            )
+        except Exception:
+            logger.exception("Source-code retrieval failed | company=%s", company_id)
+            source_chunks = []
+        if source_chunks:
+            try:
+                raw_source_answer = reasoning_synthesize(
+                    effective_question,
+                    source_chunks,
+                    allowed_owners=[],
+                    ramp_context=ramp_context,
+                )
+                source_answer = normalize_answer(raw_source_answer)
+            except Exception:
+                logger.exception("Source-code synthesis failed | company=%s", company_id)
+                source_answer = abstain("synthesis_failed")
+            source_answer["sources"] = sources_from_chunks(source_chunks)
+            source_answer["owners"] = []
+            if source_answer.get("sources") and source_answer.get("abstain_reason") is None:
+                final_answer = json.dumps(source_answer, indent=2)
+                self.redis.publish(f"query_results:{query_id}", final_answer)
+                logger.info(
+                    "Source-grounded answer sent | %s | company=%s | files=%d",
+                    query_id, company_id, len(source_chunks),
+                )
+                return final_answer
+
+        # Structured company facts must come from authoritative tables, not vector top-k.
+        try:
+            structured = answer_structured_question(
+                self.supabase, effective_question, company_id, ramp_context,
+                conversation_history=conversation_history,
+            )
+        except Exception:
+            logger.exception("Structured query failed | company=%s", company_id)
+            structured = None
+        if structured is not None:
+            final_answer = json.dumps(structured, indent=2)
+            self.redis.publish(f"query_results:{query_id}", final_answer)
+            logger.info(
+                "Structured answer sent | %s | company=%s | question=%s",
+                query_id, company_id, effective_question,
+            )
+            return final_answer
+
+        requires_structured_facts = bool(re.search(
+            r"\b(owner|owners|owns|maintainer|maintainers|responsible for)\b"
+            r"|\b(who|which person)\b.*\b(implemented|authored|wrote|changed|committed)\b"
+            r"|\b(how many|count|number of)\b.*\b(files?|source files?|steps?|tasks?)\b"
+            r"|\bwhat is the repo\b|\bwhere are we right now\b",
+            effective_question.lower(),
+        ))
+        if requires_structured_facts:
+            final_answer = json.dumps(abstain("structured_evidence_unavailable"), indent=2)
+            self.redis.publish(f"query_results:{query_id}", final_answer)
+            logger.warning(
+                "Abstained on structured fact without authoritative evidence | %s | company=%s",
+                query_id, company_id,
+            )
+            return final_answer
+
+        cache_key = self._cache_key(effective_question, company_id, ramp_context)
         if cached := self.cache.get(cache_key):
             logger.info(f"Cache hit for query {query_id}")
             self.redis.publish(f"query_results:{query_id}", cached)
@@ -73,7 +193,7 @@ class QueryEngine:
 
         try:
             relevant_chunks: List[Dict] = self.retriever.retrieve(
-                question, company_id=company_id
+                effective_question, company_id=company_id
             )
         except Exception as e:
             logger.error(f"Retrieval failed: {e}")

@@ -100,6 +100,9 @@ func (r *RedisStream) Subscribe(ctx context.Context, channel string) (<-chan str
 	pubsub := r.client.Subscribe(ctx, channel)
 	_, err := pubsub.Receive(ctx)
 	if err != nil {
+		if closeErr := pubsub.Close(); closeErr != nil {
+			log.Printf("Channel: %s - Failed to close incomplete subscription: %v", channel, closeErr)
+		}
 		log.Printf("Channel: %s - Failed to subscribe in %.3fs: %v", channel, time.Since(start).Seconds(), err)
 		return nil, fmt.Errorf("failed to subscribe to %s: %v", channel, err)
 	}

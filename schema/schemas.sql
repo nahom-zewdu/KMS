@@ -30,6 +30,9 @@ END $$;
 -- Events table: Stores raw GitHub/Slack payloads
 CREATE TABLE public.events (
     id UUID PRIMARY KEY,
+    company_id TEXT NOT NULL CHECK (
+        btrim(company_id) <> '' AND lower(btrim(company_id)) <> 'default'
+    ),
     source TEXT CHECK (source IN ('slack', 'github')) NOT NULL,
     event_type TEXT NOT NULL,
     payload JSONB NOT NULL,
@@ -38,7 +41,7 @@ CREATE TABLE public.events (
     truncated BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
-COMMENT ON TABLE public.events IS 'Stores raw event payloads from GitHub/Slack webhooks for auditability and processing.';
+COMMENT ON TABLE public.events IS 'Stores company-scoped raw GitHub/Slack payloads for auditability and processing.';
 CREATE INDEX idx_events_source ON public.events (source);
 CREATE INDEX idx_events_delivery_id ON public.events (delivery_id);
 COMMENT ON INDEX idx_events_source IS 'Index on source column for efficient filtering by slack/github.';
@@ -48,6 +51,7 @@ COMMENT ON INDEX idx_events_delivery_id IS 'Index on delivery_id for fast idempo
 -- Raw Data table: summarized event content linked to raw payloads
 CREATE TABLE public.raw_data (
     id UUID PRIMARY KEY,
+    company_id TEXT NOT NULL,
     source TEXT CHECK (source IN ('slack', 'github')) NOT NULL,
     content TEXT NOT NULL,
     record_id TEXT UNIQUE NOT NULL,
@@ -91,6 +95,7 @@ COMMENT ON TABLE public.edges IS 'Stores relationships between entities (e.g., P
 -- Contributions: metrics per PERSON/PROJECT pair
 CREATE TABLE public.contributions (
     id UUID PRIMARY KEY,
+    company_id TEXT NOT NULL,
     person_name TEXT NOT NULL,
     repo_name TEXT NOT NULL,
     commit_count INTEGER DEFAULT 0,
@@ -98,11 +103,11 @@ CREATE TABLE public.contributions (
     issue_count INTEGER DEFAULT 0,
     bus_factor FLOAT DEFAULT 0.0 CHECK (bus_factor >= 0 AND bus_factor <= 1),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(person_name, repo_name)
+    UNIQUE(company_id, person_name, repo_name)
 );
-CREATE INDEX idx_contributions_repo_name ON public.contributions (repo_name);
+CREATE INDEX idx_contributions_company_repo ON public.contributions (company_id, repo_name);
 COMMENT ON TABLE public.contributions IS 'Tracks contribution metrics per person per repository.';
-COMMENT ON INDEX idx_contributions_repo_name IS 'Index for fast metrics queries by repository.';
+COMMENT ON INDEX idx_contributions_company_repo IS 'Index for fast tenant-scoped metrics queries by repository.';
 
 
 -- Pull Requests
@@ -162,17 +167,24 @@ create index idx_query_logs_route on query_logs(route);
 --  GRANT PERMISSIONS (SUPABASE COMPATIBLE)
 -- ============================================================
 
-GRANT ALL ON SCHEMA public TO postgres, anon, authenticated, service_role;
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT ALL ON SCHEMA public TO postgres, service_role;
 
--- Grant existing tables
-GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, anon, authenticated, service_role;
-GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, anon, authenticated, service_role;
+-- Browser-facing roles receive only explicit table grants from policy migrations.
+REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
+REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM anon, authenticated;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO postgres, service_role;
 
 -- Ensure future tables also get same privileges
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
-GRANT ALL ON TABLES TO postgres, anon, authenticated, service_role;
+REVOKE ALL ON TABLES FROM anon, authenticated;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
-GRANT ALL ON SEQUENCES TO postgres, anon, authenticated, service_role;
+GRANT ALL ON TABLES TO postgres, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+REVOKE ALL ON SEQUENCES FROM anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+GRANT ALL ON SEQUENCES TO postgres, service_role;
 
 COMMENT ON SCHEMA public IS 'Public schema for KnowSphere, containing event ingestion, knowledge graph, and metrics tables.';
 
@@ -191,7 +203,7 @@ CREATE INDEX IF NOT EXISTS idx_entities_type_code ON entities(type) WHERE type I
 -- 1. Repositories table
 CREATE TABLE IF NOT EXISTS public.repositories (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    company_id TEXT NOT NULL DEFAULT 'default',
+    company_id TEXT NOT NULL,
     full_name TEXT UNIQUE NOT NULL,           -- e.g. "nahom-zewdu/KMS"
     default_branch TEXT DEFAULT 'main',
     description TEXT,
@@ -261,14 +273,60 @@ CREATE INDEX idx_modules_path ON codebase_modules(module_path);
 -----------------------------------------------
 -- Companies table
 CREATE TABLE IF NOT EXISTS public.companies (
-  id TEXT PRIMARY KEY DEFAULT 'default',
+  id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conrelid = 'public.events'::regclass
+      AND conname = 'events_company_id_fkey'
+  ) THEN
+    ALTER TABLE public.events
+      ADD CONSTRAINT events_company_id_fkey
+      FOREIGN KEY (company_id) REFERENCES public.companies(id);
+  END IF;
+END;
+$$;
+
+ALTER TABLE public.events
+  ADD CONSTRAINT events_id_company_id_key UNIQUE (id, company_id);
+ALTER TABLE public.events
+  ADD CONSTRAINT events_id_company_delivery_key UNIQUE (id, company_id, delivery_id);
+
+CREATE TABLE public.ingestion_outbox (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_id UUID NOT NULL,
+  company_id TEXT NOT NULL,
+  delivery_id TEXT NOT NULL UNIQUE,
+  job_payload JSONB NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'publishing', 'published', 'dead_letter')),
+  attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+  available_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  locked_by TEXT,
+  locked_until TIMESTAMPTZ,
+  last_error TEXT CHECK (last_error IS NULL OR length(last_error) <= 1000),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  published_at TIMESTAMPTZ,
+  CONSTRAINT ingestion_outbox_event_fkey
+    FOREIGN KEY (event_id, company_id, delivery_id)
+    REFERENCES public.events (id, company_id, delivery_id),
+  CONSTRAINT ingestion_outbox_lock_state_check
+    CHECK ((status = 'publishing') = (locked_by IS NOT NULL AND locked_until IS NOT NULL))
+);
+CREATE INDEX ingestion_outbox_dispatch_idx
+  ON public.ingestion_outbox (available_at, created_at)
+  WHERE status IN ('pending', 'publishing');
+
 -- Update profiles
 ALTER TABLE public.profiles 
-ADD COLUMN IF NOT EXISTS company_id TEXT REFERENCES public.companies(id) DEFAULT 'default',
+ADD COLUMN IF NOT EXISTS company_id TEXT REFERENCES public.companies(id),
 ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'member' CHECK (role IN ('admin', 'manager', 'member'));
 
 -- RLS policies (basic)
@@ -327,9 +385,9 @@ CREATE INDEX IF NOT EXISTS idx_company_repos_company ON public.company_repos (co
 
 -- KG tenant columns (if missing)
 ALTER TABLE public.entities
-  ADD COLUMN IF NOT EXISTS company_id TEXT NOT NULL DEFAULT 'default';
+  ADD COLUMN IF NOT EXISTS company_id TEXT NOT NULL;
 ALTER TABLE public.edges
-  ADD COLUMN IF NOT EXISTS company_id TEXT NOT NULL DEFAULT 'default';
+  ADD COLUMN IF NOT EXISTS company_id TEXT NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_entities_company ON public.entities (company_id);
 CREATE INDEX IF NOT EXISTS idx_edges_company ON public.edges (company_id);
@@ -371,3 +429,30 @@ CREATE INDEX IF NOT EXISTS idx_ramp_step_progress_plan_step
 
 CREATE INDEX IF NOT EXISTS idx_ramp_step_progress_company_user
   ON public.ramp_step_progress (company_id, user_id, status);
+
+
+-- Per-engineer usefulness feedback for Ramp onboarding steps.
+-- The NLP API accesses this table with service_role after validating user identity
+-- and company membership; it is intentionally unavailable to anon/authenticated.
+CREATE TABLE IF NOT EXISTS public.ramp_step_feedback (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  plan_id UUID NOT NULL REFERENCES public.ramp_plans(id) ON DELETE CASCADE,
+  company_id TEXT NOT NULL,
+  step_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  rating TEXT NOT NULL CHECK (rating IN ('useful', 'partially_useful', 'not_useful')),
+  reason TEXT CHECK (reason IS NULL OR char_length(reason) <= 1000),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (plan_id, step_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_ramp_step_feedback_plan_step
+  ON public.ramp_step_feedback (plan_id, step_id);
+
+CREATE INDEX IF NOT EXISTS idx_ramp_step_feedback_company_plan
+  ON public.ramp_step_feedback (company_id, plan_id);
+
+ALTER TABLE public.ramp_step_feedback ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.ramp_step_feedback FROM PUBLIC, anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.ramp_step_feedback TO service_role;

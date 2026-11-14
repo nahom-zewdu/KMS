@@ -20,12 +20,16 @@ def update_edge_lifecycle(
     source_id: str,
     target_id: str,
     edge_type: str,
-    source_record_id: str
+    source_record_id: str,
+    company_id: str,
 ):
     """
     Update confidence and last_seen_at for an existing edge.
     Called from ingestion.py after successful RE.
     """
+    if not company_id or company_id.strip().lower() == "default":
+        raise ValueError("A real company_id is required for edge lifecycle updates")
+
     try:
         # Find existing edge
         result = (
@@ -34,6 +38,7 @@ def update_edge_lifecycle(
             .eq("source_id", source_id)
             .eq("target_id", target_id)
             .eq("type", edge_type)
+            .eq("company_id", company_id)
             .execute()
         )
 
@@ -56,7 +61,7 @@ def update_edge_lifecycle(
             "last_seen_at": datetime.datetime.now(datetime.UTC).isoformat(),
             "expires_at": expires_at.isoformat(),
             "source_record_id": source_record_id  # latest proof
-        }).eq("id", edge["id"]).execute()
+        }).eq("id", edge["id"]).eq("company_id", company_id).execute()
 
         logger.info(f"Edge refreshed | {edge_type} | conf: {old_conf:.2f} → {new_conf:.2f}")
 

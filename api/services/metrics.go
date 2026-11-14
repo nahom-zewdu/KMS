@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -48,6 +49,9 @@ func (m *MetricsServiceImpl) UpdateContributions(ctx context.Context, req domain
 		log.Printf("RecordID: %s - Invalid source for metrics update: %s in %.3fs", req.RecordID, req.Source, time.Since(start).Seconds())
 		return fmt.Errorf("invalid source for metrics update: %s", req.Source)
 	}
+	if strings.TrimSpace(req.CompanyID) == "" || strings.EqualFold(strings.TrimSpace(req.CompanyID), "default") {
+		return fmt.Errorf("a real company_id is required for contribution metrics")
+	}
 
 	// Extract person and repo from payload
 	sender, _ := req.Payload["sender"].(map[string]interface{})["login"].(string)
@@ -60,6 +64,7 @@ func (m *MetricsServiceImpl) UpdateContributions(ctx context.Context, req domain
 	// Initialize update fields
 	update := map[string]interface{}{
 		"id":          NewUUID(),
+		"company_id":  strings.TrimSpace(req.CompanyID),
 		"person_name": sender,
 		"repo_name":   repoName,
 		"updated_at":  time.Now().UTC().Format(time.RFC3339),
@@ -89,7 +94,7 @@ func (m *MetricsServiceImpl) UpdateContributions(ctx context.Context, req domain
 
 	// Update bus factor asynchronously
 	go func() {
-		if _, err := m.CalculateBusFactor(context.Background(), repoName); err != nil {
+		if _, err := m.CalculateBusFactor(context.Background(), repoName, strings.TrimSpace(req.CompanyID)); err != nil {
 			log.Printf("RecordID: %s - Failed to update bus factor for %s in %.3fs: %v", req.RecordID, repoName, time.Since(start).Seconds(), err)
 		}
 	}()
@@ -107,10 +112,17 @@ func (m *MetricsServiceImpl) UpdateContributions(ctx context.Context, req domain
 // Returns:
 //
 //	Bus factor (0-1, 1 = single contributor) and error if query fails.
-func (m *MetricsServiceImpl) CalculateBusFactor(ctx context.Context, repoName string) (float64, error) {
+func (m *MetricsServiceImpl) CalculateBusFactor(ctx context.Context, repoName, companyID string) (float64, error) {
 	start := time.Now()
+	companyID = strings.TrimSpace(companyID)
+	if companyID == "" || strings.EqualFold(companyID, "default") {
+		return 0, fmt.Errorf("a real company_id is required for contribution metrics")
+	}
 	// Query contributions for the repository
-	records, err := m.storage.Query(ctx, "contributions", map[string]interface{}{"repo_name": repoName})
+	records, err := m.storage.Query(ctx, "contributions", map[string]interface{}{
+		"repo_name":  repoName,
+		"company_id": companyID,
+	})
 	if err != nil {
 		log.Printf("Failed to query contributions for %s in %.3fs: %v", repoName, time.Since(start).Seconds(), err)
 		return 0, fmt.Errorf("failed to query contributions: %v", err)
@@ -140,6 +152,7 @@ func (m *MetricsServiceImpl) CalculateBusFactor(ctx context.Context, repoName st
 		err = m.storage.Insert(ctx, "contributions", map[string]interface{}{
 			"person_name": topContributor,
 			"repo_name":   repoName,
+			"company_id":  companyID,
 			"bus_factor":  busFactor,
 			"updated_at":  time.Now().UTC().Format(time.RFC3339),
 		})

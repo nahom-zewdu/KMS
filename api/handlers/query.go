@@ -6,6 +6,8 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -20,10 +22,11 @@ import (
 type QueryHandler struct {
 	slackBot domain.SlackBotService
 	redis    domain.RedisStream
+	storage  domain.StoragePort
 }
 
-func NewQueryHandler(slackBot domain.SlackBotService, redis domain.RedisStream) *QueryHandler {
-	return &QueryHandler{slackBot: slackBot, redis: redis}
+func NewQueryHandler(slackBot domain.SlackBotService, redis domain.RedisStream, storage domain.StoragePort) *QueryHandler {
+	return &QueryHandler{slackBot: slackBot, redis: redis, storage: storage}
 }
 
 func (h *QueryHandler) HandleQuery(c *gin.Context) {
@@ -33,9 +36,21 @@ func (h *QueryHandler) HandleQuery(c *gin.Context) {
 		Question  string `json:"question"`
 		Context   string `json:"context"`
 		CompanyID string `json:"company_id"`
+		ConversationHistory []map[string]interface{} `json:"conversation_history"`
 	}
 
-	if err := c.ShouldBindJSON(&req); err != nil {
+	body, err := io.ReadAll(http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20))
+	if err != nil {
+		var maxBytesError *http.MaxBytesError
+		if errors.As(err, &maxBytesError) {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "Request payload too large"})
+			return
+		}
+		log.Printf("Invalid query request in %.3fs: %v", time.Since(start).Seconds(), err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		return
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
 		log.Printf("Invalid query request in %.3fs: %v", time.Since(start).Seconds(), err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
 		return
@@ -48,8 +63,8 @@ func (h *QueryHandler) HandleQuery(c *gin.Context) {
 	}
 
 	companyID := strings.TrimSpace(req.CompanyID)
-	if companyID == "" {
-		companyID = "default"
+	if !authorizeCompany(c, h.storage, companyID) {
+		return
 	}
 
 	content := question
@@ -76,6 +91,7 @@ func (h *QueryHandler) HandleQuery(c *gin.Context) {
 			"question":   question,
 			"context":    req.Context,
 			"company_id": companyID,
+			"conversation_history": req.ConversationHistory,
 		},
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	})

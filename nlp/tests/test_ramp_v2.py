@@ -1,8 +1,11 @@
 from unittest.mock import Mock
 
+import pytest
+
 from ramp.candidates import RampCandidateEngine
+from ramp.evidence import RampEvidenceRetrievalError
 from ramp.generator_v2 import RampPlanner
-from ramp.models import Evidence, ImplementationSurface
+from ramp.models import Evidence, ImplementationSurface, RampCandidate
 from ramp.workflows import WorkflowDiscoverer
 
 
@@ -10,12 +13,18 @@ class Query:
     """Minimal Supabase query double for Ramp planner tests."""
 
     def __init__(self, data):
-        self.data = data
+        self.data = list(data)
+        self.filters = []
 
     def select(self, *_args, **_kwargs):
         return self
 
     def eq(self, *_args, **_kwargs):
+        self.filters.append(("eq", _args[0], _args[1]))
+        return self
+
+    def in_(self, field, values):
+        self.filters.append(("in", field, values))
         return self
 
     def limit(self, *_args, **_kwargs):
@@ -25,7 +34,13 @@ class Query:
         return self
 
     def execute(self):
-        return type("Response", (), {"data": self.data})()
+        data = self.data
+        for operation, field, expected in self.filters:
+            if operation == "eq":
+                data = [row for row in data if row.get(field) == expected]
+            else:
+                data = [row for row in data if row.get(field) in expected]
+        return type("Response", (), {"data": data})()
 
 
 def surface(path, importance=0.5, author="alice"):
@@ -45,6 +60,7 @@ def relation(source, target, relation_type="CALLS", strength="derived"):
     return Evidence(
         ref=f"edge:{source}:{target}",
         source="edges",
+        repository_id="repo-1",
         kind="implementation_relation",
         strength=strength,
         detail=f"{source} --{relation_type}--> {target}",
@@ -53,6 +69,15 @@ def relation(source, target, relation_type="CALLS", strength="derived"):
             "target_ref": target,
             "relation_type": relation_type,
             "confidence": 0.8 if strength == "derived" else 1.0,
+            "provenance": {
+                "repository_id": "repo-1",
+                "source_revision": "a" * 40,
+                "extractor_id": "kms.go.gin.behavioral",
+                "extractor_version": "1",
+                "source_file": source,
+                "line": 1,
+                "observation": strength,
+            },
         },
     )
 
@@ -94,6 +119,34 @@ def test_weak_relationships_do_not_create_workflow_candidates():
     assert discoverer.discover(surfaces, evidence, "backend-engineer") == []
 
 
+def test_structural_import_edges_never_create_workflow_candidates():
+    discoverer = WorkflowDiscoverer()
+    surfaces = [surface("api/a.go"), surface("api/b.go")]
+    evidence = [relation("api/a.go", "api/b.go", relation_type="IMPORTS", strength="direct")]
+    assert discoverer.discover(surfaces, evidence, "backend-engineer") == []
+
+
+def test_behavioral_relation_without_provenance_is_rejected():
+    discoverer = WorkflowDiscoverer()
+    surfaces = [surface("api/a.go"), surface("api/b.go")]
+    item = relation("api/a.go", "api/b.go", relation_type="CALLS", strength="direct")
+    item.metadata.pop("provenance")
+    assert discoverer.discover(surfaces, [item], "backend-engineer") == []
+
+
+def test_structural_edges_are_removed_before_path_construction():
+    discoverer = WorkflowDiscoverer()
+    surfaces = [surface("api/a.go"), surface("api/b.go"), surface("api/c.go")]
+    evidence = [
+        relation("api/a.go", "api/b.go", relation_type="CALLS", strength="direct"),
+        relation("api/b.go", "api/c.go", relation_type="IMPORTS", strength="direct"),
+    ]
+    workflows = discoverer.discover(surfaces, evidence, "backend-engineer")
+    assert workflows
+    assert all("edge:api/b.go:api/c.go" not in item.evidence_refs for item in workflows)
+    assert all("api/c.go" not in item.implementation_refs for item in workflows)
+
+
 def test_candidate_engine_respects_stage_prerequisites():
     planner = RampPlanner(Mock())
     surfaces = [
@@ -128,6 +181,7 @@ def test_planner_does_not_fabricate_workflow_without_relationship_evidence():
     supabase.table.side_effect = lambda name: {
         "codebase_files": Query(files),
         "codebase_modules": Query([]),
+        "repositories": Query([{"id": "r1", "company_id": "company-1"}]),
         "entities": Query([]),
         "edges": Query([]),
         "raw_data": Query([]),
@@ -146,3 +200,365 @@ def test_planner_does_not_fabricate_workflow_without_relationship_evidence():
     assert all(step["evidence"] for step in plan["steps"])
     assert all(step["machine"]["eligible"] for step in plan["steps"])
     planner.store.save_plan.assert_called_once()
+
+
+class ExistingPlanStore:
+    def __init__(self, plan):
+        self.active_plan = plan
+        self.saved_plans = []
+
+    def save_plan(self, plan):
+        self.saved_plans.append(plan)
+        self.active_plan = plan
+
+    def get_active(self, *_args, **_kwargs):
+        return self.active_plan
+
+
+def planner_with_evidence(surfaces):
+    planner = RampPlanner(Mock())
+    planner.evidence.implementation_surfaces = Mock(return_value=surfaces)
+    planner.evidence.module_records = Mock(return_value=[])
+    planner.evidence.ownership = Mock(return_value=[])
+    planner.evidence.github_history = Mock(return_value=[])
+    planner.evidence.implementation_relationships = Mock(return_value=[])
+    planner.evidence.contribution_issues = Mock(return_value=[])
+    return planner
+
+
+def existing_plan():
+    return {
+        "company_id": "company-1",
+        "role": "backend-engineer",
+        "steps": [{"id": "previous-valid-step"}],
+        "is_active": True,
+    }
+
+
+def test_empty_required_evidence_aborts_and_preserves_existing_plan():
+    previous = existing_plan()
+    planner = planner_with_evidence([])
+    planner.store = ExistingPlanStore(previous)
+
+    with pytest.raises(ValueError, match="no eligible candidates"):
+        planner.generate("backend-engineer", "company-1")
+
+    assert planner.store.get_active("company-1", "backend-engineer") == previous
+    assert planner.store.saved_plans == []
+
+
+def test_required_evidence_failure_aborts_and_preserves_existing_plan():
+    previous = existing_plan()
+    planner = planner_with_evidence([])
+    planner.evidence.implementation_surfaces.side_effect = RampEvidenceRetrievalError(
+        "codebase_files", "list implementation surfaces", "RuntimeError"
+    )
+    planner.store = ExistingPlanStore(previous)
+
+    with pytest.raises(RampEvidenceRetrievalError) as exc_info:
+        planner.generate("backend-engineer", "company-1")
+    assert exc_info.value.source == "codebase_files"
+
+    assert planner.store.get_active("company-1", "backend-engineer") == previous
+    assert planner.store.saved_plans == []
+
+
+def test_optional_evidence_failures_are_logged_and_generation_continues(caplog):
+    planner = planner_with_evidence([surface("api/server.go")])
+    optional_sources = {
+        "module_records": ("module_records", "codebase_modules", "list module records"),
+        "ownership": ("ownership", "edges", "list ownership relationships"),
+        "github_history": ("github_history", "raw_data", "list GitHub history"),
+        "implementation_relationships": ("implementation_relationships", "entities", "list file entities"),
+        "contribution_issues": ("github_contribution_issues", "events", "list company GitHub issue events"),
+    }
+    for method, (source, table, operation) in optional_sources.items():
+        getattr(planner.evidence, method).side_effect = RampEvidenceRetrievalError(
+            table, operation, "RuntimeError"
+        )
+    planner.store.save_plan = Mock()
+
+    with caplog.at_level("WARNING"):
+        plan = planner.generate("backend-engineer", "company-1")
+
+    assert plan["steps"]
+    planner.store.save_plan.assert_called_once_with(plan)
+    assert {record.ramp_evidence_source for record in caplog.records} == {
+        source for source, _table, _operation in optional_sources.values()
+    }
+
+
+def test_no_eligible_candidates_never_replaces_existing_plan():
+    previous = existing_plan()
+    planner = planner_with_evidence([surface("api/server.go")])
+    planner.engine.select = Mock(return_value=[])
+    planner.store = ExistingPlanStore(previous)
+
+    with pytest.raises(ValueError, match="no eligible candidates"):
+        planner.generate("backend-engineer", "company-1")
+
+    assert planner.store.get_active("company-1", "backend-engineer") == previous
+    assert planner.store.saved_plans == []
+
+
+def test_large_component_is_decomposed_into_bounded_paths():
+    discoverer = WorkflowDiscoverer()
+    paths = [
+        ["api/entry.go", "api/validate.go", "api/service.go", "api/store.go", "api/queue.go", "api/worker.go", "api/result.go", "api/audit.go", "api/extra.go"],
+        ["api/entry.go", "api/validate.go", "api/service.go", "api/store.go", "api/queue.go", "api/notify.go"],
+    ]
+    surfaces = [surface(path, importance=1.0 - index * 0.02) for index, path in enumerate(sorted({item for path in paths for item in path}))]
+    evidence = [relation(source, target) for path in paths for source, target in zip(path, path[1:])]
+
+    workflows = discoverer.discover(surfaces, evidence, "backend-engineer")
+
+    assert len(workflows) == 2
+    assert all(2 <= len(item.implementation_refs) <= discoverer._MAX_PATH_FILES for item in workflows)
+    assert all("api/extra.go" not in item.implementation_refs for item in workflows)
+    assert any("api/audit.go" in item.implementation_refs for item in workflows)
+    assert any("api/notify.go" in item.implementation_refs for item in workflows)
+
+
+def test_workflow_decomposition_is_deterministic_and_evidence_bounded():
+    discoverer = WorkflowDiscoverer()
+    surfaces = [surface("api/a.go"), surface("api/b.go"), surface("api/c.go")]
+    evidence = [relation("api/a.go", "api/b.go"), relation("api/b.go", "api/c.go")]
+
+    first = discoverer.discover(surfaces, evidence, "backend-engineer")
+    second = discoverer.discover(list(reversed(surfaces)), list(reversed(evidence)), "backend-engineer")
+
+    assert first == second
+    known_paths = {item.path for item in surfaces}
+    known_evidence = {item.ref for item in evidence}
+    for workflow in first:
+        assert set(workflow.implementation_refs) <= known_paths
+        assert set(workflow.evidence_refs) <= known_paths | known_evidence
+        assert all(signal["from"] in known_paths and signal["to"] in known_paths for signal in workflow.signals)
+
+
+def test_cycles_hubs_and_isolated_files_remain_bounded():
+    discoverer = WorkflowDiscoverer()
+    surfaces = [
+        surface("pkg/cycle_a.go"),
+        surface("pkg/cycle_b.go"),
+        surface("pkg/hub.go"),
+        surface("pkg/leaf_a.go"),
+        surface("pkg/leaf_b.go"),
+        surface("pkg/isolated.go"),
+    ]
+    evidence = [
+        relation("pkg/cycle_a.go", "pkg/cycle_b.go"),
+        relation("pkg/cycle_b.go", "pkg/cycle_a.go"),
+        relation("pkg/hub.go", "pkg/leaf_a.go"),
+        relation("pkg/hub.go", "pkg/leaf_b.go"),
+    ]
+
+    workflows = discoverer.discover(surfaces, evidence, "backend-engineer")
+
+    assert workflows
+    assert all(len(item.implementation_refs) <= discoverer._MAX_PATH_FILES for item in workflows)
+    assert all("pkg/isolated.go" not in item.implementation_refs for item in workflows)
+    assert any(set(item.implementation_refs) == {"pkg/cycle_a.go", "pkg/cycle_b.go"} for item in workflows)
+    assert len(workflows) <= discoverer._MAX_CANDIDATES_PER_COMPONENT * 2
+
+
+def test_decomposition_abstains_when_no_meaningful_path_exists():
+    discoverer = WorkflowDiscoverer()
+    surfaces = [surface("pkg/a.go"), surface("pkg/b.go")]
+    evidence = [relation("pkg/a.go", "pkg/b.go", strength="inferred")]
+
+    assert discoverer.discover(surfaces, evidence, "backend-engineer") == []
+
+def test_serialization_preserves_repository_and_relationship_source_paths():
+    planner = RampPlanner(Mock())
+    source = ImplementationSurface(
+        ref="source-id",
+        path="api/handlers/github.go",
+        repository_id="repo-1",
+        module_path="api/handlers",
+        language="Go",
+        metadata={
+            "repository_full_name": "acme/service",
+            "repository_default_branch": "main",
+        },
+    )
+    target = ImplementationSurface(
+        ref="target-id",
+        path="api/services/github.go",
+        repository_id="repo-1",
+        module_path="api/services",
+        language="Go",
+        metadata={
+            "repository_full_name": "acme/service",
+            "repository_default_branch": "main",
+        },
+    )
+    edge = Evidence(
+        ref="edge:relation-123",
+        source="edges",
+        kind="implementation_relation",
+        strength="derived",
+        repository_id="repo-1",
+        detail="handler invokes service",
+        metadata={
+            "source_ref": source.path,
+            "target_ref": target.path,
+            "relation_type": "ROUTE_HANDLER_OPERATION",
+        },
+    )
+    candidate = RampCandidate(
+        candidate_id="workflow:test",
+        candidate_type="workflow-learning",
+        stage="workflow",
+        objective="Trace the handler to service boundary.",
+        implementation_refs=[source.path, target.path],
+        evidence_refs=[edge.ref, source.path, target.path],
+        prerequisites=[],
+        role_relevance=1.0,
+        prerequisite_value=0.8,
+        evidence_strength=0.8,
+        workflow_value=0.8,
+        actionability=0.9,
+        verification_strength=0.8,
+        help_available=0.5,
+        risk="review",
+        company_scoped=True,
+        concrete_action="Read the handler and service.",
+        verification_method="Explain the observed call.",
+    )
+
+    step = planner._serialize(
+        candidate,
+        "backend-engineer",
+        "company-1",
+        1,
+        {source.path: source, target.path: target},
+        {edge.ref: edge},
+    )
+
+    assert step["target"]["repo"] == "acme/service"
+    assert step["target"]["default_branch"] == "main"
+    assert step["target"]["files"][0]["github_url"] == (
+        "https://github.com/acme/service/blob/main/api/handlers/github.go"
+    )
+    relation_evidence = step["evidence"][0]
+    assert relation_evidence["record_id"] == "relation-123"
+    assert relation_evidence["file_path"] == source.path
+    assert relation_evidence["related_file_path"] == target.path
+    assert relation_evidence["repository_full_name"] == "acme/service"
+    assert all(not item["record_id"].startswith("edge:") for item in step["evidence"])
+
+def test_contribution_candidate_requires_bounded_issue_evidence_and_passes_hard_gates():
+    planner = RampPlanner(Mock())
+    indexed = surface("api/handlers/webhook.go", 0.9)
+    issue = {
+        "ref": "github-issue:delivery-42:42",
+        "repository_id": "repo-1",
+        "repository_full_name": "acme/service",
+        "default_branch": "main",
+        "number": 42,
+        "title": "Add retry visibility",
+        "url": "https://github.com/acme/service/issues/42",
+        "acceptance_checks": ["Show retry state", "Add a regression test"],
+        "file_paths": ["api/handlers/webhook.go"],
+        "labels": ["good first issue"],
+    }
+
+    candidates = planner._contribution_candidates(
+        "backend-engineer", "company-1", [issue], [indexed]
+    )
+
+    assert len(candidates) == 1
+    candidate = candidates[0]
+    assert candidate.contribution_candidate is True
+    assert candidate.history_strength == 0.0  # No commit-history precedent is claimed.
+    assert planner.engine.contribution_eligible(candidate)
+    assert planner.engine.eligible(candidate)
+    assert candidate.implementation_refs == ["api/handlers/webhook.go"]
+    assert candidate.evidence_refs[0] == issue["ref"]
+
+
+def test_contribution_candidate_rejects_ambiguous_or_foreign_repository_paths():
+    planner = RampPlanner(Mock())
+    issue = {
+        "ref": "github-issue:delivery-42:42",
+        "repository_id": "repo-1",
+        "number": 42,
+        "title": "Add retry visibility",
+        "file_paths": ["api/handlers/webhook.go"],
+    }
+    own_surface = surface("api/handlers/webhook.go")
+    foreign_surface = ImplementationSurface(
+        ref="other-file",
+        path="api/handlers/webhook.go",
+        repository_id="repo-2",
+        module_path="api/handlers",
+        language="Go",
+    )
+
+    assert planner._contribution_candidates(
+        "backend-engineer", "company-1", [issue], [own_surface, foreign_surface]
+    ) == []
+
+
+def test_contribution_candidate_rejects_paths_missing_from_index():
+    planner = RampPlanner(Mock())
+    issue = {
+        "ref": "github-issue:delivery-42:42",
+        "repository_id": "repo-1",
+        "number": 42,
+        "title": "Add retry visibility",
+        "file_paths": ["api/handlers/not-indexed.go"],
+    }
+
+    assert planner._contribution_candidates(
+        "backend-engineer", "company-1", [issue], [surface("api/handlers/webhook.go")]
+    ) == []
+
+def test_generated_plan_includes_issue_backed_contribution_after_orientation():
+    planner = planner_with_evidence([
+        ImplementationSurface(
+            ref="file-1",
+            path="api/handlers/webhook.go",
+            repository_id="repo-1",
+            module_path="api/handlers",
+            language="Go",
+            importance=0.9,
+            metadata={
+                "repository_full_name": "acme/service",
+                "repository_default_branch": "main",
+            },
+        )
+    ])
+    issue = {
+        "ref": "github-issue:delivery-42:42",
+        "repository_id": "repo-1",
+        "repository_full_name": "acme/service",
+        "default_branch": "main",
+        "number": 42,
+        "title": "Add retry visibility",
+        "url": "https://github.com/acme/service/issues/42",
+        "labels": ["good first issue"],
+        "acceptance_checks": ["Show retry state", "Add a regression test"],
+        "file_paths": ["api/handlers/webhook.go"],
+    }
+    planner.evidence.contribution_issues = Mock(return_value=[issue])
+    planner.store.save_plan = Mock()
+
+    plan = planner.generate("backend-engineer", "company-1")
+
+    types = [step["machine"]["candidate_type"] for step in plan["steps"]]
+    assert types[:2] == ["orientation", "role-surface"]
+    assert "contribution-lead" in types
+    contribution = next(
+        step for step in plan["steps"]
+        if step["machine"]["candidate_type"] == "contribution-lead"
+    )
+    issue_evidence = next(item for item in contribution["evidence"] if item["source"] == "github_issue")
+    assert issue_evidence["issue_url"] == "https://github.com/acme/service/issues/42"
+    assert issue_evidence["acceptance_checks"] == ["Show retry state", "Add a regression test"]
+    assert contribution["target"]["repo"] == "acme/service"
+    assert contribution["target"]["files"][0]["github_url"] == (
+        "https://github.com/acme/service/blob/main/api/handlers/webhook.go"
+    )
+

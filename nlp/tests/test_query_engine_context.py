@@ -143,3 +143,69 @@ def test_cache_key_changes_for_materially_different_ramp_contexts():
     assert key_a != key_b
     assert key_a != key_c
     assert key_b != key_c
+
+
+def test_short_acknowledgement_resolves_to_previous_user_question():
+    engine = _make_engine()
+    original_synth = core_module.reasoning_synthesize
+    original_structured = core_module.answer_structured_question
+    core_module.answer_structured_question = Mock(return_value=None)
+    core_module.reasoning_synthesize = Mock(return_value={
+        "answer": "The referenced files are Go handlers.",
+        "confidence": "high",
+        "sources": [{"source": "raw", "record_id": "r1"}],
+        "owners": [],
+        "abstain_reason": None,
+    })
+    try:
+        engine.handle_query({
+            "record_id": "q-followup",
+            "company_id": "company-123",
+            "content": "yea",
+            "payload": {
+                "question": "yea",
+                "context": None,
+                "company_id": "company-123",
+                "conversation_history": [
+                    {"role": "user", "content": "Can you tell me anything about those files?"},
+                    {"role": "assistant", "content": "The current Ramp references api/handlers/routes.go."},
+                    {"role": "user", "content": "yea"},
+                ],
+            },
+        })
+        engine.retriever.retrieve.assert_called_once_with(
+            "Can you tell me anything about those files?", company_id="company-123"
+        )
+    finally:
+        core_module.reasoning_synthesize = original_synth
+        core_module.answer_structured_question = original_structured
+
+
+
+
+def test_ambiguous_what_followup_does_not_query_unrelated_evidence():
+    engine = _make_engine()
+    result = engine.handle_query({
+        "record_id": "q-what",
+        "company_id": "company-123",
+        "content": "what?",
+        "payload": {"question": "what?", "conversation_history": []},
+    })
+    payload = json.loads(result)
+    assert payload["abstain_reason"] == "ambiguous_follow_up"
+    assert "clarify" in payload["answer"].lower()
+    engine.retriever.retrieve.assert_not_called()
+
+
+def test_thank_you_followup_does_not_query_knowledge_graph():
+    engine = _make_engine()
+    result = engine.handle_query({
+        "record_id": "q-thanks",
+        "company_id": "company-123",
+        "content": "thank you",
+        "payload": {"question": "thank you", "conversation_history": []},
+    })
+    payload = json.loads(result)
+    assert payload["answer"] == "You're welcome."
+    assert payload["sources"] == []
+    engine.retriever.retrieve.assert_not_called()
