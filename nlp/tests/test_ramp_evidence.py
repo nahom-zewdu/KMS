@@ -99,7 +99,7 @@ def test_implementation_surfaces_retain_repository_identity_for_source_links():
         "repository_default_branch": "release/2026",
     }
 
-def test_contribution_issues_require_open_unassigned_labeled_issue_and_indexed_paths():
+def test_contribution_issues_require_open_unassigned_labeled_issue_and_indexed_paths(monkeypatch):
     issue = {
         "number": 42,
         "title": "Add retry visibility to webhook processing",
@@ -157,6 +157,11 @@ def test_contribution_issues_require_open_unassigned_labeled_issue_and_indexed_p
         }]),
     }[name]
 
+    monkeypatch.setattr(
+        RampEvidenceStore,
+        "_live_issue_snapshot",
+        staticmethod(lambda *_args: (None, "unverified")),
+    )
     results = RampEvidenceStore(supabase).contribution_issues("company-a")
 
     assert len(results) == 1
