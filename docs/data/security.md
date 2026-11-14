@@ -6,7 +6,7 @@
 
 ## Current security status
 
-<badge>CRITICAL — remediation required</badge>
+**CRITICAL — remediation required**
 
 The active project is not currently safe for multi-tenant customer data. Security Advisor reports 11 public tables with RLS disabled. Direct catalog inspection confirms broad `anon` and `authenticated` table privileges on these objects:
 
@@ -73,7 +73,7 @@ RLS is defense in depth, not a replacement for tenant predicates in privileged s
 - [x] Authored `supabase/migrations/20261114150000_enforce_company_tenant_isolation.sql` to replace permissive policies, enforce tenant FKs/composite references, restrict browser grants, and harden RPCs. **Not applied or runtime-verified yet.**
 - [x] Expanded `schema/tests/tenant_rls.sql` to include the KRT migration and anon/authenticated/service-role assertions. **Not executed yet.**
 - [x] Frontend KRT branch now also signs/binds Slack OAuth state and verifies the initiating user/admin membership on callback; company switching verifies membership.
-- [ ] Run the expanded SQL harness on disposable PostgreSQL with pgvector available and resolve any failures.
+- [ ] Run the expanded SQL harness on disposable PostgreSQL with pgvector available (or verify the pgvector RPC path separately) and resolve any failures.
 - [ ] Run frontend lint/build and backend test suites; perform full diff review.
 - [ ] Apply reviewed migration to live Supabase only after disposable verification and explicit deployment approval; re-run Advisors and role-based live checks.
 
@@ -86,4 +86,5 @@ No live database DDL or data changes have been applied as part of this audit.
 - `docs/architecture/knowledge-reliability.md` — knowledge pipeline architecture.
 - `schema/migrations/20261031_tenant_access_policies.sql` — historical intended policy migration; do not assume it is deployed or fully correct for the current live schema.
 - `schema/tests/tenant_rls.sql` — expanded disposable PostgreSQL tenant policy harness; execution is still pending.
+- `supabase/migrations/20261114150000_enforce_company_tenant_isolation.sql` — tenant RLS/grant/RPC/constraint remediation; authored but not applied.
 - `supabase/migrations/20261114150000_enforce_company_tenant_isolation.sql` — authored remediation migration; not yet applied to live Supabase.
