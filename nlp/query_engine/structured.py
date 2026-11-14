@@ -53,7 +53,7 @@ def _context_paths(context: dict[str, Any]) -> list[str]:
         for message in history[-8:]:
             if isinstance(message, dict):
                 paths.extend(re.findall(
-                    r"(?:[\\w.-]+/)+[\\w.-]+\\.(?:go|py|ts|tsx|js|jsx|sql|md)",
+                    r"(?:[\w.-]+/)+[\w.-]+\.(?:go|py|ts|tsx|js|jsx|sql|md)",
                     str(message.get("content") or ""),
                 ))
     active = context.get("active_step")
