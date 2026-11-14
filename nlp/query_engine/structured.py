@@ -173,7 +173,7 @@ def answer_structured_question(
     context = parse_ramp_context(ramp_context)
     context["conversation_history"] = conversation_history or []
 
-    if re.search(r"\b(owner|owners|who owns|maintainer|maintainers)\b", q):
+    if re.search(r"\b(owner|owners|who owns|maintainer|maintainers|responsible for)\b", q):
         return _ownership_answer(supabase, company_id, context, question)
 
     if re.search(r"\b(who|which person)\b.*\b(implemented|authored|wrote|changed|committed)\b|\b(implemented|authored|wrote)\b", q):
