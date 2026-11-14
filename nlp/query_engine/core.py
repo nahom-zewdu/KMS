@@ -16,6 +16,7 @@ from .retrieval import AdaptiveRetriever
 from .synthesizer import reasoning_synthesize
 from .cache import QueryCache
 from .analytics import log_query
+from .structured import answer_structured_question
 
 logger = logging.getLogger("kms.core")
 
@@ -59,12 +60,50 @@ class QueryEngine:
         if not company_id or company_id.lower() == "default":
             raise ValueError("A real company_id is required for query processing")
 
+        conversation_history = payload.get("conversation_history") or []
+        if not isinstance(conversation_history, list):
+            conversation_history = []
+        conversation_history = [
+            item for item in conversation_history[-8:]
+            if isinstance(item, dict) and item.get("role") in {"user", "assistant"}
+        ]
+
         logger.info(f"Query {query_id} | company={company_id} | question={question} | ramp_context_present={bool(ramp_context)}")
 
         if not question:
             answer_json = abstain("empty_question")
             final_answer = json.dumps(answer_json)
             self.redis.publish(f"query_results:{query_id}", final_answer)
+            return final_answer
+
+        # Resolve short acknowledgements against the immediately preceding user turn.
+        # This preserves conversational continuity without asking the LLM to invent facts.
+        effective_question = question
+        if question.lower().strip(" .!?") in {"yes", "yeah", "yea", "yep", "sure", "go on", "tell me more"}:
+            previous_user = next(
+                (str(item.get("content") or "").strip()
+                 for item in reversed(conversation_history)
+                 if item.get("role") == "user" and str(item.get("content") or "").strip()),
+                "",
+            )
+            if previous_user:
+                effective_question = previous_user
+
+        # Structured company facts must come from authoritative tables, not vector top-k.
+        try:
+            structured = answer_structured_question(
+                self.supabase, effective_question, company_id, ramp_context
+            )
+        except Exception:
+            logger.exception("Structured query failed | company=%s", company_id)
+            structured = None
+        if structured is not None:
+            final_answer = json.dumps(structured, indent=2)
+            self.redis.publish(f"query_results:{query_id}", final_answer)
+            logger.info(
+                "Structured answer sent | %s | company=%s | question=%s",
+                query_id, company_id, effective_question,
+            )
             return final_answer
 
         cache_key = self._cache_key(question, company_id, ramp_context)
