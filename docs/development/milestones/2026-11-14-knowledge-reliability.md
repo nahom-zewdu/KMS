@@ -1,6 +1,6 @@
 # KMS Knowledge Reliability & Trust — Implementation Brief
 
-**Status:** IN_PROGRESS — audit confirmed critical exposure; frontend hardening started
+**Status:** IN_PROGRESS — audit confirmed critical exposure; frontend hardening and DB remediation authored, verification pending
 **Document date:** 2026-11-14
 **Target implementation base:** merged `feat/ramp` at `68ad38f4d2b40f9e9cb535243f1a2dab4ab1ea9b`
 **Implementation branch:** `feat/krt-00-tenant-isolation` (backend and frontend repositories)
@@ -285,3 +285,38 @@ Commits are on `nahom-zewdu/kms-frontend:feat/krt-00-tenant-isolation`. Build/li
 The database migration and SQL regression harness are not yet implemented. Next implementation batch is the migration and tests, not vector/RAG work. It must include table RLS/grants, membership policy correction, safe function privileges/search_path, tenant-required RPC contracts, repository ownership checks, and contribution schema drift.
 
 KRT-00 remains **IN_PROGRESS**, not VERIFIED. No live SQL changes have been applied.
+
+
+### KRT-00 implementation checkpoint — 2026-11-14
+
+**Branches**
+- Backend: `nahom-zewdu/KMS:feat/krt-00-tenant-isolation`
+- Frontend: `nahom-zewdu/kms-frontend:feat/krt-00-tenant-isolation`
+- Frontend draft PR: [#3](https://github.com/nahom-zewdu/kms-frontend/pull/3)
+
+**Backend files**
+- `supabase/migrations/20261114150000_enforce_company_tenant_isolation.sql` — migration authored; not applied.
+- `schema/tests/tenant_rls.sql` — expanded harness includes the migration and role-aware negative assertions; not run.
+- `docs/data/security.md`, this milestone, and roadmap updated.
+
+**Frontend changes**
+- Authenticated company-scoped codebase inventory route.
+- Server-only integration metadata access behind membership/admin checks.
+- Authenticated company-scoped legacy playbook route; public role-only sharing disabled.
+- Signed, expiring Slack OAuth state bound to initiating user/company; callback verifies current session and admin membership.
+- Active-company switching verifies company membership.
+- Slack OAuth state tests added.
+
+**Important limitations**
+- The migration has not been executed against disposable PostgreSQL or the live Supabase project.
+- Frontend lint/build and backend tests have not been run.
+- PR #3 is draft and must remain unmerged until the DB migration and coordinated verification pass.
+- Live Supabase remains in its previously audited exposed state. No live DDL has been applied.
+
+**Next execution sequence**
+1. Validate the migration and test harness on disposable PostgreSQL; fix every SQL/test failure.
+2. Run backend tests and frontend lint/build.
+3. Review exact PR diffs and migration rollback/deployment plan.
+4. Deploy migration to the active Supabase project only after explicit approval.
+5. Verify anon/authenticated/service_role behavior and Security Advisor findings.
+6. Only then mark KRT-00 VERIFIED/ACCEPTED and merge coordinated PRs.
