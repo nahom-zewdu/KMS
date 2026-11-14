@@ -283,7 +283,7 @@ def answer_structured_question(
             answer += f" {breakdown}."
         return {
             "answer": answer, "confidence": "high",
-            "sources": [{"source": "codebase_files", "file_path": name} for name in counts],
+            "sources": [{"source": "repositories", "file_path": name} for name in counts],
             "owners": [], "abstain_reason": None,
         }
 
