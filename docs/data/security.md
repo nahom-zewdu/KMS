@@ -70,13 +70,12 @@ RLS is defense in depth, not a replacement for tenant predicates in privileged s
 - [x] Frontend codebase route now requires authentication and active-company repository scope on the KRT branch.
 - [x] Frontend integrations route uses server-only admin access after membership/role checks.
 - [x] Legacy role-slug onboarding page now requires authentication and active-company scope.
-- [ ] Replace company membership policies; deny self-insert/self-promotion.
-- [ ] Enable RLS on every exposed public table.
-- [ ] Revoke browser grants from backend-only tables and integration credentials.
-- [ ] Restrict graph/vector/reconciliation RPCs to service_role and require tenant scope.
-- [ ] Add/fix tenant constraints, including `contributions.company_id`.
-- [ ] Expand disposable-Postgres tests for anon/authenticated/service_role behavior.
-- [ ] Apply reviewed migration to live Supabase and verify with actual roles + Advisors.
+- [x] Authored `supabase/migrations/20261114150000_enforce_company_tenant_isolation.sql` to replace permissive policies, enforce tenant FKs/composite references, restrict browser grants, and harden RPCs. **Not applied or runtime-verified yet.**
+- [x] Expanded `schema/tests/tenant_rls.sql` to include the KRT migration and anon/authenticated/service-role assertions. **Not executed yet.**
+- [x] Frontend KRT branch now also signs/binds Slack OAuth state and verifies the initiating user/admin membership on callback; company switching verifies membership.
+- [ ] Run the expanded SQL harness on disposable PostgreSQL with pgvector available and resolve any failures.
+- [ ] Run frontend lint/build and backend test suites; perform full diff review.
+- [ ] Apply reviewed migration to live Supabase only after disposable verification and explicit deployment approval; re-run Advisors and role-based live checks.
 
 No live database DDL or data changes have been applied as part of this audit.
 
@@ -86,4 +85,5 @@ No live database DDL or data changes have been applied as part of this audit.
 - `docs/development/milestones/2026-11-14-knowledge-reliability.md` — KRT workstream plan and audit log.
 - `docs/architecture/knowledge-reliability.md` — knowledge pipeline architecture.
 - `schema/migrations/20261031_tenant_access_policies.sql` — historical intended policy migration; do not assume it is deployed or fully correct for the current live schema.
-- `schema/tests/tenant_rls.sql` — disposable PostgreSQL tenant policy harness; extend before accepting KRT-00.
+- `schema/tests/tenant_rls.sql` — expanded disposable PostgreSQL tenant policy harness; execution is still pending.
+- `supabase/migrations/20261114150000_enforce_company_tenant_isolation.sql` — authored remediation migration; not yet applied to live Supabase.
