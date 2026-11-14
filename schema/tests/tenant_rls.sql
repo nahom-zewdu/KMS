@@ -126,7 +126,7 @@ INSERT INTO public.raw_data (id, company_id, source, content, record_id) VALUES
 
 -- Anonymous browser role must not access tenant data or integration credentials.
 SET ROLE anon;
-DO $ BEGIN
+DO $krt$ BEGIN
   BEGIN
     PERFORM count(*) FROM public.companies;
     RAISE EXCEPTION 'anon unexpectedly read companies';
@@ -142,13 +142,13 @@ DO $ BEGIN
     RAISE EXCEPTION 'anon unexpectedly read integration credentials';
   EXCEPTION WHEN insufficient_privilege THEN NULL;
   END;
-END $;
+END $krt$;
 RESET ROLE;
 
 
 SET ROLE authenticated;
 SET request.jwt.claim.sub = '00000000-0000-0000-0000-000000000001';
-DO $ BEGIN
+DO $krt$ BEGIN
   IF has_function_privilege('authenticated','public.search_edges_by_entity(text,text[],text)','EXECUTE') THEN
     RAISE EXCEPTION 'authenticated can execute graph search RPC';
   END IF;
@@ -165,9 +165,8 @@ DO $ BEGIN
   IF NOT has_function_privilege('service_role','public.search_edges_by_entity(text,text[],text)','EXECUTE') THEN
     RAISE EXCEPTION 'service_role cannot execute graph search RPC';
   END IF;
-END $;
-BEGIN
-DO $$ DECLARE row_count integer; BEGIN
+END $krt$;
+DO $ DECLARE row_count integer; BEGIN
   SELECT count(*) INTO row_count FROM public.entities;
   IF row_count <> 1 THEN RAISE EXCEPTION 'cross-company entity read: expected 1 got %', row_count; END IF;
   SELECT count(*) INTO row_count FROM public.edges;
