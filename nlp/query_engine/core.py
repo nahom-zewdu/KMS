@@ -168,7 +168,7 @@ class QueryEngine:
 
         try:
             relevant_chunks: List[Dict] = self.retriever.retrieve(
-                question, company_id=company_id
+                effective_question, company_id=company_id
             )
         except Exception as e:
             logger.error(f"Retrieval failed: {e}")
@@ -184,7 +184,7 @@ class QueryEngine:
                     question.lower(),
                 )
             )
-            grounded_owners = owners_from_chunks(relevant_chunks) if asks_ownership else []
+            grounded_owners = owners_from_chunks(relevant_chunks)
             try:
                 raw = reasoning_synthesize(
                     question,
