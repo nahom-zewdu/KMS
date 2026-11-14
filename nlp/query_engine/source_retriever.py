@@ -99,6 +99,9 @@ def retrieve_source_chunks(
         row for row in (getattr(repository_response, "data", None) or [])
         if isinstance(row, dict) and row.get("id") and row.get("full_name")
     ]
+    # A mocked/failed client response is not repository evidence. Fail closed.
+    if not repositories:
+        return []
     if not repositories:
         return []
     repo_by_id = {str(row["id"]): row for row in repositories}
