@@ -88,3 +88,11 @@ No live database DDL or data changes have been applied as part of this audit.
 - `schema/tests/tenant_rls.sql` — expanded disposable PostgreSQL tenant policy harness; execution is still pending.
 - `supabase/migrations/20261114150000_enforce_company_tenant_isolation.sql` — tenant RLS/grant/RPC/constraint remediation; authored but not applied.
 - `supabase/migrations/20261114150000_enforce_company_tenant_isolation.sql` — authored remediation migration; not yet applied to live Supabase.
+
+
+## Pull request tracking
+
+- Backend database remediation: [KMS PR #22](https://github.com/nahom-zewdu/KMS/pull/22) — draft, verification pending.
+- Frontend route/OAuth hardening: [kms-frontend PR #3](https://github.com/nahom-zewdu/kms-frontend/pull/3) — draft, verification pending.
+
+These are coordinated. Do not merge one without the other and the database verification gate.
