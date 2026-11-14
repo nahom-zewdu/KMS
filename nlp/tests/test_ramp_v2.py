@@ -222,6 +222,7 @@ def planner_with_evidence(surfaces):
     planner.evidence.ownership = Mock(return_value=[])
     planner.evidence.github_history = Mock(return_value=[])
     planner.evidence.implementation_relationships = Mock(return_value=[])
+    planner.evidence.contribution_issues = Mock(return_value=[])
     return planner
 
 
@@ -269,6 +270,7 @@ def test_optional_evidence_failures_are_logged_and_generation_continues(caplog):
         "ownership": ("edges", "list ownership relationships"),
         "github_history": ("raw_data", "list GitHub history"),
         "implementation_relationships": ("entities", "list file entities"),
+        "contribution_issues": ("events", "list company GitHub issue events"),
     }
     for method, (source, operation) in optional_sources.items():
         getattr(planner.evidence, method).side_effect = RampEvidenceRetrievalError(
