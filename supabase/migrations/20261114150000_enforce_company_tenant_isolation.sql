@@ -64,6 +64,38 @@ BEGIN
   ) THEN RAISE EXCEPTION 'ramp_step_feedback contains a cross-company plan reference'; END IF;
 END $$;
 
+DO $
+DECLARE
+  item record;
+  has_invalid_rows boolean;
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM public.companies
+    WHERE id IS NULL OR btrim(id)='' OR lower(btrim(id))='default'
+  ) THEN
+    RAISE EXCEPTION 'companies contains null, blank, or default identifiers';
+  END IF;
+
+  FOR item IN
+    SELECT * FROM (VALUES
+      ('company_members'),('company_integrations'),('company_repos'),
+      ('repositories'),('entities'),('edges'),('raw_data'),('events'),
+      ('contributions'),('playbooks'),('ramp_plans'),
+      ('ramp_step_progress'),('ramp_step_feedback')
+    ) AS tenant_table(table_name)
+  LOOP
+    EXECUTE format(
+      'SELECT EXISTS (SELECT 1 FROM public.%I WHERE company_id IS NULL OR btrim(company_id)='''' OR lower(btrim(company_id))=''default'')',
+      item.table_name
+    ) INTO has_invalid_rows;
+    IF has_invalid_rows THEN
+      RAISE EXCEPTION 'public.% contains null, blank, or default company identifiers', item.table_name;
+    END IF;
+  END LOOP;
+END $;
+
+ALTER TABLE public.companies ALTER COLUMN id DROP DEFAULT;
+
 -- Contributions are empty in the audited live DB. If rows appear before this
 -- migration is deployed, only an exact repository-to-company match is accepted.
 ALTER TABLE public.contributions ADD COLUMN IF NOT EXISTS company_id text;
@@ -203,6 +235,52 @@ BEGIN
 END $;
 CREATE INDEX IF NOT EXISTS idx_contributions_company_repo
   ON public.contributions(company_id, repo_name);
+
+-- Reject blank/default tenant identifiers even when writes bypass RLS.
+DO $
+DECLARE
+  item record;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='public.companies'::regclass AND conname='companies_id_not_default') THEN
+    ALTER TABLE public.companies ADD CONSTRAINT companies_id_not_default
+      CHECK (btrim(id)<>'' AND lower(btrim(id))<>'default') NOT VALID;
+  END IF;
+
+  FOR item IN
+    SELECT * FROM (VALUES
+      ('company_members'),('company_integrations'),('company_repos'),
+      ('repositories'),('entities'),('edges'),('raw_data'),('events'),
+      ('contributions'),('playbooks'),('ramp_plans'),
+      ('ramp_step_progress'),('ramp_step_feedback')
+    ) AS tenant_table(table_name)
+  LOOP
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_constraint
+      WHERE conrelid=format('public.%I',item.table_name)::regclass
+        AND conname=item.table_name||'_company_id_not_default'
+    ) THEN
+      EXECUTE format(
+        'ALTER TABLE public.%I ADD CONSTRAINT %I CHECK (company_id IS NOT NULL AND btrim(company_id)<>'''' AND lower(btrim(company_id))<>''default'') NOT VALID',
+        item.table_name,item.table_name||'_company_id_not_default'
+      );
+    END IF;
+  END LOOP;
+END $;
+
+ALTER TABLE public.companies VALIDATE CONSTRAINT companies_id_not_default;
+ALTER TABLE public.company_members VALIDATE CONSTRAINT company_members_company_id_not_default;
+ALTER TABLE public.company_integrations VALIDATE CONSTRAINT company_integrations_company_id_not_default;
+ALTER TABLE public.company_repos VALIDATE CONSTRAINT company_repos_company_id_not_default;
+ALTER TABLE public.repositories VALIDATE CONSTRAINT repositories_company_id_not_default;
+ALTER TABLE public.entities VALIDATE CONSTRAINT entities_company_id_not_default;
+ALTER TABLE public.edges VALIDATE CONSTRAINT edges_company_id_not_default;
+ALTER TABLE public.raw_data VALIDATE CONSTRAINT raw_data_company_id_not_default;
+ALTER TABLE public.events VALIDATE CONSTRAINT events_company_id_not_default;
+ALTER TABLE public.contributions VALIDATE CONSTRAINT contributions_company_id_not_default;
+ALTER TABLE public.playbooks VALIDATE CONSTRAINT playbooks_company_id_not_default;
+ALTER TABLE public.ramp_plans VALIDATE CONSTRAINT ramp_plans_company_id_not_default;
+ALTER TABLE public.ramp_step_progress VALIDATE CONSTRAINT ramp_step_progress_company_id_not_default;
+ALTER TABLE public.ramp_step_feedback VALIDATE CONSTRAINT ramp_step_feedback_company_id_not_default;
 
 -- ---------------------------------------------------------------------------
 -- 2. Non-recursive membership predicate and safe company creation RPC.
