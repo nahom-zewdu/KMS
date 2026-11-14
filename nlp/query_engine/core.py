@@ -93,7 +93,7 @@ class QueryEngine:
             if previous_user:
                 effective_question = previous_user
 
-        # For file-explanation questions, retrieve bounded source text from files
+        # A bare "what?" is ambiguous; avoid unrelated graph/vector retrieval.\n        if question.lower().strip(" .!?") in {"what", "huh"}:\n            answer_json = {"answer": "What would you like me to clarify from my previous answer?",\n                           "confidence": "low", "sources": [], "owners": [],\n                           "abstain_reason": "ambiguous_follow_up"}\n            final_answer = json.dumps(answer_json, indent=2)\n            self.redis.publish(f"query_results:{query_id}", final_answer)\n            return final_answer\n\n        # For file-explanation questions, retrieve bounded source text from files
         # already indexed under this company before asking the model to explain them.
         try:
             source_chunks = retrieve_source_chunks(
