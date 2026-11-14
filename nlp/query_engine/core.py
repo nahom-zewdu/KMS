@@ -144,6 +144,22 @@ class QueryEngine:
             )
             return final_answer
 
+        requires_structured_facts = bool(re.search(
+            r"\\b(owner|owners|owns|maintainer|maintainers|responsible for)\\b"
+            r"|\\b(who|which person)\\b.*\\b(implemented|authored|wrote|changed|committed)\\b"
+            r"|\\b(how many|count|number of)\\b.*\\b(files?|source files?|steps?|tasks?)\\b"
+            r"|\\bwhat is the repo\\b|\\bwhere are we right now\\b",
+            effective_question.lower(),
+        ))
+        if requires_structured_facts:
+            final_answer = json.dumps(abstain("structured_evidence_unavailable"), indent=2)
+            self.redis.publish(f"query_results:{query_id}", final_answer)
+            logger.warning(
+                "Abstained on structured fact without authoritative evidence | %s | company=%s",
+                query_id, company_id,
+            )
+            return final_answer
+
         cache_key = self._cache_key(question, company_id, ramp_context)
         if cached := self.cache.get(cache_key):
             logger.info(f"Cache hit for query {query_id}")
