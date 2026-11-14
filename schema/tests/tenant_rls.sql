@@ -169,10 +169,13 @@ END $krt$;
 DO $krt$ DECLARE row_count integer; BEGIN
   SELECT count(*) INTO row_count FROM public.entities;
   IF row_count <> 1 THEN RAISE EXCEPTION 'cross-company entity read: expected 1 got %', row_count; END IF;
+  SELECT count(*) INTO row_count FROM public.companies;
+  IF row_count <> 1 THEN RAISE EXCEPTION 'company directory scope expected 1 got %', row_count; END IF;
   SELECT count(*) INTO row_count FROM public.edges;
   IF row_count <> 1 THEN RAISE EXCEPTION 'cross-company edge read: expected 1 got %', row_count; END IF;
-  SELECT count(*) INTO row_count FROM public.raw_data;
-  IF row_count <> 2 THEN RAISE EXCEPTION 'cross-company raw_data read: expected 2 got %', row_count; END IF;
+  IF has_table_privilege('authenticated','public.raw_data','SELECT') THEN
+    RAISE EXCEPTION 'authenticated has direct raw_data SELECT privilege';
+  END IF;
   SELECT count(*) INTO row_count FROM public.company_members;
   IF row_count <> 2 THEN RAISE EXCEPTION 'membership visibility or recursive policy failure: expected 2 got %', row_count; END IF;
 END $$;
