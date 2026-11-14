@@ -117,8 +117,7 @@ class QueryEngine:
                 source_answer = abstain("synthesis_failed")
             source_answer["sources"] = sources_from_chunks(source_chunks)
             source_answer["owners"] = []
-            if source_answer.get("sources"):
-                source_answer["abstain_reason"] = None
+            if source_answer.get("sources") and source_answer.get("abstain_reason") is None:
                 final_answer = json.dumps(source_answer, indent=2)
                 self.redis.publish(f"query_results:{query_id}", final_answer)
                 logger.info(
