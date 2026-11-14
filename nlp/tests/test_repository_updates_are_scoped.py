@@ -116,7 +116,7 @@ def test_baseline_repository_update_filters_by_company():
     assert any(
         table == "repositories"
         and operation == "update"
-        and ("full_name", "org/repo") in filters
+        and ("id", "repo-id") in filters
         and ("company_id", "company-a") in filters
         for table, operation, filters in database.calls
     )
