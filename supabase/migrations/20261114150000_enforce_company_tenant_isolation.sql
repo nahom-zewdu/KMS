@@ -452,46 +452,56 @@ TO service_role;
 -- 5. Tenant-required RPCs and least-privilege execution grants.
 -- ---------------------------------------------------------------------------
 
-CREATE OR REPLACE FUNCTION public.match_documents(
-  query_embedding vector,
-  match_threshold double precision,
-  match_count integer,
-  filter_company_id text
-)
-RETURNS TABLE (
-  id uuid, record_id text, content text, source text,
-  created_at timestamptz, company_id text, similarity double precision
-)
-LANGUAGE plpgsql
-SECURITY INVOKER
-SET search_path = pg_catalog, public
-AS $$
+-- pgvector is installed in the live Supabase project under the extensions schema.
+-- Keep the migration runnable on disposable PostgreSQL instances that do not ship
+-- pgvector; those environments still exercise all non-vector RLS/RPC assertions.
+DO $$
 BEGIN
-  IF filter_company_id IS NULL OR btrim(filter_company_id)=''
-     OR lower(btrim(filter_company_id))='default' THEN
-    RAISE EXCEPTION 'a real filter_company_id is required' USING ERRCODE='22023';
-  END IF;
-  IF match_count IS NULL OR match_count<1 OR match_count>100
-     OR match_threshold IS NULL OR match_threshold<0 OR match_threshold>1 THEN
-    RAISE EXCEPTION 'invalid vector search bounds' USING ERRCODE='22023';
-  END IF;
+  IF to_regtype('extensions.vector') IS NOT NULL THEN
+    EXECUTE $vector_fn$
+      CREATE OR REPLACE FUNCTION public.match_documents(
+        query_embedding extensions.vector,
+        match_threshold double precision,
+        match_count integer,
+        filter_company_id text
+      )
+      RETURNS TABLE (
+        id uuid, record_id text, content text, source text,
+        created_at timestamptz, company_id text, similarity double precision
+      )
+      LANGUAGE plpgsql
+      SECURITY INVOKER
+      SET search_path = pg_catalog, public, extensions
+      AS $body$
+      BEGIN
+        IF filter_company_id IS NULL OR btrim(filter_company_id)=''
+           OR lower(btrim(filter_company_id))='default' THEN
+          RAISE EXCEPTION 'a real filter_company_id is required' USING ERRCODE='22023';
+        END IF;
+        IF match_count IS NULL OR match_count<1 OR match_count>100
+           OR match_threshold IS NULL OR match_threshold<0 OR match_threshold>1 THEN
+          RAISE EXCEPTION 'invalid vector search bounds' USING ERRCODE='22023';
+        END IF;
 
-  RETURN QUERY
-  SELECT r.id,r.record_id,r.content,r.source,r.created_at,r.company_id,
-    (1-(r.embedding <=> query_embedding))::double precision
-  FROM public.raw_data r
-  WHERE r.company_id=filter_company_id
-    AND r.embedding IS NOT NULL
-    AND (r.embedding <=> query_embedding)<(1-match_threshold)
-  ORDER BY r.embedding <=> query_embedding
-  LIMIT match_count;
-END;
-$$;
+        RETURN QUERY
+        SELECT r.id,r.record_id,r.content,r.source,r.created_at,r.company_id,
+          (1-(r.embedding <=> query_embedding))::double precision
+        FROM public.raw_data r
+        WHERE r.company_id=filter_company_id
+          AND r.embedding IS NOT NULL
+          AND (r.embedding <=> query_embedding)<(1-match_threshold)
+        ORDER BY r.embedding <=> query_embedding
+        LIMIT match_count;
+      END;
+      $body$;
+    $vector_fn$;
 
-REVOKE ALL ON FUNCTION public.match_documents(vector,double precision,integer,text)
-  FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.match_documents(vector,double precision,integer,text)
-  TO service_role;
+    EXECUTE 'REVOKE ALL ON FUNCTION public.match_documents(extensions.vector,double precision,integer,text) FROM PUBLIC, anon, authenticated';
+    EXECUTE 'GRANT EXECUTE ON FUNCTION public.match_documents(extensions.vector,double precision,integer,text) TO service_role';
+  ELSE
+    RAISE NOTICE 'pgvector extension not installed; match_documents hardening skipped in this disposable database';
+  END IF;
+END $$;
 
 DROP FUNCTION IF EXISTS public.search_edges_by_entity(text,text[]);
 
