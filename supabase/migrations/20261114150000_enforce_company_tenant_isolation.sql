@@ -233,7 +233,7 @@ BEGIN
       UNIQUE (company_id,person_name,repo_name);
   END IF;
 END $krt$;
-DO $
+DO $krt$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
@@ -254,7 +254,7 @@ BEGIN
       FOREIGN KEY (repo_name,company_id)
       REFERENCES public.repositories(full_name,company_id) NOT VALID;
   END IF;
-END $;
+END $krt$;
 
 ALTER TABLE public.contributions
   VALIDATE CONSTRAINT contributions_repository_company_fkey;
