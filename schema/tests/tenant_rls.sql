@@ -120,6 +120,31 @@ INSERT INTO public.raw_data (id, company_id, source, content, record_id) VALUES
 \ir ../migrations/20261031_tenant_access_policies.sql
 \ir ../migrations/20261031_tenant_access_policies.sql
 \ir ../graph_traverser_rpc.sql
+\ir ../../supabase/migrations/20261114095928_add_repository_file_reconciliation_rpc.sql
+\ir ../../supabase/migrations/20261114101649_add_implementation_edge_replacement_rpc.sql
+\ir ../../supabase/migrations/20261114150000_enforce_company_tenant_isolation.sql
+
+-- Anonymous browser role must not access tenant data or integration credentials.
+SET ROLE anon;
+DO $ BEGIN
+  BEGIN
+    PERFORM count(*) FROM public.companies;
+    RAISE EXCEPTION 'anon unexpectedly read companies';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    PERFORM count(*) FROM public.entities;
+    RAISE EXCEPTION 'anon unexpectedly read entities';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    PERFORM count(*) FROM public.company_integrations;
+    RAISE EXCEPTION 'anon unexpectedly read integration credentials';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END $;
+RESET ROLE;
+
 
 SET ROLE authenticated;
 SET request.jwt.claim.sub = '00000000-0000-0000-0000-000000000001';
