@@ -409,6 +409,7 @@ ALTER TABLE public.issues ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.query_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ingestion_outbox ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ramp_step_feedback ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
 -- Membership: users cannot enroll themselves, self-promote, or remove themselves.
 CREATE POLICY company_members_read_authorized
