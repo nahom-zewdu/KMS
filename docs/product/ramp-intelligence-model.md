@@ -2,8 +2,8 @@
 
 **Status:** Active implementation baseline
 **Branch:** `feat/implementation-relations`
-**Last updated:** 2026-11-11
-**Scope:** RID-01 through RID-05; next work is RID-07 in `docs/development/roadmap.md`
+**Last updated:** 2026-11-14
+**Scope:** Ramp evidence/candidate semantics through RID-09; current execution status is in `docs/development/roadmap.md`
 
 ## 1. Product question
 
