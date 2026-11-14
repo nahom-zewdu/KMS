@@ -38,8 +38,6 @@ class CodebaseBaselineSync:
         ).eq("company_id", company_id).execute()
 
     def sync_repository(self, repo_full_name: str, company_id: str) -> bool:
-        """Perform a full baseline sync, skipping an already-indexed Git revision."""
-    def sync_repository(self, repo_full_name: str, company_id: str) -> bool:
         """Index one immutable Git revision under a database-backed repository lease."""
         if not company_id or company_id.strip().lower() == "default":
             raise ValueError("company_id must resolve to a real company")
