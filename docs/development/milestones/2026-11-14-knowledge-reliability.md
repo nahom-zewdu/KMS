@@ -320,3 +320,6 @@ KRT-00 remains **IN_PROGRESS**, not VERIFIED. No live SQL changes have been appl
 4. Deploy migration to the active Supabase project only after explicit approval.
 5. Verify anon/authenticated/service_role behavior and Security Advisor findings.
 6. Only then mark KRT-00 VERIFIED/ACCEPTED and merge coordinated PRs.
+
+
+**Pull requests:** backend [#22](https://github.com/nahom-zewdu/KMS/pull/22) and frontend [#3](https://github.com/nahom-zewdu/kms-frontend/pull/3), both draft. Neither is approved for merge.
