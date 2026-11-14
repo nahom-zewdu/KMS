@@ -84,7 +84,9 @@ class QueryEngine:
             previous_user = next(
                 (str(item.get("content") or "").strip()
                  for item in reversed(conversation_history)
-                 if item.get("role") == "user" and str(item.get("content") or "").strip()),
+                 if item.get("role") == "user"
+                 and str(item.get("content") or "").strip()
+                 and str(item.get("content") or "").strip() != question),
                 "",
             )
             if previous_user:
