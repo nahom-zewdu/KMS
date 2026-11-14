@@ -180,3 +180,32 @@ def test_short_acknowledgement_resolves_to_previous_user_question():
         core_module.reasoning_synthesize = original_synth
         core_module.answer_structured_question = original_structured
 
+
+
+
+def test_ambiguous_what_followup_does_not_query_unrelated_evidence():
+    engine = _make_engine()
+    result = engine.handle_query({
+        "record_id": "q-what",
+        "company_id": "company-123",
+        "content": "what?",
+        "payload": {"question": "what?", "conversation_history": []},
+    })
+    payload = json.loads(result)
+    assert payload["abstain_reason"] == "ambiguous_follow_up"
+    assert "clarify" in payload["answer"].lower()
+    engine.retriever.retrieve.assert_not_called()
+
+
+def test_thank_you_followup_does_not_query_knowledge_graph():
+    engine = _make_engine()
+    result = engine.handle_query({
+        "record_id": "q-thanks",
+        "company_id": "company-123",
+        "content": "thank you",
+        "payload": {"question": "thank you", "conversation_history": []},
+    })
+    payload = json.loads(result)
+    assert payload["answer"] == "You're welcome."
+    assert payload["sources"] == []
+    engine.retriever.retrieve.assert_not_called()
