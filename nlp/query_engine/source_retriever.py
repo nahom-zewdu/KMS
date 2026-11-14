@@ -92,7 +92,9 @@ def retrieve_source_chunks(
     explicit_paths = _paths_from_text(question)
     refs = _context_file_refs(context)
     if explicit_paths:
-        refs = [{"path": path} for path in explicit_paths] + refs
+        # An explicit path request is an allowlist, not a hint. Never fall back
+        # to unrelated Ramp-context files when the requested path is unindexed.
+        refs = [{"path": path} for path in explicit_paths]
     elif history_paths:
         refs = [{"path": path} for path in history_paths] + refs
 
@@ -108,8 +110,6 @@ def retrieve_source_chunks(
         if row.get("id") and row.get("full_name")
     ]
     # A mocked/failed client response is not repository evidence. Fail closed.
-    if not repositories:
-        return []
     if not repositories:
         return []
     repo_by_id = {str(row["id"]): row for row in repositories}
