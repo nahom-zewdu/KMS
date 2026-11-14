@@ -216,6 +216,12 @@ class RedisStreamConsumer:
             if lease_lost.is_set():
                 raise RuntimeError("worker lost its processing lease; refusing to acknowledge")
             self._ack(stream, msg_id)
+            logger.info(
+                "Acknowledged job | stream=%s | message_id=%s | consumer=%s",
+                stream,
+                msg_id,
+                self.consumer_name,
+            )
         except Exception as exc:
             logger.exception("Handler failed for %s/%s", stream, msg_id)
             try:
