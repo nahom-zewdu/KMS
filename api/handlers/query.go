@@ -36,6 +36,7 @@ func (h *QueryHandler) HandleQuery(c *gin.Context) {
 		Question  string `json:"question"`
 		Context   string `json:"context"`
 		CompanyID string `json:"company_id"`
+		ConversationHistory []map[string]interface{} `json:"conversation_history"`
 	}
 
 	body, err := io.ReadAll(http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20))
@@ -90,6 +91,7 @@ func (h *QueryHandler) HandleQuery(c *gin.Context) {
 			"question":   question,
 			"context":    req.Context,
 			"company_id": companyID,
+			"conversation_history": req.ConversationHistory,
 		},
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	})
