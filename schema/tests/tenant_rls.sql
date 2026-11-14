@@ -176,6 +176,21 @@ DO $krt$ DECLARE row_count integer; BEGIN
   IF has_table_privilege('authenticated','public.raw_data','SELECT') THEN
     RAISE EXCEPTION 'authenticated has direct raw_data SELECT privilege';
   END IF;
+  IF has_table_privilege('authenticated','public.company_integrations','SELECT') THEN
+    RAISE EXCEPTION 'authenticated has direct integration credential SELECT privilege';
+  END IF;
+  IF has_table_privilege('authenticated','public.events','SELECT')
+     OR has_table_privilege('authenticated','public.contributions','SELECT')
+     OR has_table_privilege('authenticated','public.pull_requests','SELECT')
+     OR has_table_privilege('authenticated','public.issues','SELECT')
+     OR has_table_privilege('authenticated','public.query_logs','SELECT')
+     OR has_table_privilege('authenticated','public.ingestion_outbox','SELECT')
+     OR has_table_privilege('authenticated','public.ramp_step_feedback','SELECT') THEN
+    RAISE EXCEPTION 'authenticated has direct access to backend-only tables';
+  END IF;
+  IF to_regprocedure('public.search_edges_by_entity(text,text[])') IS NOT NULL THEN
+    RAISE EXCEPTION 'unscoped graph RPC overload still exists';
+  END IF;
   SELECT count(*) INTO row_count FROM public.company_members;
   IF row_count <> 2 THEN RAISE EXCEPTION 'membership visibility or recursive policy failure: expected 2 got %', row_count; END IF;
 END $$;
