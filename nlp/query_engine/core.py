@@ -145,10 +145,10 @@ class QueryEngine:
             return final_answer
 
         requires_structured_facts = bool(re.search(
-            r"\\b(owner|owners|owns|maintainer|maintainers|responsible for)\\b"
-            r"|\\b(who|which person)\\b.*\\b(implemented|authored|wrote|changed|committed)\\b"
-            r"|\\b(how many|count|number of)\\b.*\\b(files?|source files?|steps?|tasks?)\\b"
-            r"|\\bwhat is the repo\\b|\\bwhere are we right now\\b",
+            r"\b(owner|owners|owns|maintainer|maintainers|responsible for)\b"
+            r"|\b(who|which person)\b.*\b(implemented|authored|wrote|changed|committed)\b"
+            r"|\b(how many|count|number of)\b.*\b(files?|source files?|steps?|tasks?)\b"
+            r"|\bwhat is the repo\b|\bwhere are we right now\b",
             effective_question.lower(),
         ))
         if requires_structured_facts:
