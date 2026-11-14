@@ -99,7 +99,7 @@ def test_ownership_answer_uses_file_ownership_edges_not_generated_people():
 
 def test_authorship_is_reported_as_last_author_not_ownership():
     db = Supabase(
-        repositories=[{"id": "r1", "full_name": "acme/api"}],
+        repositories=[{"id": "r1", "company_id": "c1", "full_name": "acme/api"}],
         codebase_files=[
             {"repository_id": "r1", "file_path": "api/handlers/routes.go", "last_author": "nahom-zewdu"},
             {"repository_id": "r1", "file_path": "api/handlers/query.go", "last_author": "nahom-zewdu"},
