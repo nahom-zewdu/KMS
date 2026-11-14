@@ -398,7 +398,7 @@ Do not start KRT implementation on this branch. After the requested merge:
 **Base commit:** `68ad38f4d2b40f9e9cb535243f1a2dab4ab1ea9b`  
 **Frontend repository:** `nahom-zewdu/kms-frontend`  
 **Frontend branch:** `feat/krt-00-tenant-isolation`  
-**KRT-00 status:** IN_PROGRESS — critical findings confirmed; initial frontend hardening committed; database migration not yet written/applied.
+**KRT-00 status:** IN_PROGRESS — critical findings confirmed; frontend hardening and database migration/test changes committed; none have been runtime-verified or applied to live Supabase.
 
 ## Verified merge and branch state
 
@@ -445,13 +445,15 @@ These are dated audit counts, not durable product metrics. The empty contributio
 
 ## Work committed so far
 
-Frontend branch `feat/krt-00-tenant-isolation`:
+Frontend branch `feat/krt-00-tenant-isolation` (draft PR #3):
 - `app/api/codebase/route.ts`: authentication + active-company repository scope; no anon-client query.
 - `app/api/integrations/route.ts`: admin-client use behind membership/admin checks; no credential columns in responses.
 - `app/onboard/[slug]/page.tsx`: authenticated active-company playbook query.
-- `docs/security.md` and `docs/architecture.md`: access-boundary documentation.
+- Slack OAuth state is now HMAC-signed/time-limited and callback rechecks the authenticated initiating user and company-admin role.
+- Active-company switching now verifies the requested company belongs to the authenticated user.
+- Added Slack OAuth state tests and frontend security docs.
 
-No database DDL or live data/policy changes have been made. No tests/build have yet been run for these frontend commits.
+Backend branch now includes `supabase/migrations/20261114150000_enforce_company_tenant_isolation.sql` and expanded `schema/tests/tenant_rls.sql`. The migration is authored but not run; the SQL harness, frontend lint/build, and backend suites remain unverified. No live database DDL or data/policy changes have been made.
 
 ## Remaining KRT-00 work
 
@@ -463,3 +465,12 @@ No database DDL or live data/policy changes have been made. No tests/build have 
 6. Update both roadmaps and open coordinated PRs only when code/tests/docs are ready.
 
 **Do not mark KRT-00 VERIFIED or ACCEPTED until the migration is tested and live database role checks prove the boundary.**
+
+
+### 2026-11-14 implementation checkpoint
+
+- Supabase remediation migration authored: `supabase/migrations/20261114150000_enforce_company_tenant_isolation.sql`.
+- Migration scope: remove permissive company/member/entity/playbook policies; deny self-enrollment/self-promotion; enable RLS on all public tenant/knowledge tables; revoke browser access to integration credentials, raw events, analytics, and worker queues; grant only scoped member reads; require company ID for vector/graph RPCs; restrict sensitive RPCs to service_role; verify repository ownership before file reconciliation; add tenant and composite ownership constraints; add missing `contributions.company_id`.
+- Test harness now includes the migration plus anonymous denial, RPC privilege, tenant-scoped graph, membership self-insert, and self-promotion assertions.
+- The migration and test harness have **not** been executed. Do not infer correctness from successful GitHub file writes.
+- Frontend hardening continues in the separate draft PR #3: Slack OAuth callback authorization and active-company switch validation were added after the initial codebase/playbook changes.
