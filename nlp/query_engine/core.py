@@ -6,6 +6,7 @@ Uses query understanding + adaptive retrieval + reasoning.
 import hashlib
 import time
 import logging
+import re
 from typing import Dict, Any, List
 import json
 from supabase import Client
@@ -126,7 +127,7 @@ class QueryEngine:
         else:
             grounded_sources = sources_from_chunks(relevant_chunks)
             asks_ownership = bool(
-                __import__("re").search(
+                re.search(
                     r"\\b(owner|owners|owns|maintainer|maintainers|responsible for)\\b",
                     question.lower(),
                 )
