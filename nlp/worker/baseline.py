@@ -25,8 +25,24 @@ class BaselineHandler:
         if not repo:
             logger.error("No repo in baseline job")
             raise ValueError("repo is required for baseline sync")
-        logger.info(f"Starting baseline sync for {repo} | company={company_id}")
+        record_id = job.get("record_id") or "unknown"
+        logger.info(
+            "Starting baseline sync | stream=%s | message_id=%s | "
+            "record_id=%s | repo=%s | company=%s",
+            stream,
+            msg_id,
+            record_id,
+            repo,
+            company_id,
+        )
         success = baseline_sync.sync_repository(repo, company_id=company_id)
         if not success:
             raise RuntimeError(f"Baseline sync failed for {repo}")
-        logger.info(f"Baseline sync completed for {repo}")
+        logger.info(
+            "Baseline sync completed | stream=%s | message_id=%s | "
+            "record_id=%s | repo=%s",
+            stream,
+            msg_id,
+            record_id,
+            repo,
+        )
