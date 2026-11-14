@@ -14,7 +14,7 @@ from github import Github, GithubException
 
 logger = logging.getLogger(__name__)
 
-_SUPPORTED_SUFFIXES = (".go", ".py", ".ts", ".tsx", ".js", ".jsx")
+_SUPPORTED_SUFFIXES = (".go", ".py", ".ts", ".tsx", ".js", ".jsx", ".sql", ".md")
 _MAX_FILES = 4
 _MAX_FILE_CHARS = 9000
 
