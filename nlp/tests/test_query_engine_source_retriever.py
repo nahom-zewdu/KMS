@@ -107,3 +107,22 @@ def test_source_retrieval_fails_closed_when_supabase_returns_mock_response(monke
 
     assert chunks == []
     github.assert_not_called()
+
+
+def test_source_retrieval_skips_github_mock_content(monkeypatch):
+    monkeypatch.setenv("GITHUB_API_TOKEN", "test-token")
+    github_repo = Mock()
+    github_repo.get_contents.return_value = Mock()
+    github_client = Mock()
+    github_client.get_repo.return_value = github_repo
+
+    with patch("query_engine.source_retriever.Github", return_value=github_client):
+        chunks = retrieve_source_chunks(
+            Supabase(),
+            "company-a",
+            "Explain the handlers",
+            '{"kind":"ramp_step","active_step":{"target":{"files":[{"path":"api/handlers/routes.go","repository_id":"repo-1"}]}}}',
+        )
+
+    assert chunks == []
+    github_repo.get_contents.assert_called_once_with("api/handlers/routes.go", ref="abc123")
