@@ -11,6 +11,7 @@ Creates REPOSITORY entity + codebase_files + PART_OF edges safely.
 
 import logging
 import os
+import threading
 from datetime import datetime, timezone
 import uuid
 from typing import Dict
@@ -36,56 +37,96 @@ class CodebaseBaselineSync:
             "full_name", repo_full_name
         ).eq("company_id", company_id).execute()
 
-    def _is_revision_already_ready(
-        self, repo_full_name: str, company_id: str, source_revision: str
-    ) -> bool:
-        """Return whether this exact Git revision is already fully indexed."""
-        response = (
-            self.supabase.table("repositories")
-            .select("baseline_status, baseline_revision")
-            .eq("full_name", repo_full_name)
-            .eq("company_id", company_id)
-            .limit(1)
-            .execute()
-        )
-        rows = getattr(response, "data", None) or []
-        if not rows:
-            return False
-        current = rows[0]
-        return (
-            current.get("baseline_status") == "ready"
-            and current.get("baseline_revision") == source_revision
-        )
-
     def sync_repository(self, repo_full_name: str, company_id: str) -> bool:
         """Perform a full baseline sync, skipping an already-indexed Git revision."""
+    def sync_repository(self, repo_full_name: str, company_id: str) -> bool:
+        """Index one immutable Git revision under a database-backed repository lease."""
         if not company_id or company_id.strip().lower() == "default":
             raise ValueError("company_id must resolve to a real company")
-        logger.info("Starting full baseline sync for %s | company=%s", repo_full_name, company_id)
+
+        run_id = str(uuid.uuid4())
+        lease_stop = threading.Event()
+        lease_lost = threading.Event()
+        lease_thread = None
+        lease_claimed = False
+
+        def ensure_lease() -> None:
+            if lease_lost.is_set():
+                raise RuntimeError("baseline lease was lost; refusing further repository writes")
+
+        def renew_lease() -> None:
+            while not lease_stop.wait(30):
+                try:
+                    renewed = self.supabase.rpc(
+                        "renew_repository_baseline_lease",
+                        {
+                            "p_full_name": repo_full_name,
+                            "p_company_id": company_id,
+                            "p_run_id": run_id,
+                            "p_lease_seconds": 180,
+                        },
+                    ).execute()
+                    if renewed.data is not True:
+                        lease_lost.set()
+                        logger.error(
+                            "Baseline lease renewal rejected | repo=%s | company=%s | run=%s",
+                            repo_full_name, company_id, run_id,
+                        )
+                        return
+                except Exception:
+                    lease_lost.set()
+                    logger.exception(
+                        "Baseline lease renewal failed | repo=%s | company=%s | run=%s",
+                        repo_full_name, company_id, run_id,
+                    )
+                    return
+
+        logger.info(
+            "Starting full baseline sync for %s | company=%s | run=%s",
+            repo_full_name, company_id, run_id,
+        )
         try:
-            # Resolve the immutable source revision before changing lifecycle state.
-            # A duplicate queued job for the same commit must not regress a ready
-            # repository back to indexing or repeat all Supabase writes.
+            # Resolve a fixed Git snapshot before attempting to claim the repository.
             repo = self.gh.get_repo(repo_full_name)
             source_revision = repo.get_branch(repo.default_branch).commit.sha
-            if self._is_revision_already_ready(repo_full_name, company_id, source_revision):
+            claim = self.supabase.rpc(
+                "claim_repository_baseline",
+                {
+                    "p_full_name": repo_full_name,
+                    "p_company_id": company_id,
+                    "p_source_revision": source_revision,
+                    "p_run_id": run_id,
+                    "p_lease_seconds": 180,
+                },
+            ).execute()
+            claim_status = claim.data
+            if isinstance(claim_status, list) and claim_status:
+                claim_status = claim_status[0]
+            if isinstance(claim_status, dict):
+                claim_status = claim_status.get("claim_repository_baseline")
+            if claim_status == "ready":
                 logger.info(
-                    "Baseline already ready at revision %s; skipping duplicate sync | repo=%s | company=%s",
-                    source_revision,
-                    repo_full_name,
-                    company_id,
+                    "Baseline already ready at revision %s; skipping duplicate sync | repo=%s",
+                    source_revision, repo_full_name,
                 )
                 return True
+            if claim_status != "claimed":
+                logger.info(
+                    "Baseline claim unavailable (%s); leaving job retryable | repo=%s | run=%s",
+                    claim_status, repo_full_name, run_id,
+                )
+                return False
 
-            started_at = datetime.now(timezone.utc).isoformat()
-            self._set_sync_state(
-                repo_full_name,
-                company_id,
-                baseline_status="indexing",
-                baseline_started_at=started_at,
-                baseline_error=None,
+            lease_claimed = True
+            lease_thread = threading.Thread(
+                target=renew_lease,
+                name=f"baseline-lease-{run_id[:8]}",
+                daemon=True,
             )
+            lease_thread.start()
+            started_at = datetime.now(timezone.utc).isoformat()
             now = started_at
+            ensure_lease()
 
             # 1. REPOSITORY entity (tenant-scoped id)
             repo_entity_id = str(
@@ -153,6 +194,7 @@ class CodebaseBaselineSync:
             live_paths: list[str] = []
 
             while contents:
+                ensure_lease()
                 item = contents.pop(0)
                 if item.type == "dir":
                     try:
@@ -197,6 +239,7 @@ class CodebaseBaselineSync:
 
             # Reconcile stale file rows/entities only after the entire immutable
             # Git tree has been traversed and every live file indexed successfully.
+            ensure_lease()
             self.supabase.rpc(
                 "reconcile_repository_files",
                 {
@@ -207,9 +250,11 @@ class CodebaseBaselineSync:
             ).execute()
 
             for mod_path, file_count in module_map.items():
+                ensure_lease()
                 self._create_module(mod_path, physical_repo_id, file_count, company_id)
 
             # Relationship extraction uses the same immutable snapshot as file indexing.
+            ensure_lease()
             relationship_count = self.relationship_indexer.index_repository(
                 repo_full_name, company_id, source_revision=source_revision
             )
@@ -218,17 +263,22 @@ class CodebaseBaselineSync:
                 relationship_count,
             )
 
+            ensure_lease()
             completed_at = datetime.now(timezone.utc).isoformat()
-            self._set_sync_state(
-                repo_full_name,
-                company_id,
-                baseline_status="ready",
-                baseline_completed_at=completed_at,
-                baseline_error=None,
-                baseline_file_count=files_processed,
-                baseline_revision=source_revision,
-                last_synced_at=completed_at,
-            )
+            completion = self.supabase.rpc(
+                "complete_repository_baseline",
+                {
+                    "p_full_name": repo_full_name,
+                    "p_company_id": company_id,
+                    "p_run_id": run_id,
+                    "p_source_revision": source_revision,
+                    "p_file_count": files_processed,
+                    "p_completed_at": completed_at,
+                },
+            ).execute()
+            if completion.data is not True:
+                raise RuntimeError("baseline completion rejected because this run no longer owns the repository lease")
+            lease_claimed = False
             logger.info(
                 f"Baseline sync complete: {files_processed} files, "
                 f"{len(module_map)} modules | company={company_id}"
@@ -236,17 +286,25 @@ class CodebaseBaselineSync:
             )
             return True
         except Exception as e:
-            logger.error(f"Baseline sync failed: {e}", exc_info=True)
-            try:
-                self._set_sync_state(
-                    repo_full_name,
-                    company_id,
-                    baseline_status="failed",
-                    baseline_error="Baseline indexing failed. Check worker logs.",
-                )
-            except Exception:
-                logger.exception("Could not persist failed baseline state for %s", repo_full_name)
+            logger.error("Baseline sync failed for %s: %s", repo_full_name, e, exc_info=True)
             return False
+        finally:
+            lease_stop.set()
+            if lease_thread is not None:
+                lease_thread.join(timeout=5)
+            if lease_claimed:
+                try:
+                    self.supabase.rpc(
+                        "fail_repository_baseline",
+                        {
+                            "p_full_name": repo_full_name,
+                            "p_company_id": company_id,
+                            "p_run_id": run_id,
+                            "p_error": "Baseline indexing failed. Check worker logs.",
+                        },
+                    ).execute()
+                except Exception:
+                    logger.exception("Could not persist failed baseline state for %s", repo_full_name)
 
     def _backfill_issue_events(
         self,
