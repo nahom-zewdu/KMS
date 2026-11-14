@@ -22,8 +22,9 @@ def reasoning_synthesize(
     for i, c in enumerate(chunks[:10], 1):
         src = c.get("source", "raw")
         rid = c.get("record_id", "")
+        content_limit = 4500 if src == "github" else 500
         context_lines.append(
-            f"[{i}] ({src} record_id={rid}) {c.get('content', '')[:500]}"
+            f"[{i}] ({src} record_id={rid}) {c.get('content', '')[:content_limit]}"
         )
     context = "\n".join(context_lines)
     owners_rule = (
