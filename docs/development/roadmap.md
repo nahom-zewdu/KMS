@@ -7,8 +7,8 @@
 > Scoring spec vs implemented subset: `docs/product/ramp-candidate-scoring.md`.
 
 **Last updated:** 2026-11-14
-**Current branch:** `feat/implementation-relations`
-**Current milestone:** MVP-1 — New Engineer Ramp
+**Current branch:** `feat/krt-00-tenant-isolation`
+**Current milestone:** KRT — Knowledge Reliability & Trust
 **Current objective:** Prove that Ramp can move a new engineer from unfamiliarity to useful, safe contribution faster than normal onboarding.
 
 ---
@@ -387,3 +387,79 @@ Do not start KRT implementation on this branch. After the requested merge:
 **Architecture decision:** retain the existing Go, Python, Redis Streams, Supabase/Postgres, and pgvector stack. Improve data contracts, provenance, indexing, retrieval orchestration, and evaluation before considering new infrastructure.
 
 **Scope discipline:** this is not a commitment to build every phase at once. KRT-00 is the only first implementation batch. Each later phase is activated only after the prior acceptance gate and an updated review of the evidence.
+
+
+---
+
+# KRT execution update — 2026-11-14
+
+**Backend repository:** `nahom-zewdu/KMS`  
+**Backend branch:** `feat/krt-00-tenant-isolation`  
+**Base commit:** `68ad38f4d2b40f9e9cb535243f1a2dab4ab1ea9b`  
+**Frontend repository:** `nahom-zewdu/kms-frontend`  
+**Frontend branch:** `feat/krt-00-tenant-isolation`  
+**KRT-00 status:** IN_PROGRESS — critical findings confirmed; initial frontend hardening committed; database migration not yet written/applied.
+
+## Verified merge and branch state
+
+PR #21 merged successfully. The resulting `feat/ramp` head is `68ad38f4d2b40f9e9cb535243f1a2dab4ab1ea9b`. GitHub compare confirms the new backend branch was created from that exact head. A separate frontend branch was created from its `feat/ramp` head.
+
+## KRT-00 live audit — 2026-11-14
+
+The active Supabase project `iqafzuthrjfykfxndres` was audited read-only. Security Advisor reports 11 public tables with RLS disabled:
+`events`, `raw_data`, `edges`, `contributions`, `pull_requests`, `issues`, `query_logs`, `repositories`, `codebase_files`, `file_entity_links`, and `codebase_modules`.
+
+Confirmed policy/RPC defects:
+- `company_members` permits self-insert (`WITH CHECK auth.uid() = user_id`) and self-update without a restrictive `WITH CHECK`; a user may be able to self-enroll or alter their own membership role/company.
+- `entities` has two permissive `FOR ALL USING (true)` policies.
+- `playbooks` has a permissive public `FOR ALL USING (true)` policy.
+- `companies` is readable by the public through `USING (true)`.
+- `match_documents` is callable by `anon` and `authenticated`, allows a NULL company filter, and has mutable search_path.
+- `search_edges_by_entity(text,text[])` is callable by `anon` and `authenticated`, has no company filter, and has mutable search_path. The current Python caller passes a third company filter, so the deployed signature does not match.
+- `reconcile_repository_files(uuid,text,text[])` and `replace_implementation_edges(text,uuid[],jsonb)` are callable by browser roles. The former does not verify that the supplied repository belongs to the supplied company before deleting stale rows.
+- Integration table grants expose direct browser-role table privileges even though it contains access tokens, refresh tokens, and webhook secrets. This table must become backend-only.
+
+Security Advisor additionally reports mutable search_path on both query RPCs and leaked-password protection disabled. Password protection is tracked separately from the KRT data-boundary gate.
+
+## Live data-integrity snapshot
+
+Read-only counts/consistency checks:
+- 2 companies; 2 company memberships, both admins.
+- 422 entities; zero null/default company IDs.
+- 611 edges; zero null company IDs and zero source/target company mismatches.
+- 153 raw_data rows; zero null/default company IDs.
+- 149 events; zero null/default company IDs.
+- 237 codebase files and 96 modules; no missing repository references.
+- 0 file_entity_links.
+- 0 contributions; live `contributions` table lacks `company_id`, although current application code expects it.
+
+These are dated audit counts, not durable product metrics. The empty contributions table makes a tenant-column migration feasible without a historical row backfill, but the migration still needs an explicit constraint and verification plan.
+
+## Application access-path findings
+
+- Frontend `GET /api/codebase` used the public anon client without authentication or company/repository scope. It is now changed on the frontend KRT branch to require a verified user and filter file inventory through repositories belonging to the active company.
+- Frontend `/api/integrations` now uses the server-only admin client only after membership/role checks and selects non-secret integration metadata.
+- Legacy `/onboard/[slug]` queried public playbooks by role only, which could return another company's latest playbook. It now requires a verified session and filters by active company. Public role-slug sharing is disabled until a revocable, unguessable share-token design exists.
+- Go/Python workers use service-role credentials; database access must remain service-role-only for raw events, outbox, query logs, legacy analytics, and integration secrets.
+- Frontend server routes using the admin client must continue to perform explicit membership and role checks because service_role bypasses RLS.
+
+## Work committed so far
+
+Frontend branch `feat/krt-00-tenant-isolation`:
+- `app/api/codebase/route.ts`: authentication + active-company repository scope; no anon-client query.
+- `app/api/integrations/route.ts`: admin-client use behind membership/admin checks; no credential columns in responses.
+- `app/onboard/[slug]/page.tsx`: authenticated active-company playbook query.
+- `docs/security.md` and `docs/architecture.md`: access-boundary documentation.
+
+No database DDL or live data/policy changes have been made. No tests/build have yet been run for these frontend commits.
+
+## Remaining KRT-00 work
+
+1. Design and commit one canonical Supabase migration: correct membership/company/playbook/entity policies; enable RLS on all exposed public tables; revoke browser grants on backend-only tables and integration secrets; grant only required member reads; restrict all sensitive RPCs to service_role; fix graph RPC tenant signature; harden repository reconciliation ownership checks and search_path.
+2. Resolve schema drift: add `contributions.company_id` with a safe FK/unique key; verify events/raw_data/entities/edges ownership constraints and composite edge endpoint constraints.
+3. Extend `schema/tests/tenant_rls.sql` to cover anon denial, membership self-enrollment/self-promotion, cross-company reads/writes, RPC execute privileges, and repository ownership checks.
+4. Run migration + SQL harness against disposable PostgreSQL, then run backend and frontend suites/builds.
+5. Apply the reviewed migration to the active Supabase project only after disposable verification and explicit deployment approval; re-run Advisors and role-based live checks.
+6. Update both roadmaps and open coordinated PRs only when code/tests/docs are ready.
+
+**Do not mark KRT-00 VERIFIED or ACCEPTED until the migration is tested and live database role checks prove the boundary.**
