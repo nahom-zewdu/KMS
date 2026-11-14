@@ -125,7 +125,7 @@ def test_authorship_is_reported_as_last_author_not_ownership():
 
 def test_followup_file_question_resolves_paths_from_conversation_history():
     db = Supabase(
-        repositories=[{"id": "r1", "full_name": "acme/api"}],
+        repositories=[{"id": "r1", "company_id": "c1", "full_name": "acme/api"}],
         codebase_files=[
             {"repository_id": "r1", "file_path": "api/handlers/routes.go", "language": "Go",
              "module_path": "api/handlers", "last_author": "nahom-zewdu"},
