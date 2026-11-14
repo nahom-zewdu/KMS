@@ -36,12 +36,47 @@ class CodebaseBaselineSync:
             "full_name", repo_full_name
         ).eq("company_id", company_id).execute()
 
+    def _is_revision_already_ready(
+        self, repo_full_name: str, company_id: str, source_revision: str
+    ) -> bool:
+        """Return whether this exact Git revision is already fully indexed."""
+        response = (
+            self.supabase.table("repositories")
+            .select("baseline_status, baseline_revision")
+            .eq("full_name", repo_full_name)
+            .eq("company_id", company_id)
+            .limit(1)
+            .execute()
+        )
+        rows = getattr(response, "data", None) or []
+        if not rows:
+            return False
+        current = rows[0]
+        return (
+            current.get("baseline_status") == "ready"
+            and current.get("baseline_revision") == source_revision
+        )
+
     def sync_repository(self, repo_full_name: str, company_id: str) -> bool:
-        """Perform a full baseline sync for the given repository."""
+        """Perform a full baseline sync, skipping an already-indexed Git revision."""
         if not company_id or company_id.strip().lower() == "default":
             raise ValueError("company_id must resolve to a real company")
-        logger.info(f"Starting full baseline sync for {repo_full_name} | company={company_id}")
+        logger.info("Starting full baseline sync for %s | company=%s", repo_full_name, company_id)
         try:
+            # Resolve the immutable source revision before changing lifecycle state.
+            # A duplicate queued job for the same commit must not regress a ready
+            # repository back to indexing or repeat all Supabase writes.
+            repo = self.gh.get_repo(repo_full_name)
+            source_revision = repo.get_branch(repo.default_branch).commit.sha
+            if self._is_revision_already_ready(repo_full_name, company_id, source_revision):
+                logger.info(
+                    "Baseline already ready at revision %s; skipping duplicate sync | repo=%s | company=%s",
+                    source_revision,
+                    repo_full_name,
+                    company_id,
+                )
+                return True
+
             started_at = datetime.now(timezone.utc).isoformat()
             self._set_sync_state(
                 repo_full_name,
@@ -50,8 +85,6 @@ class CodebaseBaselineSync:
                 baseline_started_at=started_at,
                 baseline_error=None,
             )
-            repo = self.gh.get_repo(repo_full_name)
-            source_revision = repo.get_branch(repo.default_branch).commit.sha
             now = started_at
 
             # 1. REPOSITORY entity (tenant-scoped id)
