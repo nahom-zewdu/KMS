@@ -343,7 +343,7 @@ Local execution is still required before marking RID-09 VERIFIED. Acceptance add
 
 ## Deferred infrastructure
 
-Live Supabase schema reconciliation, RLS/security hardening, and canonical migration workflow remain separate workstreams. Do not pull them into RID-07.
+Live Supabase schema reconciliation, RLS/security hardening, and canonical migration workflow remain separate workstreams. Do not pull them into RID-07, RID-08, or RID-09.
 
 
 ---
