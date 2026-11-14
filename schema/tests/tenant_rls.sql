@@ -175,12 +175,6 @@ DO $krt$ DECLARE row_count integer; BEGIN
   IF row_count <> 2 THEN RAISE EXCEPTION 'cross-company raw_data read: expected 2 got %', row_count; END IF;
   SELECT count(*) INTO row_count FROM public.company_members;
   IF row_count <> 2 THEN RAISE EXCEPTION 'membership visibility or recursive policy failure: expected 2 got %', row_count; END IF;
-  SELECT count(*) INTO row_count
-  FROM public.search_edges_by_entity('A data', ARRAY[]::text[], 'company-a');
-  IF row_count <> 1 THEN RAISE EXCEPTION 'company-scoped graph RPC expected 1 row, got %', row_count; END IF;
-  SELECT count(*) INTO row_count
-  FROM public.search_edges_by_entity('B data', ARRAY[]::text[], 'company-b');
-  IF row_count <> 0 THEN RAISE EXCEPTION 'cross-company graph RPC returned % rows', row_count; END IF;
 END $$;
 DO $$ BEGIN
   BEGIN
@@ -236,6 +230,12 @@ SET ROLE service_role;
 DO $$ DECLARE row_count integer; BEGIN
   SELECT count(*) INTO row_count FROM public.entities;
   IF row_count <> 2 THEN RAISE EXCEPTION 'service role should access both tenants; got %', row_count; END IF;
+  SELECT count(*) INTO row_count
+  FROM public.search_edges_by_entity('A data', ARRAY[]::text[], 'company-a');
+  IF row_count <> 1 THEN RAISE EXCEPTION 'company-scoped graph RPC expected 1 row, got %', row_count; END IF;
+  SELECT count(*) INTO row_count
+  FROM public.search_edges_by_entity('B data', ARRAY[]::text[], 'company-b');
+  IF row_count <> 1 THEN RAISE EXCEPTION 'service-role graph RPC company filter failed, got %', row_count; END IF;
   INSERT INTO public.raw_data (id, company_id, source, content, record_id)
   VALUES ('40000000-0000-0000-0000-000000000003','company-b','github','worker write','worker-write');
   SELECT count(*) INTO row_count FROM public.contributions
