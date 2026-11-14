@@ -21,7 +21,7 @@ _MAX_FILE_CHARS = 9000
 
 def _paths_from_text(value: str) -> list[str]:
     return re.findall(
-        r"(?:[\w.-]+/)+[\w.-]+\.(?:go|py|ts|tsx|js|jsx)",
+        r"(?:[\w.-]+/)+[\w.-]+\.(?:go|py|ts|tsx|js|jsx|sql|md)",
         value or "",
     )
 
