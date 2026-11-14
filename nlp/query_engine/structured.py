@@ -48,6 +48,14 @@ def _company_inventory(supabase: Any, company_id: str) -> tuple[list[dict], list
 
 def _context_paths(context: dict[str, Any]) -> list[str]:
     paths: list[str] = []
+    history = context.get("conversation_history")
+    if isinstance(history, list):
+        for message in history[-8:]:
+            if isinstance(message, dict):
+                paths.extend(re.findall(
+                    r"(?:[\\w.-]+/)+[\\w.-]+\\.(?:go|py|ts|tsx|js|jsx|sql|md)",
+                    str(message.get("content") or ""),
+                ))
     active = context.get("active_step")
     steps = [active] if isinstance(active, dict) else []
     if not steps:
@@ -137,14 +145,101 @@ def _ownership_answer(
 
 
 def answer_structured_question(
-    supabase: Any, question: str, company_id: str, ramp_context: str | None = None
+    supabase: Any, question: str, company_id: str, ramp_context: str | None = None,
+    conversation_history: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any] | None:
     """Return an authoritative answer for supported structured company/Ramp questions."""
     q = re.sub(r"\s+", " ", (question or "").strip().lower())
     context = parse_ramp_context(ramp_context)
+    context["conversation_history"] = conversation_history or []
 
     if re.search(r"\b(owner|owners|who owns|maintainer|maintainers)\b", q):
         return _ownership_answer(supabase, company_id, context, question)
+
+    if re.search(r"\b(who|which person)\b.*\b(implemented|authored|wrote|changed|committed)\b|\b(implemented|authored|wrote)\b", q):
+        _, files = _company_inventory(supabase, company_id)
+        paths = _context_paths(context)
+        if not paths and "handler" in q:
+            paths = [str(row.get("file_path")) for row in files
+                     if "api/handlers/" in str(row.get("file_path") or "")]
+        selected = [row for row in files if not paths or row.get("file_path") in set(paths)]
+        authors: dict[str, list[str]] = {}
+        for row in selected:
+            author = str(row.get("last_author") or "").strip()
+            path = str(row.get("file_path") or "")
+            if author and path:
+                authors.setdefault(author, []).append(path)
+        if authors:
+            detail = "; ".join(
+                f"{author}: {', '.join(sorted(set(author_paths))[:8])}"
+                for author, author_paths in sorted(authors.items())
+            )
+            answer = (
+                "The indexed last-author metadata records these contributors: "
+                + detail
+                + ". This identifies the latest recorded author for each file, not everyone who implemented the area."
+            )
+        else:
+            answer = (
+                "I don't have reliable author metadata for those files. Ownership relationships are not proof of who implemented them."
+            )
+        return {
+            "answer": answer, "confidence": "medium" if authors else "low",
+            "sources": [{"source": "codebase_files", "file_path": path}
+                        for paths_for_author in authors.values() for path in paths_for_author][:8],
+            "owners": sorted(authors),
+            "abstain_reason": None if authors else "author_metadata_unavailable",
+        }
+
+    if re.search(r"\b(those files|these files|tell me about (the )?files|anything about (the )?files|describe (the )?files)\b", q):
+        repositories, files = _company_inventory(supabase, company_id)
+        paths = _context_paths(context)
+        selected = [row for row in files if row.get("file_path") in set(paths)]
+        repo_names = {str(row.get("id")): str(row.get("full_name") or "") for row in repositories}
+        if selected:
+            lines = []
+            for row in selected[:10]:
+                parts = [str(row.get("file_path"))]
+                if row.get("language"):
+                    parts.append(str(row["language"]))
+                if row.get("module_path"):
+                    parts.append(f"module {row['module_path']}")
+                if row.get("last_author"):
+                    parts.append(f"last recorded author {row['last_author']}")
+                if row.get("repository_id") in repo_names:
+                    parts.append(repo_names[row["repository_id"]])
+                lines.append(" — ".join(parts))
+            return {
+                "answer": "Here is what the indexed metadata tells us:\n" + "\n".join(lines)
+                    + "\nThis is inventory metadata; it does not by itself explain the files' runtime behavior.",
+                "confidence": "high",
+                "sources": [{"source": "codebase_files", "file_path": str(row.get("file_path"))}
+                            for row in selected[:8]],
+                "owners": [], "abstain_reason": None,
+            }
+
+    if re.search(r"\b(where are we right now|what am i working on|what are we working on)\b", q):
+        active = context.get("active_step") if isinstance(context.get("active_step"), dict) else None
+        role = str(context.get("role") or "engineer")
+        if active:
+            target = active.get("target") if isinstance(active.get("target"), dict) else {}
+            repo = target.get("repo")
+            paths = _context_paths(context)
+            answer = f"You are on step {active.get('order', '?')}: {active.get('title', 'Ramp step')} for the {role} Ramp."
+            if repo:
+                answer += f" The step targets {repo}."
+            if paths:
+                answer += " Its referenced files include " + ", ".join(paths[:6]) + "."
+        else:
+            steps = context.get("steps") if isinstance(context.get("steps"), list) else []
+            answer = f"You are viewing the {role} Ramp overview with {len(steps)} steps."
+            if steps:
+                answer += " The plan is at the overview level; no single active implementation file is selected."
+        return {
+            "answer": answer, "confidence": "high",
+            "sources": [{"source": "ramp_plans", "record_id": str(context.get("plan_id") or "")}],
+            "owners": [], "abstain_reason": None,
+        }
 
     if re.search(r"\b(how many|count|number of)\b.*\b(files?|source files?)\b|\b(files?|source files?)\s+(are|is)\s+indexed\b", q):
         repositories, files = _company_inventory(supabase, company_id)
