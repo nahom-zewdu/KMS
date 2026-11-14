@@ -290,7 +290,7 @@ def answer_structured_question(
                 "owners": [], "abstain_reason": None,
             }
 
-    if re.search(r"\b(which|what)\s+(repo|repository)|\bcurrent(ly)?\s+(repo|repository)|\brepo(sitory)?\s+(are we|am i)\s+working on\b", q):
+    if re.search(r"\b(which|what)\s+(repo|repository)|\bwhat is the repo\b|\bcurrent(ly)?\s+(repo|repository)|\brepo(sitory)?\s+(are we|am i)\s+working on\b|\brepo\s+we're\s+currently\s+working on\b", q):
         repositories, _ = _company_inventory(supabase, company_id)
         active = context.get("active_step") if isinstance(context.get("active_step"), dict) else {}
         target = active.get("target") if isinstance(active.get("target"), dict) else {}
