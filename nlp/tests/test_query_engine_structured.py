@@ -146,3 +146,57 @@ def test_followup_file_question_resolves_paths_from_conversation_history():
     assert "api/handlers/routes.go" in result["answer"]
     assert "api/handlers/github.go" in result["answer"]
     assert "Go" in result["answer"]
+
+
+
+def test_repository_specific_file_count_does_not_return_company_total():
+    db = Supabase(
+        repositories=[
+            {"id": "r1", "company_id": "c1", "full_name": "nahom-zewdu/KMS"},
+            {"id": "r2", "company_id": "c1", "full_name": "nahom-zewdu/kms-frontend"},
+        ],
+        codebase_files=[
+            {"repository_id": "r1", "file_path": "api/main.go"},
+            {"repository_id": "r1", "file_path": "api/routes.go"},
+            {"repository_id": "r2", "file_path": "app/page.tsx"},
+        ],
+    )
+    result = answer_structured_question(db, "How many files are indexed in nahom-zewdu/KMS repository?", "c1")
+    assert result["answer"] == "2 indexed files are in nahom-zewdu/KMS."
+
+
+def test_connected_repositories_are_listed_deterministically():
+    db = Supabase(repositories=[
+        {"id": "r1", "company_id": "c1", "full_name": "nahom-zewdu/KMS"},
+        {"id": "r2", "company_id": "c1", "full_name": "nahom-zewdu/kms-frontend"},
+    ])
+    result = answer_structured_question(db, "List all connected repositories", "c1")
+    assert "nahom-zewdu/KMS" in result["answer"]
+    assert "nahom-zewdu/kms-frontend" in result["answer"]
+
+
+def test_ramp_steps_are_listed_from_company_scoped_plan():
+    db = Supabase(ramp_plans=[{
+        "id": "p1", "company_id": "c1", "role": "backend-engineer",
+        "steps": [{"title": "Understand architecture"}, {"title": "Trace a workflow"}],
+    }])
+    result = answer_structured_question(
+        db, "Can you list the steps here?", "c1",
+        json.dumps({"plan_id": "p1", "role": "backend-engineer"}),
+    )
+    assert "1. Understand architecture" in result["answer"]
+    assert "2. Trace a workflow" in result["answer"]
+
+
+def test_creator_is_not_confused_with_ramp_employee_name():
+    db = Supabase(ramp_plans=[{
+        "id": "p1", "company_id": "c1", "role": "backend-engineer",
+        "employee_name": "Kinfemichael Tariku", "steps": [],
+    }])
+    result = answer_structured_question(
+        db, "Who created this Ramp?", "c1",
+        json.dumps({"plan_id": "p1", "role": "backend-engineer"}),
+    )
+    assert "does not contain a creator identity" in result["answer"]
+    assert "Kinfemichael Tariku" not in result["answer"]
+    assert result["abstain_reason"] == "ramp_creator_not_recorded"
