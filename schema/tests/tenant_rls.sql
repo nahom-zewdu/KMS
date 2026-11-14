@@ -95,6 +95,8 @@ VALUES (
 );
 INSERT INTO public.repositories VALUES
   ('50000000-0000-0000-0000-000000000001','company-a','org/repo-a');
+INSERT INTO public.codebase_files VALUES
+  ('51000000-0000-0000-0000-000000000001','50000000-0000-0000-0000-000000000001','src/main.py');
 INSERT INTO public.contributions (id, person_name, repo_name, commit_count)
 VALUES ('60000000-0000-0000-0000-000000000001','engineer','org/repo-a',3);
 \ir ../migrations/20261101_contributions_tenant_scope.sql
@@ -254,6 +256,28 @@ DO $$ DECLARE row_count integer; BEGIN
   SELECT count(*) INTO row_count
   FROM public.search_edges_by_entity('B data', ARRAY[]::text[], 'company-b');
   IF row_count <> 1 THEN RAISE EXCEPTION 'service-role graph RPC company filter failed, got %', row_count; END IF;
+  DECLARE
+    ownership_rejected boolean := false;
+    file_count integer;
+  BEGIN
+    BEGIN
+      PERFORM public.reconcile_repository_files(
+        '50000000-0000-0000-0000-000000000001',
+        'company-b',
+        ARRAY[]::text[]
+      );
+    EXCEPTION WHEN insufficient_privilege THEN
+      ownership_rejected := true;
+    END;
+    IF NOT ownership_rejected THEN
+      RAISE EXCEPTION 'repository reconciliation accepted a repository/company mismatch';
+    END IF;
+    SELECT count(*) INTO file_count FROM public.codebase_files
+    WHERE id='51000000-0000-0000-0000-000000000001';
+    IF file_count <> 1 THEN
+      RAISE EXCEPTION 'failed cross-company reconciliation deleted an indexed file';
+    END IF;
+  END;
   INSERT INTO public.raw_data (id, company_id, source, content, record_id)
   VALUES ('40000000-0000-0000-0000-000000000003','company-b','github','worker write','worker-write');
   SELECT count(*) INTO row_count FROM public.contributions
