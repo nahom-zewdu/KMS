@@ -128,7 +128,7 @@ class QueryEngine:
             grounded_sources = sources_from_chunks(relevant_chunks)
             asks_ownership = bool(
                 re.search(
-                    r"\\b(owner|owners|owns|maintainer|maintainers|responsible for)\\b",
+                    r"\b(owner|owners|owns|maintainer|maintainers|responsible for)\b",
                     question.lower(),
                 )
             )
