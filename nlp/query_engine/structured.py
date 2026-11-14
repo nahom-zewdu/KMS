@@ -214,7 +214,14 @@ def answer_structured_question(
 
     if re.search(r"\b(those files|these files|tell me about (the )?files|anything about (the )?files|describe (the )?files)\b", q):
         repositories, files = _company_inventory(supabase, company_id)
-        paths = _context_paths(context)
+        history_paths: list[str] = []
+        for message in (conversation_history or [])[-8:]:
+            if isinstance(message, dict):
+                history_paths.extend(re.findall(
+                    r"(?:[\\w.-]+/)+[\\w.-]+\\.(?:go|py|ts|tsx|js|jsx|sql|md)",
+                    str(message.get("content") or ""),
+                ))
+        paths = list(dict.fromkeys(history_paths)) or _context_paths(context)
         selected = [row for row in files if row.get("file_path") in set(paths)]
         repo_names = {str(row.get("id")): str(row.get("full_name") or "") for row in repositories}
         if selected:
