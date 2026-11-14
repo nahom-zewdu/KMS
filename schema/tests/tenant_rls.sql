@@ -17,7 +17,9 @@ AS $$ SELECT nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$
 GRANT USAGE ON SCHEMA auth TO authenticated;
 GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated, service_role;
 
-CREATE TABLE public.companies (id text PRIMARY KEY DEFAULT 'default', name text NOT NULL);\nCREATE TABLE public.profiles (id uuid PRIMARY KEY REFERENCES auth.users(id), name text);\nALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+CREATE TABLE public.companies (id text PRIMARY KEY DEFAULT 'default', name text NOT NULL);
+CREATE TABLE public.profiles (id uuid PRIMARY KEY REFERENCES auth.users(id), name text);
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 CREATE TABLE public.company_members (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES auth.users(id),
@@ -45,7 +47,8 @@ CREATE TABLE public.raw_data (
 );
 CREATE TABLE public.playbooks (id uuid PRIMARY KEY, company_id text, role text);
 CREATE TABLE public.ramp_plans (id uuid PRIMARY KEY, company_id text, role text);
-CREATE TABLE public.ramp_step_progress (id uuid PRIMARY KEY, plan_id uuid, company_id text, user_id text, step_id text, status text);\nCREATE TABLE public.ramp_step_feedback (id uuid PRIMARY KEY, plan_id uuid NOT NULL, company_id text NOT NULL, step_id text NOT NULL, user_id text NOT NULL, rating text NOT NULL, reason text, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE public.ramp_step_progress (id uuid PRIMARY KEY, plan_id uuid, company_id text, user_id text, step_id text, status text);
+CREATE TABLE public.ramp_step_feedback (id uuid PRIMARY KEY, plan_id uuid NOT NULL, company_id text NOT NULL, step_id text NOT NULL, user_id text NOT NULL, rating text NOT NULL, reason text, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now());
 CREATE TABLE public.events (
   id uuid PRIMARY KEY,
   source text NOT NULL,
