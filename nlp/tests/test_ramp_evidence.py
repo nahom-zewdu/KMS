@@ -104,9 +104,9 @@ def test_contribution_issues_require_open_unassigned_labeled_issue_and_indexed_p
         "number": 42,
         "title": "Add retry visibility to webhook processing",
         "body": (
-            "Acceptance criteria:\\n"
-            "- [ ] Show retry state in the response\\n"
-            "- [ ] Add a regression test\\n"
+            "Acceptance criteria:\n"
+            "- [ ] Show retry state in the response\n"
+            "- [ ] Add a regression test\n"
             "Relevant file: api/handlers/webhook.go"
         ),
         "state": "open",
