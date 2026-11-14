@@ -218,7 +218,7 @@ def answer_structured_question(
         for message in (conversation_history or [])[-8:]:
             if isinstance(message, dict):
                 history_paths.extend(re.findall(
-                    r"(?:[\\w.-]+/)+[\\w.-]+\\.(?:go|py|ts|tsx|js|jsx|sql|md)",
+                    r"(?:[\w.-]+/)+[\w.-]+\.(?:go|py|ts|tsx|js|jsx|sql|md)",
                     str(message.get("content") or ""),
                 ))
         paths = list(dict.fromkeys(history_paths)) or _context_paths(context)
