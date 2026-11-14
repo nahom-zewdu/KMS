@@ -323,8 +323,20 @@ def answer_structured_question(
         target = active.get("target") if isinstance(active.get("target"), dict) else {}
         current_repo = target.get("repo") or context.get("current_repository")
         connected = [str(row.get("full_name")) for row in repositories if row.get("full_name")]
+        plan_steps = context.get("steps") if isinstance(context.get("steps"), list) else []
+        plan_repositories = sorted({
+            str(step.get("target", {}).get("repo"))
+            for step in plan_steps
+            if isinstance(step, dict)
+            and isinstance(step.get("target"), dict)
+            and step.get("target", {}).get("repo")
+        })
         if current_repo:
             answer = f"The current Ramp step points to {current_repo}."
+        elif len(plan_repositories) == 1:
+            answer = f"The current Ramp primarily targets {plan_repositories[0]}."
+        elif len(plan_repositories) > 1:
+            answer = "The current Ramp spans these repositories: " + ", ".join(plan_repositories) + "."
         elif len(connected) == 1:
             answer = f"The connected repository is {connected[0]}."
         elif connected:
