@@ -78,9 +78,9 @@ def test_ramp_step_count_uses_company_scoped_active_plan():
 def test_ownership_answer_uses_file_ownership_edges_not_generated_people():
     db = Supabase(
         entities=[
-            {"id": "f1", "name": "routes.go", "type": "FILE",
+            {"id": "f1", "company_id": "c1", "name": "routes.go", "type": "FILE",
              "metadata": {"file_path": "api/handlers/routes.go"}},
-            {"id": "p1", "name": "nahom-zewdu", "type": "person", "metadata": {}},
+            {"id": "p1", "company_id": "c1", "name": "nahom-zewdu", "type": "person", "metadata": {}},
         ],
         edges=[
             {"company_id": "c1", "source_id": "p1", "target_id": "f1", "type": "OWNS", "confidence": 0.8},
