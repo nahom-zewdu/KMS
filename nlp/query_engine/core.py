@@ -18,6 +18,7 @@ from .synthesizer import reasoning_synthesize
 from .cache import QueryCache
 from .analytics import log_query
 from .structured import answer_structured_question
+from .source_retriever import retrieve_source_chunks
 
 logger = logging.getLogger("kms.core")
 
@@ -91,6 +92,40 @@ class QueryEngine:
             )
             if previous_user:
                 effective_question = previous_user
+
+        # For file-explanation questions, retrieve bounded source text from files
+        # already indexed under this company before asking the model to explain them.
+        try:
+            source_chunks = retrieve_source_chunks(
+                self.supabase, company_id, effective_question, ramp_context,
+                conversation_history=conversation_history,
+            )
+        except Exception:
+            logger.exception("Source-code retrieval failed | company=%s", company_id)
+            source_chunks = []
+        if source_chunks:
+            try:
+                raw_source_answer = reasoning_synthesize(
+                    effective_question,
+                    source_chunks,
+                    allowed_owners=[],
+                    ramp_context=ramp_context,
+                )
+                source_answer = normalize_answer(raw_source_answer)
+            except Exception:
+                logger.exception("Source-code synthesis failed | company=%s", company_id)
+                source_answer = abstain("synthesis_failed")
+            source_answer["sources"] = sources_from_chunks(source_chunks)
+            source_answer["owners"] = []
+            if source_answer.get("sources"):
+                source_answer["abstain_reason"] = None
+                final_answer = json.dumps(source_answer, indent=2)
+                self.redis.publish(f"query_results:{query_id}", final_answer)
+                logger.info(
+                    "Source-grounded answer sent | %s | company=%s | files=%d",
+                    query_id, company_id, len(source_chunks),
+                )
+                return final_answer
 
         # Structured company facts must come from authoritative tables, not vector top-k.
         try:
