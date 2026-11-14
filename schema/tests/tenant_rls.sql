@@ -18,6 +18,8 @@ GRANT USAGE ON SCHEMA auth TO authenticated;
 GRANT EXECUTE ON FUNCTION auth.uid() TO authenticated, service_role;
 
 CREATE TABLE public.companies (id text PRIMARY KEY DEFAULT 'default', name text NOT NULL);
+CREATE TABLE public.profiles (id uuid PRIMARY KEY REFERENCES auth.users(id), name text);
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 CREATE TABLE public.company_members (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES auth.users(id),
@@ -33,7 +35,7 @@ CREATE TABLE public.codebase_files (id uuid PRIMARY KEY, repository_id uuid REFE
 CREATE TABLE public.codebase_modules (id uuid PRIMARY KEY, repository_id uuid REFERENCES public.repositories(id), module_path text);
 CREATE TABLE public.file_entity_links (id uuid PRIMARY KEY, file_id uuid REFERENCES public.codebase_files(id), entity_id uuid);
 CREATE TABLE public.entities (id uuid PRIMARY KEY, company_id text, type text, name text, metadata jsonb);
-CREATE TABLE public.edges (id uuid PRIMARY KEY, company_id text, source_id uuid REFERENCES public.entities(id), target_id uuid REFERENCES public.entities(id), type text, metadata jsonb, confidence double precision);
+CREATE TABLE public.edges (id uuid PRIMARY KEY, company_id text, source_id uuid REFERENCES public.entities(id), target_id uuid REFERENCES public.entities(id), type text, metadata jsonb, confidence double precision, created_at timestamptz DEFAULT now());
 CREATE TABLE public.raw_data (
   id uuid PRIMARY KEY,
   company_id text NOT NULL,
@@ -46,6 +48,7 @@ CREATE TABLE public.raw_data (
 CREATE TABLE public.playbooks (id uuid PRIMARY KEY, company_id text, role text);
 CREATE TABLE public.ramp_plans (id uuid PRIMARY KEY, company_id text, role text);
 CREATE TABLE public.ramp_step_progress (id uuid PRIMARY KEY, plan_id uuid, company_id text, user_id text, step_id text, status text);
+CREATE TABLE public.ramp_step_feedback (id uuid PRIMARY KEY, plan_id uuid NOT NULL, company_id text NOT NULL, step_id text NOT NULL, user_id text NOT NULL, rating text NOT NULL, reason text, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now());
 CREATE TABLE public.events (
   id uuid PRIMARY KEY,
   source text NOT NULL,
@@ -92,6 +95,8 @@ VALUES (
 );
 INSERT INTO public.repositories VALUES
   ('50000000-0000-0000-0000-000000000001','company-a','org/repo-a');
+INSERT INTO public.codebase_files VALUES
+  ('51000000-0000-0000-0000-000000000001','50000000-0000-0000-0000-000000000001','src/main.py');
 INSERT INTO public.contributions (id, person_name, repo_name, commit_count)
 VALUES ('60000000-0000-0000-0000-000000000001','engineer','org/repo-a',3);
 \ir ../migrations/20261101_contributions_tenant_scope.sql
@@ -117,24 +122,79 @@ INSERT INTO public.raw_data (id, company_id, source, content, record_id) VALUES
 \ir ../migrations/20261031_tenant_access_policies.sql
 \ir ../migrations/20261031_tenant_access_policies.sql
 \ir ../graph_traverser_rpc.sql
+\ir ../../supabase/migrations/20261114095928_add_repository_file_reconciliation_rpc.sql
+\ir ../../supabase/migrations/20261114101649_add_implementation_edge_replacement_rpc.sql
+\ir ../../supabase/migrations/20261114150000_enforce_company_tenant_isolation.sql
+
+-- Anonymous browser role must not access tenant data or integration credentials.
+SET ROLE anon;
+DO $krt$ BEGIN
+  BEGIN
+    PERFORM count(*) FROM public.companies;
+    RAISE EXCEPTION 'anon unexpectedly read companies';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    PERFORM count(*) FROM public.entities;
+    RAISE EXCEPTION 'anon unexpectedly read entities';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    PERFORM count(*) FROM public.company_integrations;
+    RAISE EXCEPTION 'anon unexpectedly read integration credentials';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END $krt$;
+RESET ROLE;
+
 
 SET ROLE authenticated;
 SET request.jwt.claim.sub = '00000000-0000-0000-0000-000000000001';
-DO $$ DECLARE row_count integer; BEGIN
+DO $krt$ BEGIN
+  IF has_function_privilege('authenticated','public.search_edges_by_entity(text,text[],text)','EXECUTE') THEN
+    RAISE EXCEPTION 'authenticated can execute graph search RPC';
+  END IF;
+  IF has_function_privilege('authenticated','public.reconcile_repository_files(uuid,text,text[])','EXECUTE') THEN
+    RAISE EXCEPTION 'authenticated can execute repository reconciliation RPC';
+  END IF;
+  IF has_function_privilege('authenticated','public.replace_implementation_edges(text,uuid[],jsonb)','EXECUTE') THEN
+    RAISE EXCEPTION 'authenticated can execute implementation edge replacement RPC';
+  END IF;
+  IF to_regprocedure('public.match_documents(extensions.vector,double precision,integer,text)') IS NOT NULL
+     AND has_function_privilege('authenticated','public.match_documents(extensions.vector,double precision,integer,text)','EXECUTE') THEN
+    RAISE EXCEPTION 'authenticated can execute vector search RPC';
+  END IF;
+  IF NOT has_function_privilege('service_role','public.search_edges_by_entity(text,text[],text)','EXECUTE') THEN
+    RAISE EXCEPTION 'service_role cannot execute graph search RPC';
+  END IF;
+END $krt$;
+DO $krt$ DECLARE row_count integer; BEGIN
   SELECT count(*) INTO row_count FROM public.entities;
   IF row_count <> 1 THEN RAISE EXCEPTION 'cross-company entity read: expected 1 got %', row_count; END IF;
+  SELECT count(*) INTO row_count FROM public.companies;
+  IF row_count <> 1 THEN RAISE EXCEPTION 'company directory scope expected 1 got %', row_count; END IF;
   SELECT count(*) INTO row_count FROM public.edges;
   IF row_count <> 1 THEN RAISE EXCEPTION 'cross-company edge read: expected 1 got %', row_count; END IF;
-  SELECT count(*) INTO row_count FROM public.raw_data;
-  IF row_count <> 1 THEN RAISE EXCEPTION 'cross-company raw_data read: expected 1 got %', row_count; END IF;
+  IF has_table_privilege('authenticated','public.raw_data','SELECT') THEN
+    RAISE EXCEPTION 'authenticated has direct raw_data SELECT privilege';
+  END IF;
+  IF has_table_privilege('authenticated','public.company_integrations','SELECT') THEN
+    RAISE EXCEPTION 'authenticated has direct integration credential SELECT privilege';
+  END IF;
+  IF has_table_privilege('authenticated','public.events','SELECT')
+     OR has_table_privilege('authenticated','public.contributions','SELECT')
+     OR has_table_privilege('authenticated','public.pull_requests','SELECT')
+     OR has_table_privilege('authenticated','public.issues','SELECT')
+     OR has_table_privilege('authenticated','public.query_logs','SELECT')
+     OR has_table_privilege('authenticated','public.ingestion_outbox','SELECT')
+     OR has_table_privilege('authenticated','public.ramp_step_feedback','SELECT') THEN
+    RAISE EXCEPTION 'authenticated has direct access to backend-only tables';
+  END IF;
+  IF to_regprocedure('public.search_edges_by_entity(text,text[])') IS NOT NULL THEN
+    RAISE EXCEPTION 'unscoped graph RPC overload still exists';
+  END IF;
   SELECT count(*) INTO row_count FROM public.company_members;
   IF row_count <> 2 THEN RAISE EXCEPTION 'membership visibility or recursive policy failure: expected 2 got %', row_count; END IF;
-  SELECT count(*) INTO row_count
-  FROM public.search_edges_by_entity('A data', ARRAY[]::text[], 'company-a');
-  IF row_count <> 1 THEN RAISE EXCEPTION 'company-scoped graph RPC expected 1 row, got %', row_count; END IF;
-  SELECT count(*) INTO row_count
-  FROM public.search_edges_by_entity('B data', ARRAY[]::text[], 'company-b');
-  IF row_count <> 0 THEN RAISE EXCEPTION 'cross-company graph RPC returned % rows', row_count; END IF;
 END $$;
 DO $$ BEGIN
   BEGIN
@@ -187,9 +247,35 @@ END $$;
 
 RESET ROLE;
 SET ROLE service_role;
-DO $$ DECLARE row_count integer; BEGIN
+DO $krt$ DECLARE row_count integer; ownership_rejected boolean := false; file_count integer; BEGIN
   SELECT count(*) INTO row_count FROM public.entities;
   IF row_count <> 2 THEN RAISE EXCEPTION 'service role should access both tenants; got %', row_count; END IF;
+  SELECT count(*) INTO row_count
+  FROM public.search_edges_by_entity('A data', ARRAY[]::text[], 'company-a');
+  IF row_count <> 1 THEN RAISE EXCEPTION 'company-scoped graph RPC expected 1 row, got %', row_count; END IF;
+  SELECT count(*) INTO row_count
+  FROM public.search_edges_by_entity('B data', ARRAY[]::text[], 'company-b');
+  IF row_count <> 1 THEN RAISE EXCEPTION 'service-role graph RPC company filter failed, got %', row_count; END IF;
+  ownership_rejected := false;
+  BEGIN
+    BEGIN
+      PERFORM public.reconcile_repository_files(
+        '50000000-0000-0000-0000-000000000001',
+        'company-b',
+        ARRAY[]::text[]
+      );
+    EXCEPTION WHEN insufficient_privilege THEN
+      ownership_rejected := true;
+    END;
+    IF NOT ownership_rejected THEN
+      RAISE EXCEPTION 'repository reconciliation accepted a repository/company mismatch';
+    END IF;
+    SELECT count(*) INTO file_count FROM public.codebase_files
+    WHERE id='51000000-0000-0000-0000-000000000001';
+    IF file_count <> 1 THEN
+      RAISE EXCEPTION 'failed cross-company reconciliation deleted an indexed file';
+    END IF;
+  END;
   INSERT INTO public.raw_data (id, company_id, source, content, record_id)
   VALUES ('40000000-0000-0000-0000-000000000003','company-b','github','worker write','worker-write');
   SELECT count(*) INTO row_count FROM public.contributions
@@ -210,7 +296,7 @@ DO $$ DECLARE row_count integer; BEGIN
     RAISE EXCEPTION 'cross-company duplicate delivery_id unexpectedly succeeded';
   EXCEPTION WHEN unique_violation THEN NULL;
   END;
-END $$;
+END $krt$;
 DO $$
 DECLARE
   first_outbox_id uuid;
