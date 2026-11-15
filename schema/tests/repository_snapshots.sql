@@ -21,10 +21,10 @@ BEGIN
   VALUES (v_company, 'Repository snapshot test');
 
   INSERT INTO public.repositories (
-    id, company_id, full_name, default_branch,
+    id, company_id, full_name,
     baseline_status, baseline_run_id, baseline_lease_expires_at
   ) VALUES (
-    v_repo, v_company, 'snapshot-test/repository', 'main',
+    v_repo, v_company, 'snapshot-test/repository',
     'indexing', v_run, now() + interval '10 minutes'
   );
 
@@ -40,15 +40,15 @@ BEGIN
       jsonb_build_object('file_path', 'src/target.go', 'repository_id', v_repo::text));
 
   INSERT INTO public.codebase_files (
-    id, repository_id, file_path, file_name, snapshot_id, language
+    id, repository_id, file_path, snapshot_id
   ) VALUES
-    (gen_random_uuid(), v_repo, 'src/source.go', 'source.go', v_snapshot, 'Go'),
-    (gen_random_uuid(), v_repo, 'src/target.go', 'target.go', v_snapshot, 'Go');
+    (gen_random_uuid(), v_repo, 'src/source.go', v_snapshot),
+    (gen_random_uuid(), v_repo, 'src/target.go', v_snapshot);
 
   INSERT INTO public.codebase_modules (
-    id, repository_id, module_path, module_name, snapshot_id
+    id, repository_id, module_path, snapshot_id
   ) VALUES (
-    gen_random_uuid(), v_repo, 'src', 'src', v_snapshot
+    gen_random_uuid(), v_repo, 'src', v_snapshot
   );
 
   PERFORM public.replace_snapshot_implementation_edges(
@@ -101,9 +101,9 @@ BEGIN
   );
 
   INSERT INTO public.codebase_files (
-    id, repository_id, file_path, file_name, snapshot_id, language
+    id, repository_id, file_path, snapshot_id
   ) VALUES (
-    gen_random_uuid(), v_repo, 'src/partial.go', 'partial.go', v_failed_snapshot, 'Go'
+    gen_random_uuid(), v_repo, 'src/partial.go', v_failed_snapshot
   );
 
   IF NOT public.fail_repository_snapshot(
