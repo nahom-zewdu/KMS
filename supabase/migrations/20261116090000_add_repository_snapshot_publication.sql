@@ -109,6 +109,70 @@ ALTER TABLE public.repository_snapshots ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.repository_snapshots FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.repository_snapshots TO service_role;
 
+-- A legacy ready baseline is not considered complete until it has an active
+-- immutable snapshot. This forces one clean snapshot build on the first sync
+-- after this migration, even when the Git commit has not changed.
+CREATE OR REPLACE FUNCTION public.claim_repository_baseline(
+  p_full_name text,
+  p_company_id text,
+  p_source_revision text,
+  p_run_id uuid,
+  p_lease_seconds integer DEFAULT 180
+)
+RETURNS text
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = pg_catalog, public
+AS $
+DECLARE
+  repo_row public.repositories%ROWTYPE;
+BEGIN
+  IF p_full_name IS NULL OR btrim(p_full_name) = ''
+     OR p_company_id IS NULL OR btrim(p_company_id) = ''
+     OR lower(btrim(p_company_id)) = 'default'
+     OR p_source_revision IS NULL OR btrim(p_source_revision) = ''
+     OR p_run_id IS NULL OR p_lease_seconds IS NULL
+     OR p_lease_seconds < 30 OR p_lease_seconds > 3600 THEN
+    RAISE EXCEPTION 'valid repository, company, revision, run id, and lease duration are required';
+  END IF;
+
+  SELECT * INTO repo_row
+  FROM public.repositories
+  WHERE full_name = p_full_name AND company_id = p_company_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'repository not found for company';
+  END IF;
+
+  IF repo_row.baseline_status = 'ready'
+     AND repo_row.baseline_revision = p_source_revision
+     AND repo_row.active_snapshot_id IS NOT NULL THEN
+    RETURN 'ready';
+  END IF;
+
+  IF repo_row.baseline_status = 'indexing'
+     AND repo_row.baseline_lease_expires_at > now() THEN
+    RETURN 'busy';
+  END IF;
+
+  UPDATE public.repositories
+  SET baseline_status = 'indexing',
+      baseline_run_id = p_run_id,
+      baseline_lease_expires_at = now() + make_interval(secs => p_lease_seconds),
+      baseline_started_at = now(),
+      baseline_error = NULL
+  WHERE id = repo_row.id;
+
+  RETURN 'claimed';
+END;
+$;
+
+REVOKE ALL ON FUNCTION public.claim_repository_baseline(text,text,text,uuid,integer)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.claim_repository_baseline(text,text,text,uuid,integer)
+  TO service_role;
+
 -- The worker may create a staging snapshot only while it owns the live lease.
 CREATE OR REPLACE FUNCTION public.create_repository_snapshot(
   p_repository_id uuid,
