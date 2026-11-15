@@ -287,7 +287,8 @@ BEGIN
   SELECT count(*) INTO v_actual_relationships
   FROM public.edges
   WHERE snapshot_id = p_snapshot_id
-    AND company_id = v_snapshot.company_id;
+    AND company_id = v_snapshot.company_id
+    AND type IN ('IMPORTS', 'ROUTE_HANDLER_OPERATION');
 
   IF v_actual_files <> p_file_count
      OR v_actual_modules <> p_module_count
