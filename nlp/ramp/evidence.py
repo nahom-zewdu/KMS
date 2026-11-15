@@ -60,7 +60,7 @@ class RampEvidenceStore:
                 self.supabase.table("codebase_files")
                 .select(
                     "id, repository_id, file_path, module_path, language, file_name, "
-                    "last_author, last_commit_sha, importance_score, metadata"
+                    "last_author, last_commit_sha, importance_score, metadata, snapshot_id"
                 )
                 .in_("repository_id", repository_ids)
                 .limit(5000)
@@ -70,6 +70,9 @@ class RampEvidenceStore:
 
         result: List[ImplementationSurface] = []
         for row in getattr(response, "data", []) or []:
+            active_snapshot_id = repository_by_id.get(str(row.get("repository_id")), {}).get("active_snapshot_id")
+            if str(row.get("snapshot_id") or "") != str(active_snapshot_id or ""):
+                continue
             path = str(row.get("file_path") or "").strip()
             if not path:
                 continue
@@ -105,14 +108,17 @@ class RampEvidenceStore:
                 self.supabase.table("codebase_modules")
                 .select(
                     "id, repository_id, module_path, module_name, inferred_type, "
-                    "description, importance_score, metadata"
+                    "description, importance_score, metadata, snapshot_id"
                 )
                 .in_("repository_id", repository_ids)
                 .limit(1000)
                 .execute()
             ),
         )
-        return [row for row in (getattr(response, "data", []) or []) if isinstance(row, dict)]
+        return [
+            row for row in (getattr(response, "data", []) or [])
+            if isinstance(row, dict) and row.get("baseline_status") in (None, "ready")
+        ]
 
     def _repository_records(self, company_id: str) -> List[Dict[str, Any]]:
         response = self._retrieve(
@@ -120,12 +126,19 @@ class RampEvidenceStore:
             "list company repositories",
             lambda: (
                 self.supabase.table("repositories")
-                .select("id, full_name, default_branch")
+                .select("id, full_name, default_branch, active_snapshot_id, baseline_status")
                 .eq("company_id", company_id)
                 .execute()
             ),
         )
-        return [row for row in (getattr(response, "data", []) or []) if isinstance(row, dict)]
+        return [
+            row for row in (getattr(response, "data", []) or [])
+            if isinstance(row, dict)
+            and str(row.get("snapshot_id") or "") == str(
+                next((repo.get("active_snapshot_id") for repo in self._repository_records(company_id)
+                      if str(repo.get("id")) == str(row.get("repository_id"))), None) or ""
+            )
+        ]
 
     def _repository_ids(self, company_id: str) -> List[str]:
         return [str(row["id"]) for row in self._repository_records(company_id) if row.get("id")]
@@ -193,15 +206,22 @@ class RampEvidenceStore:
             "validate behavioral evidence repository membership",
             lambda: (
                 self.supabase.table("codebase_files")
-                .select("repository_id, file_path")
+                .select("repository_id, file_path, snapshot_id")
                 .in_("repository_id", repository_ids)
                 .limit(10000)
                 .execute()
             ),
         )
+        active_snapshot_by_repo = {
+            str(repo.get("id")): str(repo.get("active_snapshot_id") or "")
+            for repo in self._repository_records(company_id)
+        }
         path_repository_ids: Dict[str, set[str]] = {}
         for row in getattr(file_rows, "data", []) or []:
-            if isinstance(row, dict) and row.get("file_path") and row.get("repository_id"):
+            if (
+                isinstance(row, dict) and row.get("file_path") and row.get("repository_id")
+                and str(row.get("snapshot_id") or "") == active_snapshot_by_repo.get(str(row.get("repository_id")), "")
+            ):
                 path_repository_ids.setdefault(str(row["file_path"]), set()).add(
                     str(row["repository_id"])
                 )
