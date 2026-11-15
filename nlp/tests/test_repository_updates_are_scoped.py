@@ -61,7 +61,9 @@ class RecordingSupabase:
         result = {
             "claim_repository_baseline": "claimed",
             "renew_repository_baseline_lease": True,
-            "complete_repository_baseline": True,
+            "create_repository_snapshot": "snapshot-id",
+            "publish_repository_snapshot": True,
+            "fail_repository_snapshot": True,
             "fail_repository_baseline": True,
         }.get(name, False)
         return SimpleNamespace(execute=lambda: SimpleNamespace(data=result))
@@ -120,13 +122,21 @@ def test_baseline_repository_update_filters_by_company():
         and ("company_id", "company-a") in filters
         for table, operation, filters in database.calls
     )
-    completion = next(
+    snapshot_creation = next(
         params for name, params in database.rpc_calls
-        if name == "complete_repository_baseline"
+        if name == "create_repository_snapshot"
     )
-    assert completion["p_company_id"] == "company-a"
-    assert completion["p_source_revision"] == "a" * 40
-    assert completion["p_file_count"] == 0
+    assert snapshot_creation["p_repository_id"] == "repo-id"
+    assert snapshot_creation["p_company_id"] == "company-a"
+    assert snapshot_creation["p_source_revision"] == "a" * 40
+
+    publication = next(
+        params for name, params in database.rpc_calls
+        if name == "publish_repository_snapshot"
+    )
+    assert publication["p_snapshot_id"] == "snapshot-id"
+    assert publication["p_file_count"] == 0
+    assert publication["p_module_count"] == 0
 
 
 
