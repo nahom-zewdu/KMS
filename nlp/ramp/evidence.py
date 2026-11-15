@@ -12,6 +12,7 @@ import os
 import re
 import threading
 import time
+import uuid
 from typing import Any, Callable, Dict, List, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
@@ -158,17 +159,36 @@ class RampEvidenceStore:
                 .execute()
             ),
         )
-        active_snapshot_ids = {
-            str(row.get("active_snapshot_id"))
-            for row in self._repository_records(company_id)
-            if row.get("active_snapshot_id")
-        }
+        active_snapshot_by_file: Dict[str, str] = {}
+        for repository in self._repository_records(company_id):
+            repository_id = str(repository.get("id") or "")
+            full_name = str(repository.get("full_name") or "")
+            if not repository_id or not full_name:
+                continue
+            active_snapshot_id = str(repository.get("active_snapshot_id") or "")
+            files = self._retrieve(
+                "codebase_files",
+                "resolve active ownership snapshot",
+                lambda repository_id=repository_id: (
+                    self.supabase.table("codebase_files")
+                    .select("file_path,snapshot_id")
+                    .eq("repository_id", repository_id)
+                    .execute()
+                ),
+            )
+            for file_row in getattr(files, "data", []) or []:
+                path = str(file_row.get("file_path") or "")
+                if path and str(file_row.get("snapshot_id") or "") == active_snapshot_id:
+                    entity_id = str(uuid.uuid5(
+                        uuid.NAMESPACE_URL, f"file:{company_id}:{full_name}:{path}"
+                    ))
+                    active_snapshot_by_file[entity_id] = active_snapshot_id
+
         return [
             row for row in (getattr(response, "data", []) or [])
             if isinstance(row, dict)
-            and (
-                (row.get("snapshot_id") is None and not active_snapshot_ids)
-                or str(row.get("snapshot_id") or "") in active_snapshot_ids
+            and str(row.get("snapshot_id") or "") == active_snapshot_by_file.get(
+                str(row.get("target_id") or ""), ""
             )
         ]
 
