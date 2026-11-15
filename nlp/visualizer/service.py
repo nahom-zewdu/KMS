@@ -31,7 +31,9 @@ class VisualizerService:
             )
             return [
                 r["id"] for r in (res.data or [])
-                if r.get("id") and r.get("baseline_status") in (None, "ready")
+                if r.get("id") and (
+                    r.get("baseline_status") in (None, "ready") or r.get("active_snapshot_id")
+                )
             ]
         except Exception as e:
             logger.warning("repo_ids_for_company failed: %s", e)
