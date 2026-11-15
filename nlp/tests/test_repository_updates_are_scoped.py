@@ -168,7 +168,9 @@ def test_failed_directory_traversal_never_runs_destructive_reconciliation():
     assert not sync.sync_repository("org/repo", "company-a")
     rpc_names = [name for name, _params in database.rpc_calls]
     assert "claim_repository_baseline" in rpc_names
-    assert "fail_repository_baseline" in rpc_names
+    assert "create_repository_snapshot" in rpc_names
+    assert "fail_repository_snapshot" in rpc_names
+    assert "fail_repository_baseline" not in rpc_names
     assert "reconcile_repository_files" not in rpc_names
     assert "complete_repository_baseline" not in rpc_names
     assert not any(
