@@ -120,7 +120,9 @@ class PlaybookGenerator:
         ).eq("company_id", company_id).execute()
         repository_rows = [
             row for row in (repositories.data or [])
-            if row.get("id") and row.get("baseline_status") in (None, "ready")
+            if row.get("id") and (
+                row.get("baseline_status") in (None, "ready") or row.get("active_snapshot_id")
+            )
         ]
         repository_ids = [row["id"] for row in repository_rows]
         active_by_repo = {
