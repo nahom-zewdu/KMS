@@ -260,7 +260,12 @@ END $$;
 
 RESET ROLE;
 SET ROLE service_role;
-DO $krt$ DECLARE row_count integer; ownership_rejected boolean := false; file_count integer; BEGIN
+DO $service_role_test$
+DECLARE
+  row_count integer;
+  ownership_rejected boolean := false;
+  file_count integer;
+BEGIN
   SELECT count(*) INTO row_count FROM public.entities;
   IF row_count <> 2 THEN RAISE EXCEPTION 'service role should access both tenants; got %', row_count; END IF;
   SELECT count(*) INTO row_count
@@ -309,8 +314,8 @@ DO $krt$ DECLARE row_count integer; ownership_rejected boolean := false; file_co
     RAISE EXCEPTION 'cross-company duplicate delivery_id unexpectedly succeeded';
   EXCEPTION WHEN unique_violation THEN NULL;
   END;
-END $krt$;
-DO $$
+END $service_role_test$;
+DO $
 DECLARE
   first_outbox_id uuid;
   duplicate_outbox_id uuid;
