@@ -1,69 +1,47 @@
-# worker/codebase_analysis.py
-"""
-Handles durable codebase analysis jobs from Redis stream.
-This replaces the previous detached daemon thread approach.
-Ensures codebase analysis failures are observable and retryable.
+"""Legacy GitHub push stream compatibility handler.
+
+New pushes are sent directly to the baseline queue. Messages already present in
+codebase_analysis_jobs are converted into a full immutable baseline sync instead
+of mutating the currently published inventory incrementally.
 """
 
 import logging
-import asyncio
 
-from codebase.analyzer import CodebaseAnalyzer
+from codebase.baseline import CodebaseBaselineSync
 from utils.supabase import init_supabase
 from utils.db_helpers import ensure_event_tenant
 
 logger = logging.getLogger("codebase_analysis")
 
 supabase = init_supabase()
-analyzer = CodebaseAnalyzer(supabase)
+baseline_sync = CodebaseBaselineSync(supabase)
 
 
 class CodebaseAnalysisHandler:
-    """
-    Handles processing of codebase analysis jobs from the Redis stream.
-    Processes incremental GitHub push events for file-level entity extraction.
-    """
-
     async def process(self, job: dict, stream: str, msg_id: str, redis_client):
-        """
-        Process a codebase analysis job from the Redis stream.
-        
-        Args:
-            job: Job dict with record_id, company_id, payload, etc.
-            stream: Stream name
-            msg_id: Redis message ID
-            redis_client: Redis client (not used in async handler, but kept for interface consistency)
-        
-        Raises:
-            Exception: If analysis fails (will prevent ACK in consumer)
-        """
         record_id = job.get("record_id")
         company_id = (job.get("company_id") or "").strip()
-        payload = job.get("payload", {})
-        
-        if not company_id or company_id.strip().lower() == "default":
+        payload = job.get("payload") if isinstance(job.get("payload"), dict) else {}
+
+        if not company_id or company_id.lower() == "default":
             raise ValueError("company_id is required for codebase analysis")
-        
         if not record_id:
             raise ValueError("record_id is required for codebase analysis")
 
         ensure_event_tenant(supabase, record_id, company_id)
-        
-        logger.info(f"Starting codebase analysis | record={record_id} | company={company_id}")
-        
-        try:
-            # Run the async analysis
-            success = await analyzer.process_push_event(
-                payload,
-                record_id,
-                company_id=company_id,
-            )
-            
-            if not success:
-                raise RuntimeError(f"Codebase analysis returned false for {record_id}")
-            
-            logger.info(f"Codebase analysis completed | record={record_id}")
-            
-        except Exception as e:
-            logger.error(f"Codebase analysis failed | record={record_id}: {e}", exc_info=True)
-            raise
+
+        repository = payload.get("repository")
+        repo_name = (
+            repository.get("full_name")
+            if isinstance(repository, dict)
+            else None
+        ) or payload.get("repo")
+        if not isinstance(repo_name, str) or not repo_name.strip():
+            raise ValueError("GitHub push payload does not contain repository.full_name")
+
+        logger.info(
+            "Converting legacy push analysis into snapshot baseline sync | repo=%s | company=%s",
+            repo_name, company_id,
+        )
+        if not baseline_sync.sync_repository(repo_name.strip(), company_id):
+            raise RuntimeError(f"Snapshot baseline sync failed for {repo_name}")
