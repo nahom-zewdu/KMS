@@ -9,6 +9,7 @@ Fully data-driven where possible.
 """
 
 import logging
+import uuid
 from typing import Dict, List, Any
 from supabase import Client
 
@@ -258,21 +259,36 @@ class VisualizerService:
                 .limit(30)
                 .execute()
             )
-            active_snapshot_ids = {
-                str(row.get("active_snapshot_id"))
-                for row in (
-                    self.supabase.table("repositories")
-                    .select("id,active_snapshot_id")
-                    .eq("company_id", company_id)
+            repositories = (
+                self.supabase.table("repositories")
+                .select("id,full_name,active_snapshot_id")
+                .eq("company_id", company_id)
+                .execute()
+            ).data or []
+            active_snapshot_by_file = {}
+            for repository in repositories:
+                repository_id = str(repository.get("id") or "")
+                full_name = str(repository.get("full_name") or "")
+                if not repository_id or not full_name:
+                    continue
+                active_snapshot_id = str(repository.get("active_snapshot_id") or "")
+                file_rows = (
+                    self.supabase.table("codebase_files")
+                    .select("file_path,snapshot_id")
+                    .eq("repository_id", repository_id)
                     .execute()
                 ).data or []
-                if row.get("active_snapshot_id")
-            }
+                for file_row in file_rows:
+                    path = str(file_row.get("file_path") or "")
+                    if path and str(file_row.get("snapshot_id") or "") == active_snapshot_id:
+                        entity_id = str(uuid.uuid5(
+                            uuid.NAMESPACE_URL, f"file:{company_id}:{full_name}:{path}"
+                        ))
+                        active_snapshot_by_file[entity_id] = active_snapshot_id
             edges = [
                 edge for edge in (res.data or [])
-                if (
-                    (edge.get("snapshot_id") is None and not active_snapshot_ids)
-                    or str(edge.get("snapshot_id") or "") in active_snapshot_ids
+                if str(edge.get("snapshot_id") or "") == active_snapshot_by_file.get(
+                    str(edge.get("target_id") or ""), ""
                 )
             ]
             if not edges:
