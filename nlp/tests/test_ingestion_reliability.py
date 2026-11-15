@@ -145,12 +145,14 @@ class TestCodebaseAnalysisDurability:
             # Verify that xadd was called to publish codebase analysis job
             mock_redis.xadd.assert_called_once()
             call_args = mock_redis.xadd.call_args
-            assert call_args[0][0] == "codebase_analysis_jobs"
+            assert call_args[0][0] == "codebase_baseline_jobs"
             
             # Verify the job payload
             payload_dict = json.loads(call_args[0][1]["data"])
             assert payload_dict["RecordID"] == "delivery-123"
             assert payload_dict["CompanyID"] == "company-abc"
+            assert payload_dict["EventType"] == "baseline"
+            assert payload_dict["Payload"] == {"repo": "org/repo"}
 
     def test_codebase_analysis_not_published_for_non_push_events(self):
         """Non-push GitHub events should NOT trigger codebase analysis."""
@@ -270,16 +272,16 @@ class TestCodebaseAnalysisHandler:
         }
         
         with patch('worker.codebase_analysis.ensure_event_tenant'), \
-             patch('worker.codebase_analysis.analyzer') as mock_analyzer:
-            mock_analyzer.process_push_event = AsyncMock(return_value=True)
+             patch('worker.codebase_analysis.baseline_sync') as mock_sync:
+            mock_sync.sync_repository.return_value = True
             
             redis_client = Mock()
             
             # Should complete without raising
             asyncio.run(handler.process(job, "codebase_analysis_jobs", "msg-1", redis_client))
             
-            # Verify analyzer was called
-            mock_analyzer.process_push_event.assert_called_once()
+            # Legacy push jobs now trigger a complete snapshot sync.
+            mock_sync.sync_repository.assert_called_once_with("org/repo", "company-abc")
 
     def test_codebase_analysis_failure_raises_exception(self):
         """Failed codebase analysis raises exception."""
@@ -295,13 +297,13 @@ class TestCodebaseAnalysisHandler:
         }
         
         with patch('worker.codebase_analysis.ensure_event_tenant'), \
-             patch('worker.codebase_analysis.analyzer') as mock_analyzer:
-            mock_analyzer.process_push_event = AsyncMock(return_value=False)
+             patch('worker.codebase_analysis.baseline_sync') as mock_sync:
+            mock_sync.sync_repository.return_value = False
             
             redis_client = Mock()
             
             # Should raise exception when analysis returns False
-            with pytest.raises(RuntimeError, match="returned false"):
+            with pytest.raises(RuntimeError, match="Snapshot baseline sync failed"):
                 asyncio.run(handler.process(job, "codebase_analysis_jobs", "msg-1", redis_client))
 
     def test_codebase_analysis_missing_company_id(self):
@@ -330,10 +332,8 @@ class TestCodebaseAnalysisHandler:
         }
         
         with patch('worker.codebase_analysis.ensure_event_tenant'), \
-             patch('worker.codebase_analysis.analyzer') as mock_analyzer:
-            mock_analyzer.process_push_event = AsyncMock(
-                side_effect=RuntimeError("Network error")
-            )
+             patch('worker.codebase_analysis.baseline_sync') as mock_sync:
+            mock_sync.sync_repository.side_effect = RuntimeError("Network error")
             
             redis_client = Mock()
             
