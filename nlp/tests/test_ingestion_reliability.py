@@ -328,9 +328,9 @@ class TestCodebaseAnalysisHandler:
         job = {
             "record_id": "delivery-123",
             "company_id": "company-abc",
-            "payload": {},
+            "payload": {"repository": {"full_name": "org/repo"}},
         }
-        
+
         with patch('worker.codebase_analysis.ensure_event_tenant'), \
              patch('worker.codebase_analysis.baseline_sync') as mock_sync:
             mock_sync.sync_repository.side_effect = RuntimeError("Network error")
