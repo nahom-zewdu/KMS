@@ -224,7 +224,7 @@ class RampEvidenceStore:
             "list implementation relationships",
             lambda: (
                 self.supabase.table("edges")
-                .select("id, source_id, target_id, type, confidence, company_id, metadata")
+                .select("id, source_id, target_id, type, confidence, company_id, metadata, snapshot_id")
                 .eq("company_id", company_id)
                 .limit(20000)
                 .execute()
