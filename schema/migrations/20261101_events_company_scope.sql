@@ -178,7 +178,8 @@ BEGIN
       AND indisunique
       AND indisvalid
       AND indpred IS NULL
-      AND indkey = ARRAY[delivery_attnum]::smallint[]
+      AND indnatts = 1
+      AND indkey[0] = delivery_attnum
   ) THEN
     IF EXISTS (
       SELECT 1
