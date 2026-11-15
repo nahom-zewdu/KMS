@@ -181,7 +181,7 @@ BEGIN
     RAISE EXCEPTION 'service_role cannot execute graph search RPC';
   END IF;
 END $krt$;
-DO $krt$ DECLARE row_count integer; BEGIN
+DO $$ DECLARE row_count integer; BEGIN
   SELECT count(*) INTO row_count FROM public.entities;
   IF row_count <> 1 THEN RAISE EXCEPTION 'cross-company entity read: expected 1 got %', row_count; END IF;
   SELECT count(*) INTO row_count FROM public.companies;
@@ -315,7 +315,7 @@ BEGIN
   EXCEPTION WHEN unique_violation THEN NULL;
   END;
 END $service_role_test$;
-DO $
+DO $$
 DECLARE
   first_outbox_id uuid;
   duplicate_outbox_id uuid;
