@@ -398,6 +398,7 @@ BEGIN
         AND target_entity.company_id = p_company_id
         AND target_entity.type = 'FILE'
         AND target_entity.metadata->>'file_path' = target_file.file_path
+        AND target_entity.metadata->>'repository_id' = v_snapshot.repository_id::text
        WHERE target_file.snapshot_id = p_snapshot_id
          AND target_file.repository_id = v_snapshot.repository_id
      );
