@@ -123,7 +123,7 @@ RETURNS text
 LANGUAGE plpgsql
 SECURITY INVOKER
 SET search_path = pg_catalog, public
-AS $
+AS $claim$
 DECLARE
   repo_row public.repositories%ROWTYPE;
 BEGIN
@@ -166,7 +166,7 @@ BEGIN
 
   RETURN 'claimed';
 END;
-$;
+$claim$;
 
 REVOKE ALL ON FUNCTION public.claim_repository_baseline(text,text,text,uuid,integer)
   FROM PUBLIC, anon, authenticated;
