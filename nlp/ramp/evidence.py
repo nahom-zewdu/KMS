@@ -97,11 +97,16 @@ class RampEvidenceStore:
         return sorted(result, key=lambda item: (-item.importance, item.path))
 
     def module_records(self, company_id: str) -> List[Dict[str, Any]]:
-        """Return company-scoped module records without interpreting their meaning."""
+        """Return module records from each repository's active snapshot."""
         self._require_company_id(company_id)
-        repository_ids = self._repository_ids(company_id)
+        repositories = self._repository_records(company_id)
+        repository_ids = [str(row["id"]) for row in repositories if row.get("id")]
         if not repository_ids:
             return []
+        active_by_repo = {
+            str(row["id"]): str(row.get("active_snapshot_id") or "")
+            for row in repositories if row.get("id")
+        }
         response = self._retrieve(
             "codebase_modules",
             "list module records",
@@ -118,9 +123,9 @@ class RampEvidenceStore:
         )
         return [
             row for row in (getattr(response, "data", []) or [])
-            if isinstance(row, dict) and (
-                row.get("baseline_status") in (None, "ready")
-                or row.get("active_snapshot_id")
+            if isinstance(row, dict)
+            and str(row.get("snapshot_id") or "") == active_by_repo.get(
+                str(row.get("repository_id")), ""
             )
         ]
 
@@ -138,9 +143,9 @@ class RampEvidenceStore:
         return [
             row for row in (getattr(response, "data", []) or [])
             if isinstance(row, dict)
-            and str(row.get("snapshot_id") or "") == str(
-                next((repo.get("active_snapshot_id") for repo in self._repository_records(company_id)
-                      if str(repo.get("id")) == str(row.get("repository_id"))), None) or ""
+            and (
+                row.get("baseline_status") in (None, "ready")
+                or row.get("active_snapshot_id")
             )
         ]
 
