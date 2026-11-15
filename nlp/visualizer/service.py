@@ -24,11 +24,14 @@ class VisualizerService:
         try:
             res = (
                 self.supabase.table("repositories")
-                .select("id")
+                .select("id,active_snapshot_id,baseline_status")
                 .eq("company_id", company_id)
                 .execute()
             )
-            return [r["id"] for r in (res.data or []) if r.get("id")]
+            return [
+                r["id"] for r in (res.data or [])
+                if r.get("id") and r.get("baseline_status") in (None, "ready")
+            ]
         except Exception as e:
             logger.warning("repo_ids_for_company failed: %s", e)
             return []
@@ -41,12 +44,25 @@ class VisualizerService:
         try:
             res = (
                 self.supabase.table("codebase_files")
-                .select("file_path, language, last_author, module_path, repository_id")
+                .select("file_path, language, last_author, module_path, repository_id, snapshot_id")
                 .in_("repository_id", repo_ids[:50])  # keep request size sane
                 .limit(limit)
                 .execute()
             )
-            return res.data or []
+            repo_rows = (
+                self.supabase.table("repositories")
+                .select("id,active_snapshot_id")
+                .eq("company_id", company_id)
+                .execute()
+            ).data or []
+            active_by_repo = {
+                str(row["id"]): str(row.get("active_snapshot_id") or "")
+                for row in repo_rows if row.get("id")
+            }
+            return [
+                row for row in (res.data or [])
+                if str(row.get("snapshot_id") or "") == active_by_repo.get(str(row.get("repository_id")), "")
+            ]
         except Exception as e:
             logger.warning("files_for_company failed: %s", e)
             return []
@@ -115,8 +131,20 @@ class VisualizerService:
                 .order("importance_score", desc=True)\
                 .limit(15).execute()
 
+            repo_rows = (
+                self.supabase.table("repositories")
+                .select("id,active_snapshot_id")
+                .eq("company_id", company_id)
+                .execute()
+            ).data or []
+            active_by_repo = {
+                str(row["id"]): str(row.get("active_snapshot_id") or "")
+                for row in repo_rows if row.get("id")
+            }
             modules = []
             for m in res.data or []:
+                if str(m.get("snapshot_id") or "") != active_by_repo.get(str(m.get("repository_id")), ""):
+                    continue
                 importance = float(m.get("importance_score", 0.5))
                 if any(kw in m.get("module_path", "").lower() for kw in role.lower().split()):
                     importance = min(1.0, importance + 0.35)
@@ -224,13 +252,29 @@ class VisualizerService:
         try:
             res = (
                 self.supabase.table("edges")
-                .select("source_id,target_id,type,confidence")
+                .select("source_id,target_id,type,confidence,snapshot_id")
                 .eq("type", "OWNS")
                 .eq("company_id", company_id)
                 .limit(30)
                 .execute()
             )
-            edges = res.data or []
+            active_snapshot_ids = {
+                str(row.get("active_snapshot_id"))
+                for row in (
+                    self.supabase.table("repositories")
+                    .select("id,active_snapshot_id")
+                    .eq("company_id", company_id)
+                    .execute()
+                ).data or []
+                if row.get("active_snapshot_id")
+            }
+            edges = [
+                edge for edge in (res.data or [])
+                if (
+                    (edge.get("snapshot_id") is None and not active_snapshot_ids)
+                    or str(edge.get("snapshot_id") or "") in active_snapshot_ids
+                )
+            ]
             if not edges:
                 return {"key_owners": [], "note": "No ownership edges yet"}
 
