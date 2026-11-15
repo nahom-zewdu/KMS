@@ -151,14 +151,26 @@ class RampEvidenceStore:
             "list ownership relationships",
             lambda: (
                 self.supabase.table("edges")
-                .select("source_id, target_id, type, metadata, confidence")
+                .select("source_id, target_id, type, metadata, confidence, snapshot_id")
                 .eq("company_id", company_id)
                 .eq("type", "OWNS")
                 .limit(5000)
                 .execute()
             ),
         )
-        return [row for row in (getattr(response, "data", []) or []) if isinstance(row, dict)]
+        active_snapshot_ids = {
+            str(row.get("active_snapshot_id"))
+            for row in self._repository_records(company_id)
+            if row.get("active_snapshot_id")
+        }
+        return [
+            row for row in (getattr(response, "data", []) or [])
+            if isinstance(row, dict)
+            and (
+                (row.get("snapshot_id") is None and not active_snapshot_ids)
+                or str(row.get("snapshot_id") or "") in active_snapshot_ids
+            )
+        ]
 
     def implementation_relationships(self, company_id: str) -> List[Evidence]:
         """Return graph relationships whose endpoints resolve to FILE entities.
@@ -245,6 +257,7 @@ class RampEvidenceStore:
                 or not all(isinstance(item, dict) for item in provenance_items)
                 or str(metadata.get("repository_id") or "") not in path_repository_ids.get(source_path, set())
                 or str(metadata.get("repository_id") or "") not in path_repository_ids.get(target_path, set())
+                or str(edge.get("snapshot_id") or "") != active_snapshot_by_repo.get(str(metadata.get("repository_id") or ""), "")
             ):
                 continue
             provenance = {
