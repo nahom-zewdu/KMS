@@ -49,7 +49,7 @@ class VisualizerService:
                 self.supabase.table("codebase_files")
                 .select("file_path, language, last_author, module_path, repository_id, snapshot_id")
                 .in_("repository_id", repo_ids[:50])  # keep request size sane
-                .limit(limit)
+                .limit(10000)
                 .execute()
             )
             repo_rows = (
@@ -62,10 +62,11 @@ class VisualizerService:
                 str(row["id"]): str(row.get("active_snapshot_id") or "")
                 for row in repo_rows if row.get("id")
             }
-            return [
+            active_rows = [
                 row for row in (res.data or [])
                 if str(row.get("snapshot_id") or "") == active_by_repo.get(str(row.get("repository_id")), "")
             ]
+            return active_rows[:limit]
         except Exception as e:
             logger.warning("files_for_company failed: %s", e)
             return []
@@ -132,7 +133,7 @@ class VisualizerService:
                 .select("*")\
                 .in_("repository_id", repo_ids)\
                 .order("importance_score", desc=True)\
-                .limit(15).execute()
+                .limit(1000).execute()
 
             repo_rows = (
                 self.supabase.table("repositories")
@@ -160,7 +161,7 @@ class VisualizerService:
                     "description": m.get("description", ""),
                     "file_count": m.get("metadata", {}).get("file_count", 0)
                 })
-            return modules
+            return modules[:15]
         except Exception as e:
             logger.warning(f"Modules query failed, falling back: {e}")
             return self._fallback_modules(role, company_id)
