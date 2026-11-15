@@ -108,7 +108,10 @@ def retrieve_source_chunks(
     repositories = [
         row for row in _response_rows(repository_response)
         if row.get("id") and row.get("full_name")
-    and row.get("baseline_status") in (None, "ready")
+        and (
+            row.get("baseline_status") in (None, "ready")
+            or row.get("active_snapshot_id")
+        )
     ]
     # A mocked/failed client response is not repository evidence. Fail closed.
     if not repositories:
