@@ -150,7 +150,10 @@ RESET ROLE;
 
 SET ROLE authenticated;
 SET request.jwt.claim.sub = '00000000-0000-0000-0000-000000000001';
-DO $krt$ BEGIN
+DO $krt$
+DECLARE
+  vector_search_oid oid;
+BEGIN
   IF has_function_privilege('authenticated','public.search_edges_by_entity(text,text[],text)','EXECUTE') THEN
     RAISE EXCEPTION 'authenticated can execute graph search RPC';
   END IF;
@@ -160,8 +163,18 @@ DO $krt$ BEGIN
   IF has_function_privilege('authenticated','public.replace_implementation_edges(text,uuid[],jsonb)','EXECUTE') THEN
     RAISE EXCEPTION 'authenticated can execute implementation edge replacement RPC';
   END IF;
-  IF to_regprocedure('public.match_documents(extensions.vector,double precision,integer,text)') IS NOT NULL
-     AND has_function_privilege('authenticated','public.match_documents(extensions.vector,double precision,integer,text)','EXECUTE') THEN
+
+  -- Resolve the vector RPC through pg_catalog rather than to_regprocedure:
+  -- authenticated intentionally has no USAGE on the extensions schema.
+  SELECT p.oid INTO vector_search_oid
+  FROM pg_catalog.pg_proc AS p
+  WHERE p.pronamespace = 'public'::regnamespace
+    AND p.proname = 'match_documents'
+    AND pg_get_function_identity_arguments(p.oid) =
+      'query_embedding extensions.vector, match_threshold double precision, match_count integer, filter_company_id text';
+
+  IF vector_search_oid IS NOT NULL
+     AND has_function_privilege('authenticated', vector_search_oid, 'EXECUTE') THEN
     RAISE EXCEPTION 'authenticated can execute vector search RPC';
   END IF;
   IF NOT has_function_privilege('service_role','public.search_edges_by_entity(text,text[],text)','EXECUTE') THEN
