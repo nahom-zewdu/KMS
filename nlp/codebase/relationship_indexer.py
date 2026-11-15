@@ -26,13 +26,16 @@ class ImplementationRelationshipIndexer:
         self.behavioral_producer = GoBehavioralEvidenceProducer()
 
     def index_repository(
-        self, repo_full_name: str, company_id: str, *, source_revision: str | None = None
+        self, repo_full_name: str, company_id: str, *, source_revision: str | None = None,
+        snapshot_id: str | None = None,
     ) -> int:
         """Rebuild resolvable implementation relationships for one repository."""
         repo = self.github.get_repo(repo_full_name)
         if not source_revision:
             raise ValueError("source_revision must be an immutable Git commit SHA")
-        repository_rows = self._load_repository_rows(repo, company_id)
+        if not snapshot_id:
+            raise ValueError("snapshot_id is required for snapshot-scoped relationship indexing")
+        repository_rows = self._load_repository_rows(repo, company_id, snapshot_id=snapshot_id)
         inventory = self._load_source_inventory(repo, repository_rows, ref=source_revision)
         relations = self.extractor.extract(inventory)
         repository_id = next(
@@ -66,7 +69,7 @@ class ImplementationRelationshipIndexer:
             edge_id = str(
                 uuid.uuid5(
                     uuid.NAMESPACE_URL,
-                    f"implementation:{relation.relation_type}:{source_id}:{target_id}",
+                    f"implementation:{snapshot_id}:{relation.relation_type}:{source_id}:{target_id}",
                 )
             )
             rows.append(
@@ -127,8 +130,9 @@ class ImplementationRelationshipIndexer:
 
         # One PostgreSQL RPC validates and replaces the full edge set atomically.
         self.supabase.rpc(
-            "replace_implementation_edges",
+            "replace_snapshot_implementation_edges",
             {
+                "p_snapshot_id": snapshot_id,
                 "p_company_id": company_id,
                 "p_source_ids": source_entity_ids,
                 "p_edges": rows,
@@ -143,7 +147,9 @@ class ImplementationRelationshipIndexer:
         )
         return len(rows)
 
-    def _load_repository_rows(self, repo, company_id: str) -> list[dict[str, Any]]:
+    def _load_repository_rows(
+        self, repo, company_id: str, *, snapshot_id: str
+    ) -> list[dict[str, Any]]:
         """Load all file records belonging to this tenant's physical repository."""
         repo_row = (
             self.supabase.table("repositories")
@@ -160,6 +166,7 @@ class ImplementationRelationshipIndexer:
             self.supabase.table("codebase_files")
             .select("file_path,language,repository_id")
             .eq("repository_id", repository_id)
+            .eq("snapshot_id", snapshot_id)
             .execute()
         )
         return [row for row in (rows.data or []) if row.get("file_path")]
