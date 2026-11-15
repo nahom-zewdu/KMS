@@ -133,7 +133,7 @@ class PlaybookGenerator:
             self.supabase.table("codebase_files")
             .select("file_path,repository_id,snapshot_id")
             .in_("repository_id", repository_ids)
-            .limit(6)
+            .limit(10000)
             .execute()
             if repository_ids else None
         )
@@ -143,7 +143,7 @@ class PlaybookGenerator:
                 if str(row.get("snapshot_id") or "") == active_by_repo.get(str(row.get("repository_id")), "")
             ]
             if active_files:
-                parts.append("Files: " + ", ".join(row["file_path"] for row in active_files))
+                parts.append("Files: " + ", ".join(row["file_path"] for row in active_files[:6]))
 
         return "\n".join(parts) if parts else "No additional context available."
 
