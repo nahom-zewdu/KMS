@@ -37,7 +37,7 @@ def _company_inventory(supabase: Any, company_id: str) -> tuple[list[dict], list
     )
     repositories = [
         row for row in repositories
-        if row.get("baseline_status") in (None, "ready")
+        if row.get("baseline_status") in (None, "ready") or row.get("active_snapshot_id")
     ]
     repository_ids = [str(row["id"]) for row in repositories if row.get("id")]
     if not repository_ids:
