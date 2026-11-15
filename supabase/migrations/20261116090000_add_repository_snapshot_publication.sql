@@ -372,6 +372,7 @@ BEGIN
     WHERE f.snapshot_id = p_snapshot_id
       AND f.repository_id = v_snapshot.repository_id
       AND e.metadata->>'file_path' = f.file_path
+      AND e.metadata->>'repository_id' = v_snapshot.repository_id::text
   );
 
   IF v_invalid > 0 THEN
