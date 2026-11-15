@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+import uuid
 from typing import Any
 
 
@@ -134,20 +135,37 @@ def _ownership_answer(
         .in_("target_id", target_ids)
         .limit(2000)
     )
-    active_snapshot_ids = {
-        str(row.get("active_snapshot_id"))
-        for row in _rows(
-            supabase.table("repositories")
-            .select("id,active_snapshot_id,baseline_status")
-            .eq("company_id", company_id)
+    repository_rows = _rows(
+        supabase.table("repositories")
+        .select("id,full_name,active_snapshot_id,baseline_status")
+        .eq("company_id", company_id)
+    )
+    active_by_file_entity = {}
+    for repository in repository_rows:
+        if repository.get("baseline_status") not in (None, "ready"):
+            continue
+        repository_id = str(repository.get("id") or "")
+        full_name = str(repository.get("full_name") or "")
+        active_snapshot_id = str(repository.get("active_snapshot_id") or "")
+        if not repository_id or not full_name:
+            continue
+        inventory_rows = _rows(
+            supabase.table("codebase_files")
+            .select("file_path,snapshot_id")
+            .eq("repository_id", repository_id)
         )
-        if row.get("active_snapshot_id") and row.get("baseline_status") in (None, "ready")
-    }
+        for inventory_row in inventory_rows:
+            path = str(inventory_row.get("file_path") or "")
+            if not path or str(inventory_row.get("snapshot_id") or "") != active_snapshot_id:
+                continue
+            entity_id = str(uuid.uuid5(
+                uuid.NAMESPACE_URL, f"file:{company_id}:{full_name}:{path}"
+            ))
+            active_by_file_entity[entity_id] = active_snapshot_id
     edges = [
         edge for edge in edges
-        if (
-            (edge.get("snapshot_id") is None and not active_snapshot_ids)
-            or str(edge.get("snapshot_id") or "") in active_snapshot_ids
+        if str(edge.get("snapshot_id") or "") == active_by_file_entity.get(
+            str(edge.get("target_id") or ""), ""
         )
     ]
     if not edges:
