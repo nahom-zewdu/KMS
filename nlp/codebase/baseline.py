@@ -521,7 +521,7 @@ class CodebaseBaselineSync:
         ).execute()
 
         edge_id = str(
-            uuid.uuid5(uuid.NAMESPACE_URL, f"partof:{file_entity_id}:{repo_entity_id}")
+            uuid.uuid5(uuid.NAMESPACE_URL, f"partof:{snapshot_id}:{file_entity_id}:{repo_entity_id}")
         )
         self.supabase.table("edges").upsert(
             {
@@ -532,14 +532,20 @@ class CodebaseBaselineSync:
                 "confidence": 1.0,
                 "created_at": now,
                 "company_id": company_id,
+                "snapshot_id": snapshot_id,
             },
             on_conflict="id",
         ).execute()
 
         if last_author:
-            self._upsert_owns(last_author, file_entity_id, company_id, now)
+            self._upsert_owns(
+                last_author, file_entity_id, company_id, now, snapshot_id=snapshot_id
+            )
 
-    def _upsert_owns(self, author: str, file_entity_id: str, company_id: str, now: str):
+    def _upsert_owns(
+        self, author: str, file_entity_id: str, company_id: str, now: str,
+        snapshot_id: str | None = None,
+    ):
         """PERSON + OWNS edge (same id scheme as analyzer)."""
         author_norm = str(author).strip().lower()
         if not author_norm:
@@ -560,7 +566,7 @@ class CodebaseBaselineSync:
         ).execute()
 
         owns_edge_id = str(
-            uuid.uuid5(uuid.NAMESPACE_URL, f"owns:{person_entity_id}:{file_entity_id}")
+            uuid.uuid5(uuid.NAMESPACE_URL, f"owns:{snapshot_id}:{person_entity_id}:{file_entity_id}")
         )
         self.supabase.table("edges").upsert(
             {
@@ -571,6 +577,7 @@ class CodebaseBaselineSync:
                 "confidence": 0.8,
                 "created_at": now,
                 "company_id": company_id,
+                "snapshot_id": snapshot_id,
             },
             on_conflict="id",
         ).execute()
