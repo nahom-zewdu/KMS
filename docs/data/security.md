@@ -96,3 +96,13 @@ No live database DDL or data changes have been applied as part of this audit.
 - Frontend route/OAuth hardening: [kms-frontend PR #3](https://github.com/nahom-zewdu/kms-frontend/pull/3) — draft, verification pending.
 
 These are coordinated. Do not merge one without the other and the database verification gate.
+
+
+### Verification update — 2026-11-15 (user-reported local runs)
+
+- Backend Python suite: **184 passed, 5 warnings, 16.40s**. Warnings are deprecations in `pythonjsonlogger` and PyGithub's `login_or_token` argument; no test failures.
+- Frontend: `npm run lint` passed.
+- Frontend: `npm run build` passed on Next.js 16.4.3; TypeScript and all 35 static-generation pages completed.
+- The user-provided terminal excerpt does not show `git branch --show-current` or the backend/frontend commit SHAs. These results are recorded as local verification evidence, but exact branch/commit association still needs confirmation.
+- Still outstanding: execute `schema/tests/tenant_rls.sql` on disposable PostgreSQL; run the dedicated Slack OAuth state tests; review the migration; obtain approval before any live Supabase deployment.
+- No live Supabase migration or policy change is recorded.
