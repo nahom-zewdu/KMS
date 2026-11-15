@@ -164,8 +164,14 @@ def _ownership_answer(
             active_by_file_entity[entity_id] = active_snapshot_id
     edges = [
         edge for edge in edges
-        if str(edge.get("snapshot_id") or "") == active_by_file_entity.get(
-            str(edge.get("target_id") or ""), ""
+        if (
+            (
+                str(edge.get("type") or "").upper() == "MAINTAINS"
+                and edge.get("snapshot_id") is None
+            )
+            or str(edge.get("snapshot_id") or "") == active_by_file_entity.get(
+                str(edge.get("target_id") or ""), ""
+            )
         )
     ]
     if not edges:
