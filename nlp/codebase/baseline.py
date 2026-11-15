@@ -494,6 +494,8 @@ class CodebaseBaselineSync:
                     "language": self._detect_language(file_path),
                     "company_id": company_id,
                     "last_author": last_author,
+                    "repository_id": physical_repo_id,
+                    "repository_full_name": repo_full_name,
                 },
                 "created_at": now,
             },
