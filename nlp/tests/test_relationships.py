@@ -125,12 +125,14 @@ def test_indexer_delete_scope_includes_all_repository_files_and_go_module():
 
     indexer = ImplementationRelationshipIndexer(supabase, github)
     assert indexer.index_repository(
-        "nahom-zewdu/KMS", "company-1", source_revision="a" * 40
+        "nahom-zewdu/KMS", "company-1", source_revision="a" * 40,
+        snapshot_id="snapshot-1",
     ) == 1
 
     old_file_id = indexer._file_entity_id("nahom-zewdu/KMS", "company-1", "api/old.js")
     rpc_name, rpc_args = supabase.rpc.call_args.args
-    assert rpc_name == "replace_implementation_edges"
+    assert rpc_name == "replace_snapshot_implementation_edges"
+    assert rpc_args["p_snapshot_id"] == "snapshot-1"
     assert old_file_id in rpc_args["p_source_ids"]
     assert rpc_args["p_edges"][0]["type"] == "IMPORTS"
     assert not queries["edges"].filters
