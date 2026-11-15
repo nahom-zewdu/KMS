@@ -64,6 +64,15 @@ ALTER TABLE public.codebase_modules
   ADD CONSTRAINT codebase_modules_repository_module_snapshot_key
   UNIQUE (repository_id, module_path, snapshot_id);
 
+-- PostgreSQL treats NULL values as distinct in ordinary unique constraints.
+-- Preserve one legacy row per repository/path while snapshots are introduced.
+CREATE UNIQUE INDEX IF NOT EXISTS codebase_files_legacy_repository_path_key
+  ON public.codebase_files(repository_id, file_path)
+  WHERE snapshot_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS codebase_modules_legacy_repository_path_key
+  ON public.codebase_modules(repository_id, module_path)
+  WHERE snapshot_id IS NULL;
+
 ALTER TABLE public.codebase_files
   DROP CONSTRAINT IF EXISTS codebase_files_snapshot_repository_fk;
 ALTER TABLE public.codebase_files
@@ -124,15 +133,16 @@ BEGIN
       USING ERRCODE = '22023';
   END IF;
 
-  IF NOT EXISTS (
-    SELECT 1 FROM public.repositories r
-    WHERE r.id = p_repository_id
-      AND r.company_id = p_company_id
-      AND r.baseline_status = 'indexing'
-      AND r.baseline_run_id = p_run_id
-      AND r.baseline_lease_expires_at > now()
-    FOR UPDATE
-  ) THEN
+  PERFORM 1
+  FROM public.repositories r
+  WHERE r.id = p_repository_id
+    AND r.company_id = p_company_id
+    AND r.baseline_status = 'indexing'
+    AND r.baseline_run_id = p_run_id
+    AND r.baseline_lease_expires_at > now()
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
     RAISE EXCEPTION 'repository baseline lease is not owned by this run'
       USING ERRCODE = '42501';
   END IF;
@@ -381,8 +391,15 @@ BEGIN
      OR item.company_id IS DISTINCT FROM p_company_id
      OR NOT (item.source_id = ANY(p_source_ids))
      OR NOT EXISTS (
-       SELECT 1 FROM public.entities e
-       WHERE e.id = item.target_id AND e.company_id = p_company_id
+       SELECT 1
+       FROM public.codebase_files target_file
+       JOIN public.entities target_entity
+         ON target_entity.id = item.target_id
+        AND target_entity.company_id = p_company_id
+        AND target_entity.type = 'FILE'
+        AND target_entity.metadata->>'file_path' = target_file.file_path
+       WHERE target_file.snapshot_id = p_snapshot_id
+         AND target_file.repository_id = v_snapshot.repository_id
      );
 
   IF v_invalid > 0 THEN
