@@ -153,11 +153,19 @@ class IngestionHandler:
         try:
             # A push schedules a complete immutable baseline rebuild. Incremental
             # writes to the published inventory would violate snapshot consistency.
+            push_payload = job.get("payload") if isinstance(job.get("payload"), dict) else {}
+            repository = push_payload.get("repository")
+            repo_name = (
+                repository.get("full_name") if isinstance(repository, dict) else None
+            ) or push_payload.get("repo")
+            if not isinstance(repo_name, str) or not repo_name.strip():
+                raise ValueError("GitHub push payload does not contain repository.full_name")
+
             baseline_job = {
                 "RecordID": job.get("record_id"),
                 "Source": "github",
-                "EventType": job.get("event_type"),
-                "Payload": job.get("payload", {}),
+                "EventType": "baseline",
+                "Payload": {"repo": repo_name.strip()},
                 "CompanyID": job.get("company_id"),
                 "CreatedAt": job.get("created_at") or datetime.now(timezone.utc).isoformat(),
             }
