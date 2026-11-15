@@ -142,7 +142,7 @@ def _ownership_answer(
     )
     active_by_file_entity = {}
     for repository in repository_rows:
-        if repository.get("baseline_status") not in (None, "ready"):
+        if repository.get("baseline_status") not in (None, "ready") and not repository.get("active_snapshot_id"):
             continue
         repository_id = str(repository.get("id") or "")
         full_name = str(repository.get("full_name") or "")
