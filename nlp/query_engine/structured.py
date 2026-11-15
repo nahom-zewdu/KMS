@@ -30,19 +30,31 @@ def _rows(query: Any) -> list[dict[str, Any]]:
 def _company_inventory(supabase: Any, company_id: str) -> tuple[list[dict], list[dict]]:
     repositories = _rows(
         supabase.table("repositories")
-        .select("id,full_name,default_branch,baseline_status,baseline_file_count")
+        .select("id,full_name,default_branch,baseline_status,baseline_file_count,active_snapshot_id")
         .eq("company_id", company_id)
         .order("full_name")
     )
+    repositories = [
+        row for row in repositories
+        if row.get("baseline_status") in (None, "ready")
+    ]
     repository_ids = [str(row["id"]) for row in repositories if row.get("id")]
     if not repository_ids:
         return repositories, []
     files = _rows(
         supabase.table("codebase_files")
-        .select("id,repository_id,file_path,language,module_path,last_author,last_commit_sha")
+        .select("id,repository_id,file_path,language,module_path,last_author,last_commit_sha,snapshot_id")
         .in_("repository_id", repository_ids)
         .limit(10000)
     )
+    active_by_repo = {
+        str(row["id"]): str(row.get("active_snapshot_id") or "")
+        for row in repositories if row.get("id")
+    }
+    files = [
+        row for row in files
+        if str(row.get("snapshot_id") or "") == active_by_repo.get(str(row.get("repository_id")), "")
+    ]
     return repositories, files
 
 
@@ -116,12 +128,28 @@ def _ownership_answer(
         }
     edges = _rows(
         supabase.table("edges")
-        .select("source_id,target_id,type,confidence")
+        .select("source_id,target_id,type,confidence,snapshot_id")
         .eq("company_id", company_id)
         .in_("type", ["OWNS", "MAINTAINS"])
         .in_("target_id", target_ids)
         .limit(2000)
     )
+    active_snapshot_ids = {
+        str(row.get("active_snapshot_id"))
+        for row in _rows(
+            supabase.table("repositories")
+            .select("id,active_snapshot_id,baseline_status")
+            .eq("company_id", company_id)
+        )
+        if row.get("active_snapshot_id") and row.get("baseline_status") in (None, "ready")
+    }
+    edges = [
+        edge for edge in edges
+        if (
+            (edge.get("snapshot_id") is None and not active_snapshot_ids)
+            or str(edge.get("snapshot_id") or "") in active_snapshot_ids
+        )
+    ]
     if not edges:
         return {
             "answer": "I couldn't find indexed OWNS or MAINTAINS relationships for the referenced files. I won't infer owners from commit authors or file names.",
