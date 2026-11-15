@@ -118,7 +118,10 @@ class RampEvidenceStore:
         )
         return [
             row for row in (getattr(response, "data", []) or [])
-            if isinstance(row, dict) and row.get("baseline_status") in (None, "ready")
+            if isinstance(row, dict) and (
+                row.get("baseline_status") in (None, "ready")
+                or row.get("active_snapshot_id")
+            )
         ]
 
     def _repository_records(self, company_id: str) -> List[Dict[str, Any]]:
