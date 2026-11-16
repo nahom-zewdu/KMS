@@ -53,19 +53,20 @@ class VisualizerService:
             ).data or []
             active_by_repo = {
                 str(row["id"]): str(row.get("active_snapshot_id") or "")
-                for row in repo_rows if row.get("id") and row.get("active_snapshot_id")
+                for row in repo_rows if row.get("id")
             }
             repository_ids = [repo_id for repo_id in repo_ids[:50] if repo_id in active_by_repo]
-            if not active_by_repo or not repository_ids:
+            if not repository_ids:
                 return []
-            res = (
+            file_query = (
                 self.supabase.table("codebase_files")
                 .select("file_path, language, last_author, module_path, repository_id, snapshot_id")
                 .in_("repository_id", repository_ids)  # keep request size sane
-                .in_("snapshot_id", list(active_by_repo.values()))
-                .limit(10000)
-                .execute()
             )
+            active_snapshot_ids = [snapshot_id for snapshot_id in active_by_repo.values() if snapshot_id]
+            if active_snapshot_ids:
+                file_query = file_query.in_("snapshot_id", active_snapshot_ids)
+            res = file_query.limit(10000).execute()
             active_rows = [
                 row for row in (res.data or [])
                 if str(row.get("snapshot_id") or "") == active_by_repo.get(str(row.get("repository_id")), "")
@@ -141,16 +142,17 @@ class VisualizerService:
             ).data or []
             active_by_repo = {
                 str(row["id"]): str(row.get("active_snapshot_id") or "")
-                for row in repo_rows if row.get("id") and row.get("active_snapshot_id")
+                for row in repo_rows if row.get("id")
             }
-            if not active_by_repo:
-                return []
-            res = self.supabase.table("codebase_modules")\
-                .select("*")\
-                .in_("repository_id", [repo_id for repo_id in repo_ids if repo_id in active_by_repo])\
-                .in_("snapshot_id", list(active_by_repo.values()))\
-                .order("importance_score", desc=True)\
-                .limit(1000).execute()
+            active_snapshot_ids = [snapshot_id for snapshot_id in active_by_repo.values() if snapshot_id]
+            module_query = (
+                self.supabase.table("codebase_modules")
+                .select("*")
+                .in_("repository_id", [repo_id for repo_id in repo_ids if repo_id in active_by_repo])
+            )
+            if active_snapshot_ids:
+                module_query = module_query.in_("snapshot_id", active_snapshot_ids)
+            res = module_query.order("importance_score", desc=True).limit(1000).execute()
             modules = []
             for m in res.data or []:
                 if str(m.get("snapshot_id") or "") != active_by_repo.get(str(m.get("repository_id")), ""):
