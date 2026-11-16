@@ -45,13 +45,6 @@ class VisualizerService:
         if not repo_ids:
             return []
         try:
-            res = (
-                self.supabase.table("codebase_files")
-                .select("file_path, language, last_author, module_path, repository_id, snapshot_id")
-                .in_("repository_id", repo_ids[:50])  # keep request size sane
-                .limit(10000)
-                .execute()
-            )
             repo_rows = (
                 self.supabase.table("repositories")
                 .select("id,active_snapshot_id")
@@ -60,8 +53,19 @@ class VisualizerService:
             ).data or []
             active_by_repo = {
                 str(row["id"]): str(row.get("active_snapshot_id") or "")
-                for row in repo_rows if row.get("id")
+                for row in repo_rows if row.get("id") and row.get("active_snapshot_id")
             }
+            repository_ids = [repo_id for repo_id in repo_ids[:50] if repo_id in active_by_repo]
+            if not active_by_repo or not repository_ids:
+                return []
+            res = (
+                self.supabase.table("codebase_files")
+                .select("file_path, language, last_author, module_path, repository_id, snapshot_id")
+                .in_("repository_id", repository_ids)  # keep request size sane
+                .in_("snapshot_id", list(active_by_repo.values()))
+                .limit(10000)
+                .execute()
+            )
             active_rows = [
                 row for row in (res.data or [])
                 if str(row.get("snapshot_id") or "") == active_by_repo.get(str(row.get("repository_id")), "")
@@ -129,12 +133,6 @@ class VisualizerService:
             repo_ids = self._repo_ids_for_company(company_id)
             if not repo_ids:
                 return []
-            res = self.supabase.table("codebase_modules")\
-                .select("*")\
-                .in_("repository_id", repo_ids)\
-                .order("importance_score", desc=True)\
-                .limit(1000).execute()
-
             repo_rows = (
                 self.supabase.table("repositories")
                 .select("id,active_snapshot_id")
@@ -143,8 +141,16 @@ class VisualizerService:
             ).data or []
             active_by_repo = {
                 str(row["id"]): str(row.get("active_snapshot_id") or "")
-                for row in repo_rows if row.get("id")
+                for row in repo_rows if row.get("id") and row.get("active_snapshot_id")
             }
+            if not active_by_repo:
+                return []
+            res = self.supabase.table("codebase_modules")\
+                .select("*")\
+                .in_("repository_id", [repo_id for repo_id in repo_ids if repo_id in active_by_repo])\
+                .in_("snapshot_id", list(active_by_repo.values()))\
+                .order("importance_score", desc=True)\
+                .limit(1000).execute()
             modules = []
             for m in res.data or []:
                 if str(m.get("snapshot_id") or "") != active_by_repo.get(str(m.get("repository_id")), ""):
@@ -254,20 +260,27 @@ class VisualizerService:
     def _build_ownership(self, role: str, company_id: str) -> Dict:
         """Key ownership edges for the role, derived from KG."""
         try:
-            res = (
-                self.supabase.table("edges")
-                .select("source_id,target_id,type,confidence,snapshot_id")
-                .eq("type", "OWNS")
-                .eq("company_id", company_id)
-                .limit(30)
-                .execute()
-            )
             repositories = (
                 self.supabase.table("repositories")
                 .select("id,full_name,active_snapshot_id")
                 .eq("company_id", company_id)
                 .execute()
             ).data or []
+            active_snapshot_ids = [
+                str(repository["active_snapshot_id"])
+                for repository in repositories if repository.get("active_snapshot_id")
+            ]
+            if not active_snapshot_ids:
+                return {"key_owners": [], "note": "No ownership edges yet"}
+            res = (
+                self.supabase.table("edges")
+                .select("source_id,target_id,type,confidence,snapshot_id")
+                .eq("type", "OWNS")
+                .eq("company_id", company_id)
+                .in_("snapshot_id", active_snapshot_ids)
+                .limit(30)
+                .execute()
+            )
             active_snapshot_by_file = {}
             for repository in repositories:
                 repository_id = str(repository.get("id") or "")
@@ -279,6 +292,7 @@ class VisualizerService:
                     self.supabase.table("codebase_files")
                     .select("file_path,snapshot_id")
                     .eq("repository_id", repository_id)
+                    .eq("snapshot_id", active_snapshot_id)
                     .execute()
                 ).data or []
                 for file_row in file_rows:
