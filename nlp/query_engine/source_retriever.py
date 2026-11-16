@@ -119,18 +119,16 @@ def retrieve_source_chunks(
     active_snapshot_ids = [
         str(row["active_snapshot_id"]) for row in repositories if row.get("active_snapshot_id")
     ]
-    if not active_snapshot_ids:
-        return []
     repo_by_id = {str(row["id"]): row for row in repositories}
     repo_by_name = {str(row["full_name"]): row for row in repositories}
-    file_response = (
+    file_query = (
         supabase.table("codebase_files")
         .select("repository_id,file_path,language,module_path,last_author,last_commit_sha,snapshot_id")
         .in_("repository_id", list(repo_by_id))
-        .in_("snapshot_id", active_snapshot_ids)
-        .limit(10000)
-        .execute()
     )
+    if active_snapshot_ids:
+        file_query = file_query.in_("snapshot_id", active_snapshot_ids)
+    file_response = file_query.limit(10000).execute()
     indexed_files = [
         row for row in _response_rows(file_response)
         if row.get("file_path")
