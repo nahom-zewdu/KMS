@@ -64,6 +64,7 @@ class RampEvidenceStore:
                     "last_author, last_commit_sha, importance_score, metadata, snapshot_id"
                 )
                 .in_("repository_id", repository_ids)
+                .in_("snapshot_id", [str(row.get("active_snapshot_id")) for row in repositories if row.get("active_snapshot_id")])
                 .limit(5000)
                 .execute()
             ),
@@ -117,6 +118,7 @@ class RampEvidenceStore:
                     "description, importance_score, metadata, snapshot_id"
                 )
                 .in_("repository_id", repository_ids)
+                .in_("snapshot_id", [snapshot_id for snapshot_id in active_by_repo.values() if snapshot_id])
                 .limit(1000)
                 .execute()
             ),
@@ -163,6 +165,7 @@ class RampEvidenceStore:
                 .select("source_id, target_id, type, metadata, confidence, snapshot_id")
                 .eq("company_id", company_id)
                 .eq("type", "OWNS")
+                .in_("snapshot_id", [str(row.get("active_snapshot_id")) for row in self._repository_records(company_id) if row.get("active_snapshot_id")])
                 .limit(5000)
                 .execute()
             ),
@@ -226,6 +229,7 @@ class RampEvidenceStore:
                 self.supabase.table("edges")
                 .select("id, source_id, target_id, type, confidence, company_id, metadata, snapshot_id")
                 .eq("company_id", company_id)
+                .in_("snapshot_id", [str(row.get("active_snapshot_id")) for row in self._repository_records(company_id) if row.get("active_snapshot_id")])
                 .limit(20000)
                 .execute()
             ),
@@ -248,6 +252,7 @@ class RampEvidenceStore:
                 self.supabase.table("codebase_files")
                 .select("repository_id, file_path, snapshot_id")
                 .in_("repository_id", repository_ids)
+                .in_("snapshot_id", [snapshot_id for snapshot_id in active_snapshot_by_repo.values() if snapshot_id])
                 .limit(10000)
                 .execute()
             ),
