@@ -187,19 +187,26 @@ class RampEvidenceStore:
             str(row.get("active_snapshot_id"))
             for row in self._repository_records(company_id) if row.get("active_snapshot_id")
         ]
-        if not active_snapshot_ids:
-            return []
         response = self._retrieve(
             "edges",
             "list ownership relationships",
             lambda: (
-                self.supabase.table("edges")
-                .select("source_id, target_id, type, metadata, confidence, snapshot_id")
-                .eq("company_id", company_id)
-                .eq("type", "OWNS")
-                .in_("snapshot_id", active_snapshot_ids)
-                .limit(5000)
-                .execute()
+                (
+                    self.supabase.table("edges")
+                    .select("source_id, target_id, type, metadata, confidence, snapshot_id")
+                    .eq("company_id", company_id)
+                    .eq("type", "OWNS")
+                    .in_("snapshot_id", active_snapshot_ids)
+                    .limit(5000)
+                    .execute()
+                    if active_snapshot_ids else
+                    self.supabase.table("edges")
+                    .select("source_id, target_id, type, metadata, confidence, snapshot_id")
+                    .eq("company_id", company_id)
+                    .eq("type", "OWNS")
+                    .limit(5000)
+                    .execute()
+                )
             ),
         )
         active_snapshot_by_file: Dict[str, str] = {}
@@ -246,8 +253,6 @@ class RampEvidenceStore:
             str(row.get("active_snapshot_id"))
             for row in self._repository_records(company_id) if row.get("active_snapshot_id")
         ]
-        if not active_snapshot_ids:
-            return []
         entities = self._retrieve(
             "entities",
             "list file entities",
@@ -264,12 +269,20 @@ class RampEvidenceStore:
             "edges",
             "list implementation relationships",
             lambda: (
-                self.supabase.table("edges")
-                .select("id, source_id, target_id, type, confidence, company_id, metadata, snapshot_id")
-                .eq("company_id", company_id)
-                .in_("snapshot_id", active_snapshot_ids)
-                .limit(20000)
-                .execute()
+                (
+                    self.supabase.table("edges")
+                    .select("id, source_id, target_id, type, confidence, company_id, metadata, snapshot_id")
+                    .eq("company_id", company_id)
+                    .in_("snapshot_id", active_snapshot_ids)
+                    .limit(20000)
+                    .execute()
+                    if active_snapshot_ids else
+                    self.supabase.table("edges")
+                    .select("id, source_id, target_id, type, confidence, company_id, metadata, snapshot_id")
+                    .eq("company_id", company_id)
+                    .limit(20000)
+                    .execute()
+                )
             ),
         )
 
