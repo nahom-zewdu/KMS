@@ -129,13 +129,15 @@ class PlaybookGenerator:
             str(row["id"]): str(row.get("active_snapshot_id") or "")
             for row in repository_rows
         }
+        active_snapshot_ids = [snapshot_id for snapshot_id in active_by_repo.values() if snapshot_id]
         files = (
             self.supabase.table("codebase_files")
             .select("file_path,repository_id,snapshot_id")
             .in_("repository_id", repository_ids)
+            .in_("snapshot_id", active_snapshot_ids)
             .limit(10000)
             .execute()
-            if repository_ids else None
+            if repository_ids and active_snapshot_ids else None
         )
         if files and files.data:
             active_files = [
