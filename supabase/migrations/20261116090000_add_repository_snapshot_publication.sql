@@ -29,7 +29,8 @@ CREATE INDEX IF NOT EXISTS idx_repository_snapshots_status
   ON public.repository_snapshots(status);
 
 ALTER TABLE public.repositories
-  ADD COLUMN IF NOT EXISTS active_snapshot_id uuid;
+  ADD COLUMN IF NOT EXISTS active_snapshot_id uuid,
+  ADD COLUMN IF NOT EXISTS last_synced_at timestamptz;
 
 ALTER TABLE public.repositories
   DROP CONSTRAINT IF EXISTS repositories_active_snapshot_fk;
@@ -55,11 +56,15 @@ ALTER TABLE public.edges
 ALTER TABLE public.codebase_files
   DROP CONSTRAINT IF EXISTS codebase_files_repository_id_file_path_key;
 ALTER TABLE public.codebase_files
+  DROP CONSTRAINT IF EXISTS codebase_files_repository_path_snapshot_key;
+ALTER TABLE public.codebase_files
   ADD CONSTRAINT codebase_files_repository_path_snapshot_key
   UNIQUE (repository_id, file_path, snapshot_id);
 
 ALTER TABLE public.codebase_modules
   DROP CONSTRAINT IF EXISTS codebase_modules_repository_id_module_path_key;
+ALTER TABLE public.codebase_modules
+  DROP CONSTRAINT IF EXISTS codebase_modules_repository_module_snapshot_key;
 ALTER TABLE public.codebase_modules
   ADD CONSTRAINT codebase_modules_repository_module_snapshot_key
   UNIQUE (repository_id, module_path, snapshot_id);
