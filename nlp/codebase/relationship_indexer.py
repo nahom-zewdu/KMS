@@ -162,14 +162,27 @@ class ImplementationRelationshipIndexer:
         if not repo_row.data:
             return []
         repository_id = repo_row.data[0]["id"]
-        rows = (
-            self.supabase.table("codebase_files")
-            .select("file_path,language,repository_id")
-            .eq("repository_id", repository_id)
-            .eq("snapshot_id", snapshot_id)
-            .execute()
-        )
-        return [row for row in (rows.data or []) if row.get("file_path")]
+        # PostgREST applies a server-side row cap (commonly 1,000). Fetch
+        # every page explicitly so large repositories do not publish a partial
+        # relationship graph from an incomplete file inventory.
+        page_size = 1000
+        all_rows: list[dict[str, Any]] = []
+        offset = 0
+        while True:
+            page = (
+                self.supabase.table("codebase_files")
+                .select("file_path,language,repository_id")
+                .eq("repository_id", repository_id)
+                .eq("snapshot_id", snapshot_id)
+                .range(offset, offset + page_size - 1)
+                .execute()
+            )
+            page_rows = page.data or []
+            all_rows.extend(page_rows)
+            if len(page_rows) < page_size:
+                break
+            offset += page_size
+        return [row for row in all_rows if row.get("file_path")]
 
     def _load_source_inventory(
         self, repo, repository_rows: list[dict[str, Any]], *, ref: str
