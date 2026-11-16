@@ -57,21 +57,30 @@ class RampEvidenceStore:
         active_snapshot_ids = [
             str(row["active_snapshot_id"]) for row in repositories if row.get("active_snapshot_id")
         ]
-        if not active_snapshot_ids:
-            return []
         response = self._retrieve(
             "codebase_files",
             "list implementation surfaces",
             lambda: (
-                self.supabase.table("codebase_files")
-                .select(
-                    "id, repository_id, file_path, module_path, language, file_name, "
-                    "last_author, last_commit_sha, importance_score, metadata, snapshot_id"
+                (
+                    self.supabase.table("codebase_files")
+                    .select(
+                        "id, repository_id, file_path, module_path, language, file_name, "
+                        "last_author, last_commit_sha, importance_score, metadata, snapshot_id"
+                    )
+                    .in_("repository_id", repository_ids)
+                    .in_("snapshot_id", active_snapshot_ids)
+                    .limit(5000)
+                    .execute()
+                    if active_snapshot_ids else
+                    self.supabase.table("codebase_files")
+                    .select(
+                        "id, repository_id, file_path, module_path, language, file_name, "
+                        "last_author, last_commit_sha, importance_score, metadata, snapshot_id"
+                    )
+                    .in_("repository_id", repository_ids)
+                    .limit(5000)
+                    .execute()
                 )
-                .in_("repository_id", repository_ids)
-                .in_("snapshot_id", active_snapshot_ids)
-                .limit(5000)
-                .execute()
             ),
         )
 
@@ -114,21 +123,30 @@ class RampEvidenceStore:
             for row in repositories if row.get("id")
         }
         active_snapshot_ids = [snapshot_id for snapshot_id in active_by_repo.values() if snapshot_id]
-        if not active_snapshot_ids:
-            return []
         response = self._retrieve(
             "codebase_modules",
             "list module records",
             lambda: (
-                self.supabase.table("codebase_modules")
-                .select(
-                    "id, repository_id, module_path, module_name, inferred_type, "
-                    "description, importance_score, metadata, snapshot_id"
+                (
+                    self.supabase.table("codebase_modules")
+                    .select(
+                        "id, repository_id, module_path, module_name, inferred_type, "
+                        "description, importance_score, metadata, snapshot_id"
+                    )
+                    .in_("repository_id", repository_ids)
+                    .in_("snapshot_id", active_snapshot_ids)
+                    .limit(1000)
+                    .execute()
+                    if active_snapshot_ids else
+                    self.supabase.table("codebase_modules")
+                    .select(
+                        "id, repository_id, module_path, module_name, inferred_type, "
+                        "description, importance_score, metadata, snapshot_id"
+                    )
+                    .in_("repository_id", repository_ids)
+                    .limit(1000)
+                    .execute()
                 )
-                .in_("repository_id", repository_ids)
-                .in_("snapshot_id", active_snapshot_ids)
-                .limit(1000)
-                .execute()
             ),
         )
         return [
