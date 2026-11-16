@@ -63,6 +63,8 @@ ALTER TABLE public.codebase_files
   UNIQUE (repository_id, file_path, snapshot_id);
 
 ALTER TABLE public.codebase_modules
+  DROP CONSTRAINT IF EXISTS unique_repo_module;
+ALTER TABLE public.codebase_modules
   DROP CONSTRAINT IF EXISTS codebase_modules_repository_id_module_path_key;
 ALTER TABLE public.codebase_modules
   DROP CONSTRAINT IF EXISTS codebase_modules_repository_module_snapshot_key;
