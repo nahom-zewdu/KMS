@@ -295,7 +295,14 @@ class RampEvidenceStore:
             if path and row.get("id"):
                 file_paths[str(row["id"])] = path
 
-        repository_ids = self._repository_ids(company_id)
+        active_snapshot_by_repo = {
+            str(repo.get("id")): str(repo.get("active_snapshot_id") or "")
+            for repo in self._repository_records(company_id)
+        }
+        active_snapshot_ids = [snapshot_id for snapshot_id in active_snapshot_by_repo.values() if snapshot_id]
+        if not active_snapshot_ids:
+            return []
+        repository_ids = list(active_snapshot_by_repo)
         file_rows = self._retrieve(
             "codebase_files",
             "validate behavioral evidence repository membership",
@@ -303,15 +310,11 @@ class RampEvidenceStore:
                 self.supabase.table("codebase_files")
                 .select("repository_id, file_path, snapshot_id")
                 .in_("repository_id", repository_ids)
-                .in_("snapshot_id", [snapshot_id for snapshot_id in active_snapshot_by_repo.values() if snapshot_id])
+                .in_("snapshot_id", active_snapshot_ids)
                 .limit(10000)
                 .execute()
             ),
         )
-        active_snapshot_by_repo = {
-            str(repo.get("id")): str(repo.get("active_snapshot_id") or "")
-            for repo in self._repository_records(company_id)
-        }
         path_repository_ids: Dict[str, set[str]] = {}
         for row in getattr(file_rows, "data", []) or []:
             if (
