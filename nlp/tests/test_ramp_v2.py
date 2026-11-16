@@ -598,8 +598,8 @@ def test_implementation_relationships_resolves_active_snapshot_before_inventory_
             "baseline_status": "ready",
         }],
         "entities": [
-            {"id": source_id, "metadata": {"file_path": "api/route.go"}},
-            {"id": target_id, "metadata": {"file_path": "internal/service.go"}},
+            {"id": source_id, "company_id": "company-1", "type": "FILE", "metadata": {"file_path": "api/route.go"}},
+            {"id": target_id, "company_id": "company-1", "type": "FILE", "metadata": {"file_path": "internal/service.go"}},
         ],
         "edges": [{
             "id": "edge-1",
