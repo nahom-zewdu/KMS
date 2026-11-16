@@ -562,3 +562,76 @@ def test_generated_plan_includes_issue_backed_contribution_after_orientation():
         "https://github.com/acme/service/blob/main/api/handlers/webhook.go"
     )
 
+def test_implementation_relationships_resolves_active_snapshot_before_inventory_query():
+    source_id = "11111111-1111-4111-8111-111111111111"
+    target_id = "22222222-2222-4222-8222-222222222222"
+    snapshot_id = "33333333-3333-4333-8333-333333333333"
+    revision = "a" * 40
+    provenance = [
+        {
+            "repository_id": "repo-1",
+            "source_revision": revision,
+            "extractor_id": "kms.go.gin.behavioral",
+            "extractor_version": "1",
+            "source_file": "api/route.go",
+            "line": 10,
+            "observation": "derived",
+            "limitations": [],
+        },
+        {
+            "repository_id": "repo-1",
+            "source_revision": revision,
+            "extractor_id": "kms.go.gin.behavioral",
+            "extractor_version": "1",
+            "source_file": "internal/service.go",
+            "line": 24,
+            "observation": "direct",
+            "limitations": [],
+        },
+    ]
+    rows = {
+        "repositories": [{
+            "id": "repo-1",
+            "full_name": "org/repo",
+            "company_id": "company-1",
+            "active_snapshot_id": snapshot_id,
+            "baseline_status": "ready",
+        }],
+        "entities": [
+            {"id": source_id, "metadata": {"file_path": "api/route.go"}},
+            {"id": target_id, "metadata": {"file_path": "internal/service.go"}},
+        ],
+        "edges": [{
+            "id": "edge-1",
+            "source_id": source_id,
+            "target_id": target_id,
+            "type": "ROUTE_HANDLER_OPERATION",
+            "confidence": 0.8,
+            "company_id": "company-1",
+            "snapshot_id": snapshot_id,
+            "metadata": {
+                "repository_id": "repo-1",
+                "source_revision": revision,
+                "extractor_id": "kms.go.gin.behavioral",
+                "extractor_version": "1",
+                "detail": "route invokes service",
+                "provenance": provenance,
+            },
+        }],
+        "codebase_files": [
+            {"repository_id": "repo-1", "file_path": "api/route.go", "snapshot_id": snapshot_id},
+            {"repository_id": "repo-1", "file_path": "internal/service.go", "snapshot_id": snapshot_id},
+        ],
+    }
+    supabase = Mock()
+    supabase.table.side_effect = lambda name: Query(rows.get(name, []))
+
+    evidence = __import__("ramp.evidence", fromlist=["RampEvidenceStore"]).RampEvidenceStore(
+        supabase
+    ).implementation_relationships("company-1")
+
+    assert len(evidence) == 1
+    assert evidence[0].metadata["source_ref"] == "api/route.go"
+    assert evidence[0].metadata["target_ref"] == "internal/service.go"
+    assert evidence[0].repository_id == "repo-1"
+
