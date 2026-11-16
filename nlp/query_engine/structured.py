@@ -46,6 +46,7 @@ def _company_inventory(supabase: Any, company_id: str) -> tuple[list[dict], list
         supabase.table("codebase_files")
         .select("id,repository_id,file_path,language,module_path,last_author,last_commit_sha,snapshot_id")
         .in_("repository_id", repository_ids)
+        .in_("snapshot_id", [str(row.get("active_snapshot_id")) for row in repositories if row.get("active_snapshot_id")])
         .limit(10000)
     )
     active_by_repo = {
@@ -153,6 +154,7 @@ def _ownership_answer(
             supabase.table("codebase_files")
             .select("file_path,snapshot_id")
             .eq("repository_id", repository_id)
+            .eq("snapshot_id", active_snapshot_id)
         )
         for inventory_row in inventory_rows:
             path = str(inventory_row.get("file_path") or "")
