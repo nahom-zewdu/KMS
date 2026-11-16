@@ -84,6 +84,9 @@ class Query:
     def in_(self, *_args, **_kwargs):
         return self
 
+    def range(self, *_args, **_kwargs):
+        return self
+
     def delete(self):
         return self
 
@@ -182,3 +185,45 @@ def test_unavailable_go_file_fails_closed_when_not_deleted():
         assert "Cannot build complete Go behavioral snapshot" in str(exc)
     else:
         raise AssertionError("unavailable Go source must fail closed")
+
+def test_snapshot_file_inventory_is_paginated_past_postgrest_default_limit():
+    first_page = [
+        {"file_path": f"pkg/file_{index}.py", "language": "Python", "repository_id": "repo-1"}
+        for index in range(1000)
+    ]
+    second_page = [
+        {"file_path": "pkg/file_1000.py", "language": "Python", "repository_id": "repo-1"}
+    ]
+
+    class PagedQuery(Query):
+        def __init__(self, data, pages=None):
+            super().__init__(data)
+            self.pages = pages
+            self.bounds = None
+
+        def range(self, start, end):
+            self.bounds = (start, end)
+            return self
+
+        def execute(self):
+            if self.pages is None:
+                return type("Response", (), {"data": self.data})()
+            start, _end = self.bounds
+            page = self.pages[0] if start == 0 else self.pages[1]
+            return type("Response", (), {"data": page})()
+
+    file_query = PagedQuery([], pages=[first_page, second_page])
+    repo_query = PagedQuery([{"id": "repo-1"}])
+    supabase = Mock()
+    supabase.table.side_effect = lambda name: (
+        repo_query if name == "repositories" else file_query
+    )
+    indexer = ImplementationRelationshipIndexer(supabase, Mock())
+
+    rows = indexer._load_repository_rows(
+        Mock(full_name="org/repo"), "company-1", snapshot_id="snapshot-1"
+    )
+
+    assert len(rows) == 1001
+    assert rows[-1]["file_path"] == "pkg/file_1000.py"
+
