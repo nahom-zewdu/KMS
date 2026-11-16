@@ -43,15 +43,16 @@ def _company_inventory(supabase: Any, company_id: str) -> tuple[list[dict], list
     active_snapshot_ids = [
         str(row["active_snapshot_id"]) for row in repositories if row.get("active_snapshot_id")
     ]
-    if not repository_ids or not active_snapshot_ids:
+    if not repository_ids:
         return repositories, []
-    files = _rows(
+    file_query = (
         supabase.table("codebase_files")
         .select("id,repository_id,file_path,language,module_path,last_author,last_commit_sha,snapshot_id")
         .in_("repository_id", repository_ids)
-        .in_("snapshot_id", active_snapshot_ids)
-        .limit(10000)
     )
+    if active_snapshot_ids:
+        file_query = file_query.in_("snapshot_id", active_snapshot_ids)
+    files = _rows(file_query.limit(10000))
     active_by_repo = {
         str(row["id"]): str(row.get("active_snapshot_id") or "")
         for row in repositories if row.get("id")
