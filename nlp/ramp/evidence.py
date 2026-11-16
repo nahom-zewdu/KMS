@@ -54,6 +54,11 @@ class RampEvidenceStore:
         if not repository_ids:
             return []
         repository_by_id = {str(row["id"]): row for row in repositories if row.get("id")}
+        active_snapshot_ids = [
+            str(row["active_snapshot_id"]) for row in repositories if row.get("active_snapshot_id")
+        ]
+        if not active_snapshot_ids:
+            return []
         response = self._retrieve(
             "codebase_files",
             "list implementation surfaces",
@@ -64,7 +69,7 @@ class RampEvidenceStore:
                     "last_author, last_commit_sha, importance_score, metadata, snapshot_id"
                 )
                 .in_("repository_id", repository_ids)
-                .in_("snapshot_id", [str(row.get("active_snapshot_id")) for row in repositories if row.get("active_snapshot_id")])
+                .in_("snapshot_id", active_snapshot_ids)
                 .limit(5000)
                 .execute()
             ),
@@ -108,6 +113,9 @@ class RampEvidenceStore:
             str(row["id"]): str(row.get("active_snapshot_id") or "")
             for row in repositories if row.get("id")
         }
+        active_snapshot_ids = [snapshot_id for snapshot_id in active_by_repo.values() if snapshot_id]
+        if not active_snapshot_ids:
+            return []
         response = self._retrieve(
             "codebase_modules",
             "list module records",
@@ -118,7 +126,7 @@ class RampEvidenceStore:
                     "description, importance_score, metadata, snapshot_id"
                 )
                 .in_("repository_id", repository_ids)
-                .in_("snapshot_id", [snapshot_id for snapshot_id in active_by_repo.values() if snapshot_id])
+                .in_("snapshot_id", active_snapshot_ids)
                 .limit(1000)
                 .execute()
             ),
@@ -157,6 +165,12 @@ class RampEvidenceStore:
     def ownership(self, company_id: str) -> List[Dict[str, Any]]:
         """Return ownership edges available in the existing knowledge graph."""
         self._require_company_id(company_id)
+        active_snapshot_ids = [
+            str(row.get("active_snapshot_id"))
+            for row in self._repository_records(company_id) if row.get("active_snapshot_id")
+        ]
+        if not active_snapshot_ids:
+            return []
         response = self._retrieve(
             "edges",
             "list ownership relationships",
@@ -165,7 +179,7 @@ class RampEvidenceStore:
                 .select("source_id, target_id, type, metadata, confidence, snapshot_id")
                 .eq("company_id", company_id)
                 .eq("type", "OWNS")
-                .in_("snapshot_id", [str(row.get("active_snapshot_id")) for row in self._repository_records(company_id) if row.get("active_snapshot_id")])
+                .in_("snapshot_id", active_snapshot_ids)
                 .limit(5000)
                 .execute()
             ),
@@ -210,6 +224,12 @@ class RampEvidenceStore:
         or ownership, not behavioral control/data flow between implementation surfaces.
         """
         self._require_company_id(company_id)
+        active_snapshot_ids = [
+            str(row.get("active_snapshot_id"))
+            for row in self._repository_records(company_id) if row.get("active_snapshot_id")
+        ]
+        if not active_snapshot_ids:
+            return []
         entities = self._retrieve(
             "entities",
             "list file entities",
@@ -229,7 +249,7 @@ class RampEvidenceStore:
                 self.supabase.table("edges")
                 .select("id, source_id, target_id, type, confidence, company_id, metadata, snapshot_id")
                 .eq("company_id", company_id)
-                .in_("snapshot_id", [str(row.get("active_snapshot_id")) for row in self._repository_records(company_id) if row.get("active_snapshot_id")])
+                .in_("snapshot_id", active_snapshot_ids)
                 .limit(20000)
                 .execute()
             ),
