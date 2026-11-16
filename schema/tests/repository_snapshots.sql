@@ -88,6 +88,20 @@ BEGIN
     RAISE EXCEPTION 'complete snapshot was not atomically published';
   END IF;
 
+  -- Reader contract: resolve the repository's active pointer first, then
+  -- query only rows belonging to that snapshot. Staged/legacy rows must not
+  -- enter the published inventory.
+  IF (
+    SELECT count(*)
+    FROM public.repositories r
+    JOIN public.codebase_files f
+      ON f.repository_id = r.id
+     AND f.snapshot_id = r.active_snapshot_id
+    WHERE r.id = v_repo
+  ) <> 2 THEN
+    RAISE EXCEPTION 'active snapshot reader returned an unexpected file inventory';
+  END IF;
+
   -- A failed subsequent build must not replace or invalidate the last good
   -- snapshot. Its staged rows are isolated and remain unpublished.
   UPDATE public.repositories
@@ -126,6 +140,17 @@ BEGIN
       AND file_path = 'src/partial.go'
   ) THEN
     RAISE EXCEPTION 'failed snapshot damaged the active snapshot or lost failure isolation';
+  END IF;
+
+  IF (
+    SELECT count(*)
+    FROM public.repositories r
+    JOIN public.codebase_files f
+      ON f.repository_id = r.id
+     AND f.snapshot_id = r.active_snapshot_id
+    WHERE r.id = v_repo
+  ) <> 2 THEN
+    RAISE EXCEPTION 'failed staged rows leaked into the active snapshot reader';
   END IF;
 
   RAISE NOTICE 'repository snapshot publication integration checks passed';
