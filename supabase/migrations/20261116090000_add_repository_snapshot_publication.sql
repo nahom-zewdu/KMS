@@ -30,7 +30,8 @@ CREATE INDEX IF NOT EXISTS idx_repository_snapshots_status
 
 ALTER TABLE public.repositories
   ADD COLUMN IF NOT EXISTS active_snapshot_id uuid,
-  ADD COLUMN IF NOT EXISTS last_synced_at timestamptz;
+  ADD COLUMN IF NOT EXISTS last_synced_at timestamptz,
+  ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
 
 ALTER TABLE public.repositories
   DROP CONSTRAINT IF EXISTS repositories_active_snapshot_fk;
