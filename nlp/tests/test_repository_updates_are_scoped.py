@@ -177,3 +177,50 @@ def test_failed_directory_traversal_never_runs_destructive_reconciliation():
         table == "repositories" and values.get("last_synced_at")
         for table, values in database.updates
     )
+
+def test_staged_author_metadata_does_not_mutate_shared_file_entity():
+    class CaptureQuery:
+        def __init__(self, table):
+            self.table = table
+        def upsert(self, values, **_kwargs):
+            self.table.payloads.append(values)
+            return self
+        def execute(self):
+            return SimpleNamespace(data=[])
+
+    class CaptureDatabase:
+        def __init__(self):
+            self.payloads = []
+        def table(self, _name):
+            query = CaptureQuery(self)
+            query.table = self
+            return query
+
+    database = CaptureDatabase()
+    sync = CodebaseBaselineSync.__new__(CodebaseBaselineSync)
+    sync.supabase = database
+
+    sync._index_file(
+        SimpleNamespace(path="src/service.py", sha="blob-sha"),
+        "repository-entity",
+        "repository-id",
+        "org/repo",
+        "company-a",
+        last_author="alice",
+        snapshot_id="snapshot-id",
+        source_revision="commit-sha",
+    )
+
+    file_entity = database.payloads[0]
+    assert file_entity["type"] == "FILE"
+    assert file_entity["metadata"]["file_path"] == "src/service.py"
+    assert "last_author" not in file_entity["metadata"]
+
+    file_row = next(
+        payload for payload in database.payloads
+        if payload.get("snapshot_id") == "snapshot-id"
+    )
+    assert file_row["last_author"] == "alice"
+    assert file_row["last_commit_sha"] == "commit-sha"
+    assert file_row["metadata"]["blob_sha"] == "blob-sha"
+
