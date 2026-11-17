@@ -101,29 +101,35 @@ def retrieve_source_chunks(
     # Resolve repository inventory strictly through this company's repository IDs.
     repository_response = (
         supabase.table("repositories")
-        .select("id,full_name,default_branch,baseline_revision")
+        .select("id,full_name,default_branch,baseline_revision,active_snapshot_id,baseline_status")
         .eq("company_id", company_id)
         .execute()
     )
     repositories = [
         row for row in _response_rows(repository_response)
         if row.get("id") and row.get("full_name")
+        and (
+            row.get("baseline_status") in (None, "ready")
+            or row.get("active_snapshot_id")
+        )
     ]
     # A mocked/failed client response is not repository evidence. Fail closed.
     if not repositories:
         return []
     repo_by_id = {str(row["id"]): row for row in repositories}
     repo_by_name = {str(row["full_name"]): row for row in repositories}
-    file_response = (
+    file_query = (
         supabase.table("codebase_files")
-        .select("repository_id,file_path,language,module_path,last_author,last_commit_sha")
+        .select("repository_id,file_path,language,module_path,last_author,last_commit_sha,snapshot_id")
         .in_("repository_id", list(repo_by_id))
-        .limit(10000)
-        .execute()
     )
+    file_response = file_query.limit(10000).execute()
     indexed_files = [
         row for row in _response_rows(file_response)
         if row.get("file_path")
+    and (
+        str(row.get("snapshot_id") or "") == str(repo_by_id.get(str(row.get("repository_id")), {}).get("active_snapshot_id") or "")
+    )
     ]
 
     # Broad discovery must never widen an explicit file-path allowlist.

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+import uuid
 from typing import Any
 
 
@@ -30,19 +31,31 @@ def _rows(query: Any) -> list[dict[str, Any]]:
 def _company_inventory(supabase: Any, company_id: str) -> tuple[list[dict], list[dict]]:
     repositories = _rows(
         supabase.table("repositories")
-        .select("id,full_name,default_branch,baseline_status,baseline_file_count")
+        .select("id,full_name,default_branch,baseline_status,baseline_file_count,active_snapshot_id")
         .eq("company_id", company_id)
         .order("full_name")
     )
+    repositories = [
+        row for row in repositories
+        if row.get("baseline_status") in (None, "ready") or row.get("active_snapshot_id")
+    ]
     repository_ids = [str(row["id"]) for row in repositories if row.get("id")]
     if not repository_ids:
         return repositories, []
-    files = _rows(
+    file_query = (
         supabase.table("codebase_files")
-        .select("id,repository_id,file_path,language,module_path,last_author,last_commit_sha")
+        .select("id,repository_id,file_path,language,module_path,last_author,last_commit_sha,snapshot_id")
         .in_("repository_id", repository_ids)
-        .limit(10000)
     )
+    files = _rows(file_query.limit(10000))
+    active_by_repo = {
+        str(row["id"]): str(row.get("active_snapshot_id") or "")
+        for row in repositories if row.get("id")
+    }
+    files = [
+        row for row in files
+        if str(row.get("snapshot_id") or "") == active_by_repo.get(str(row.get("repository_id")), "")
+    ]
     return repositories, files
 
 
@@ -116,12 +129,51 @@ def _ownership_answer(
         }
     edges = _rows(
         supabase.table("edges")
-        .select("source_id,target_id,type,confidence")
+        .select("source_id,target_id,type,confidence,snapshot_id")
         .eq("company_id", company_id)
         .in_("type", ["OWNS", "MAINTAINS"])
         .in_("target_id", target_ids)
         .limit(2000)
     )
+    repository_rows = _rows(
+        supabase.table("repositories")
+        .select("id,full_name,active_snapshot_id,baseline_status")
+        .eq("company_id", company_id)
+    )
+    active_by_file_entity = {}
+    for repository in repository_rows:
+        if repository.get("baseline_status") not in (None, "ready") and not repository.get("active_snapshot_id"):
+            continue
+        repository_id = str(repository.get("id") or "")
+        full_name = str(repository.get("full_name") or "")
+        active_snapshot_id = str(repository.get("active_snapshot_id") or "")
+        if not repository_id or not full_name:
+            continue
+        inventory_rows = _rows(
+            supabase.table("codebase_files")
+            .select("file_path,snapshot_id")
+            .eq("repository_id", repository_id)
+        )
+        for inventory_row in inventory_rows:
+            path = str(inventory_row.get("file_path") or "")
+            if not path or str(inventory_row.get("snapshot_id") or "") != active_snapshot_id:
+                continue
+            entity_id = str(uuid.uuid5(
+                uuid.NAMESPACE_URL, f"file:{company_id}:{full_name}:{path}"
+            ))
+            active_by_file_entity[entity_id] = active_snapshot_id
+    edges = [
+        edge for edge in edges
+        if (
+            (
+                str(edge.get("type") or "").upper() == "MAINTAINS"
+                and edge.get("snapshot_id") is None
+            )
+            or str(edge.get("snapshot_id") or "") == active_by_file_entity.get(
+                str(edge.get("target_id") or ""), ""
+            )
+        )
+    ]
     if not edges:
         return {
             "answer": "I couldn't find indexed OWNS or MAINTAINS relationships for the referenced files. I won't infer owners from commit authors or file names.",

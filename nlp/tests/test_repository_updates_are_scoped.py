@@ -61,7 +61,9 @@ class RecordingSupabase:
         result = {
             "claim_repository_baseline": "claimed",
             "renew_repository_baseline_lease": True,
-            "complete_repository_baseline": True,
+            "create_repository_snapshot": "snapshot-id",
+            "publish_repository_snapshot": True,
+            "fail_repository_snapshot": True,
             "fail_repository_baseline": True,
         }.get(name, False)
         return SimpleNamespace(execute=lambda: SimpleNamespace(data=result))
@@ -120,13 +122,21 @@ def test_baseline_repository_update_filters_by_company():
         and ("company_id", "company-a") in filters
         for table, operation, filters in database.calls
     )
-    completion = next(
+    snapshot_creation = next(
         params for name, params in database.rpc_calls
-        if name == "complete_repository_baseline"
+        if name == "create_repository_snapshot"
     )
-    assert completion["p_company_id"] == "company-a"
-    assert completion["p_source_revision"] == "a" * 40
-    assert completion["p_file_count"] == 0
+    assert snapshot_creation["p_repository_id"] == "repo-id"
+    assert snapshot_creation["p_company_id"] == "company-a"
+    assert snapshot_creation["p_source_revision"] == "a" * 40
+
+    publication = next(
+        params for name, params in database.rpc_calls
+        if name == "publish_repository_snapshot"
+    )
+    assert publication["p_snapshot_id"] == "snapshot-id"
+    assert publication["p_file_count"] == 0
+    assert publication["p_module_count"] == 0
 
 
 
@@ -158,10 +168,59 @@ def test_failed_directory_traversal_never_runs_destructive_reconciliation():
     assert not sync.sync_repository("org/repo", "company-a")
     rpc_names = [name for name, _params in database.rpc_calls]
     assert "claim_repository_baseline" in rpc_names
-    assert "fail_repository_baseline" in rpc_names
+    assert "create_repository_snapshot" in rpc_names
+    assert "fail_repository_snapshot" in rpc_names
+    assert "fail_repository_baseline" not in rpc_names
     assert "reconcile_repository_files" not in rpc_names
     assert "complete_repository_baseline" not in rpc_names
     assert not any(
         table == "repositories" and values.get("last_synced_at")
         for table, values in database.updates
     )
+
+def test_staged_author_metadata_does_not_mutate_shared_file_entity():
+    class CaptureQuery:
+        def __init__(self, table):
+            self.table = table
+        def upsert(self, values, **_kwargs):
+            self.table.payloads.append(values)
+            return self
+        def execute(self):
+            return SimpleNamespace(data=[])
+
+    class CaptureDatabase:
+        def __init__(self):
+            self.payloads = []
+        def table(self, _name):
+            query = CaptureQuery(self)
+            query.table = self
+            return query
+
+    database = CaptureDatabase()
+    sync = CodebaseBaselineSync.__new__(CodebaseBaselineSync)
+    sync.supabase = database
+
+    sync._index_file(
+        SimpleNamespace(path="src/service.py", sha="blob-sha"),
+        "repository-entity",
+        "repository-id",
+        "org/repo",
+        "company-a",
+        last_author="alice",
+        snapshot_id="snapshot-id",
+        source_revision="commit-sha",
+    )
+
+    file_entity = database.payloads[0]
+    assert file_entity["type"] == "FILE"
+    assert file_entity["metadata"]["file_path"] == "src/service.py"
+    assert "last_author" not in file_entity["metadata"]
+
+    file_row = next(
+        payload for payload in database.payloads
+        if payload.get("snapshot_id") == "snapshot-id"
+    )
+    assert file_row["last_author"] == "alice"
+    assert file_row["last_commit_sha"] == "commit-sha"
+    assert file_row["metadata"]["blob_sha"] == "blob-sha"
+

@@ -115,18 +115,34 @@ class PlaybookGenerator:
             parts.append("Recent: " + " | ".join(r["content"][:80] for r in recent.data))
 
         # Key files
-        repositories = self.supabase.table("repositories").select("id").eq("company_id", company_id).execute()
-        repository_ids = [row["id"] for row in repositories.data or [] if row.get("id")]
-        files = (
+        repositories = self.supabase.table("repositories").select(
+            "id,active_snapshot_id,baseline_status"
+        ).eq("company_id", company_id).execute()
+        repository_rows = [
+            row for row in (repositories.data or [])
+            if row.get("id") and (
+                row.get("baseline_status") in (None, "ready") or row.get("active_snapshot_id")
+            )
+        ]
+        repository_ids = [row["id"] for row in repository_rows]
+        active_by_repo = {
+            str(row["id"]): str(row.get("active_snapshot_id") or "")
+            for row in repository_rows
+        }
+        file_query = (
             self.supabase.table("codebase_files")
-            .select("file_path")
+            .select("file_path,repository_id,snapshot_id")
             .in_("repository_id", repository_ids)
-            .limit(6)
-            .execute()
             if repository_ids else None
         )
+        files = file_query.limit(10000).execute() if file_query else None
         if files and files.data:
-            parts.append("Files: " + ", ".join(f["file_path"] for f in files.data))
+            active_files = [
+                row for row in files.data
+                if str(row.get("snapshot_id") or "") == active_by_repo.get(str(row.get("repository_id")), "")
+            ]
+            if active_files:
+                parts.append("Files: " + ", ".join(row["file_path"] for row in active_files[:6]))
 
         return "\n".join(parts) if parts else "No additional context available."
 

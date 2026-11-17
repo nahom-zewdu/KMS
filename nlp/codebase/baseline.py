@@ -47,6 +47,7 @@ class CodebaseBaselineSync:
         lease_lost = threading.Event()
         lease_thread = None
         lease_claimed = False
+        snapshot_id = None
 
         def ensure_lease() -> None:
             if lease_lost.is_set():
@@ -182,8 +183,26 @@ class CodebaseBaselineSync:
                     }
                 ).execute()
 
-            # Author map from recent commits (most recent author wins per file)
-            author_map = self._build_author_map(repo, max_commits=200)
+            snapshot_response = self.supabase.rpc(
+                "create_repository_snapshot",
+                {
+                    "p_repository_id": physical_repo_id,
+                    "p_company_id": company_id,
+                    "p_run_id": run_id,
+                    "p_source_revision": source_revision,
+                },
+            ).execute()
+            snapshot_id = snapshot_response.data
+            if isinstance(snapshot_id, list) and snapshot_id:
+                snapshot_id = snapshot_id[0]
+            if isinstance(snapshot_id, dict):
+                snapshot_id = snapshot_id.get("create_repository_snapshot")
+            if not snapshot_id:
+                raise RuntimeError("repository snapshot creation returned no snapshot ID")
+
+            # Author map from recent commits (most recent author wins per file).
+            # Pin history lookup to the same immutable revision as the inventory.
+            author_map = self._build_author_map(repo, max_commits=200, sha=source_revision)
             logger.info("Author map: %d files with last_author", len(author_map))
 
             contents = repo.get_contents("", ref=source_revision)
@@ -213,6 +232,8 @@ class CodebaseBaselineSync:
                         repo_full_name,
                         company_id,
                         last_author=author_map.get(item.path),
+                        snapshot_id=snapshot_id,
+                        source_revision=source_revision,
                     )
                     files_processed += 1
                     live_paths.append(item.path)
@@ -235,26 +256,20 @@ class CodebaseBaselineSync:
                     exc_info=True,
                 )
 
-            # Reconcile stale file rows/entities only after the entire immutable
-            # Git tree has been traversed and every live file indexed successfully.
+            # Snapshot rows are staged independently. Do not reconcile or mutate
+            # the currently published inventory before the new snapshot is ready.
             ensure_lease()
-            self.supabase.rpc(
-                "reconcile_repository_files",
-                {
-                    "p_repository_id": physical_repo_id,
-                    "p_company_id": company_id,
-                    "p_live_paths": live_paths,
-                },
-            ).execute()
-
             for mod_path, file_count in module_map.items():
                 ensure_lease()
-                self._create_module(mod_path, physical_repo_id, file_count, company_id)
+                self._create_module(
+                    mod_path, physical_repo_id, file_count, company_id, snapshot_id=snapshot_id
+                )
 
             # Relationship extraction uses the same immutable snapshot as file indexing.
             ensure_lease()
             relationship_count = self.relationship_indexer.index_repository(
-                repo_full_name, company_id, source_revision=source_revision
+                repo_full_name, company_id, source_revision=source_revision,
+                snapshot_id=snapshot_id,
             )
             logger.info(
                 "Implementation relationship indexing complete: %d relationships",
@@ -264,18 +279,20 @@ class CodebaseBaselineSync:
             ensure_lease()
             completed_at = datetime.now(timezone.utc).isoformat()
             completion = self.supabase.rpc(
-                "complete_repository_baseline",
+                "publish_repository_snapshot",
                 {
-                    "p_full_name": repo_full_name,
-                    "p_company_id": company_id,
+                    "p_snapshot_id": snapshot_id,
                     "p_run_id": run_id,
-                    "p_source_revision": source_revision,
                     "p_file_count": files_processed,
+                    "p_module_count": len(module_map),
+                    "p_relationship_count": relationship_count,
                     "p_completed_at": completed_at,
                 },
             ).execute()
             if completion.data is not True:
-                raise RuntimeError("baseline completion rejected because this run no longer owns the repository lease")
+                raise RuntimeError(
+                    "snapshot publication rejected because this run no longer owns the repository lease"
+                )
             lease_claimed = False
             logger.info(
                 f"Baseline sync complete: {files_processed} files, "
@@ -292,15 +309,25 @@ class CodebaseBaselineSync:
                 lease_thread.join(timeout=5)
             if lease_claimed:
                 try:
-                    self.supabase.rpc(
-                        "fail_repository_baseline",
-                        {
-                            "p_full_name": repo_full_name,
-                            "p_company_id": company_id,
-                            "p_run_id": run_id,
-                            "p_error": "Baseline indexing failed. Check worker logs.",
-                        },
-                    ).execute()
+                    if snapshot_id:
+                        self.supabase.rpc(
+                            "fail_repository_snapshot",
+                            {
+                                "p_snapshot_id": snapshot_id,
+                                "p_run_id": run_id,
+                                "p_error": "Baseline indexing failed. Check worker logs.",
+                            },
+                        ).execute()
+                    else:
+                        self.supabase.rpc(
+                            "fail_repository_baseline",
+                            {
+                                "p_full_name": repo_full_name,
+                                "p_company_id": company_id,
+                                "p_run_id": run_id,
+                                "p_error": "Baseline indexing failed. Check worker logs.",
+                            },
+                        ).execute()
                 except Exception:
                     logger.exception("Could not persist failed baseline state for %s", repo_full_name)
 
@@ -409,14 +436,16 @@ class CodebaseBaselineSync:
             ignore_duplicates=True,
         ).execute()
 
-    def _build_author_map(self, repo, max_commits: int = 200) -> Dict[str, str]:
+    def _build_author_map(
+        self, repo, max_commits: int = 200, sha: str | None = None
+    ) -> Dict[str, str]:
         """
         Walk recent commits (newest first). First time we see a file path wins = last author.
         One pass; avoids per-file commit API calls.
         """
         author_map: Dict[str, str] = {}
         try:
-            for i, commit in enumerate(repo.get_commits()):
+            for i, commit in enumerate(repo.get_commits(sha=sha) if sha else repo.get_commits()):
                 if i >= max_commits:
                     break
                 try:
@@ -438,7 +467,11 @@ class CodebaseBaselineSync:
             logger.warning("Failed building author map: %s", e)
         return author_map
 
-    def _index_file(self, gh_file, repo_entity_id: str, physical_repo_id: str, repo_full_name: str, company_id: str, last_author: str | None = None,):
+    def _index_file(
+        self, gh_file, repo_entity_id: str, physical_repo_id: str,
+        repo_full_name: str, company_id: str, last_author: str | None = None,
+        snapshot_id: str | None = None, source_revision: str | None = None,
+    ):
         """FILE entity, codebase_files, PART_OF, and OWNS when last_author is known."""
         file_path = gh_file.path
         file_name = file_path.split("/")[-1]
@@ -460,7 +493,8 @@ class CodebaseBaselineSync:
                     "module_path": module_path,
                     "language": self._detect_language(file_path),
                     "company_id": company_id,
-                    "last_author": last_author,
+                    "repository_id": physical_repo_id,
+                    "repository_full_name": repo_full_name,
                 },
                 "created_at": now,
             },
@@ -475,15 +509,20 @@ class CodebaseBaselineSync:
                 "module_path": module_path,
                 "language": self._detect_language(file_path),
                 "last_modified_at": now,
-                "last_commit_sha": gh_file.sha,
+                "last_commit_sha": source_revision,
                 "last_author": last_author,
-                "metadata": {"company_id": company_id},
+                "snapshot_id": snapshot_id,
+                "metadata": {
+                    "company_id": company_id,
+                    "source_revision": source_revision,
+                    "blob_sha": gh_file.sha,
+                },
             },
-            on_conflict="repository_id,file_path",
+            on_conflict="repository_id,file_path,snapshot_id",
         ).execute()
 
         edge_id = str(
-            uuid.uuid5(uuid.NAMESPACE_URL, f"partof:{file_entity_id}:{repo_entity_id}")
+            uuid.uuid5(uuid.NAMESPACE_URL, f"partof:{snapshot_id}:{file_entity_id}:{repo_entity_id}")
         )
         self.supabase.table("edges").upsert(
             {
@@ -494,14 +533,20 @@ class CodebaseBaselineSync:
                 "confidence": 1.0,
                 "created_at": now,
                 "company_id": company_id,
+                "snapshot_id": snapshot_id,
             },
             on_conflict="id",
         ).execute()
 
         if last_author:
-            self._upsert_owns(last_author, file_entity_id, company_id, now)
+            self._upsert_owns(
+                last_author, file_entity_id, company_id, now, snapshot_id=snapshot_id
+            )
 
-    def _upsert_owns(self, author: str, file_entity_id: str, company_id: str, now: str):
+    def _upsert_owns(
+        self, author: str, file_entity_id: str, company_id: str, now: str,
+        snapshot_id: str | None = None,
+    ):
         """PERSON + OWNS edge (same id scheme as analyzer)."""
         author_norm = str(author).strip().lower()
         if not author_norm:
@@ -522,7 +567,7 @@ class CodebaseBaselineSync:
         ).execute()
 
         owns_edge_id = str(
-            uuid.uuid5(uuid.NAMESPACE_URL, f"owns:{person_entity_id}:{file_entity_id}")
+            uuid.uuid5(uuid.NAMESPACE_URL, f"owns:{snapshot_id}:{person_entity_id}:{file_entity_id}")
         )
         self.supabase.table("edges").upsert(
             {
@@ -533,11 +578,15 @@ class CodebaseBaselineSync:
                 "confidence": 0.8,
                 "created_at": now,
                 "company_id": company_id,
+                "snapshot_id": snapshot_id,
             },
             on_conflict="id",
         ).execute()
 
-    def _create_module(self, module_path: str, repo_id: str, file_count: int, company_id: str):
+    def _create_module(
+        self, module_path: str, repo_id: str, file_count: int,
+        company_id: str, snapshot_id: str | None = None,
+    ):
         """Create/update module with computed importance."""
         module_name = module_path.split("/")[-1] if module_path else "root"
         importance = min(1.0, (file_count / 20.0) + 0.3)
@@ -550,7 +599,8 @@ class CodebaseBaselineSync:
             "description": f"Module containing {file_count} files",
             "importance_score": round(importance, 2),
             "metadata": {"file_count": file_count, "company_id": company_id},
-        }, on_conflict="repository_id,module_path").execute()
+            "snapshot_id": snapshot_id,
+        }, on_conflict="repository_id,module_path,snapshot_id").execute()
 
     def _create_part_of_edge(self, repo_id: str, file_path: str, company_id: str):
         """Create deterministic PART_OF edge using UUID."""

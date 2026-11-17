@@ -363,3 +363,83 @@ def test_live_closed_issue_is_not_returned_as_contribution_candidate(monkeypatch
 
     assert RampEvidenceStore(supabase).contribution_issues("company-a") == []
 
+
+
+def test_implementation_surfaces_include_legacy_repository_in_mixed_snapshot_company():
+    supabase = Mock()
+    supabase.table.side_effect = lambda name: {
+        "repositories": Query([
+            {
+                "id": "snapshot-repo",
+                "full_name": "acme/current",
+                "active_snapshot_id": "snapshot-1",
+                "baseline_status": "ready",
+            },
+            {
+                "id": "legacy-repo",
+                "full_name": "acme/legacy",
+                "active_snapshot_id": None,
+                "baseline_status": "ready",
+            },
+        ]),
+        "codebase_files": Query([
+            {
+                "id": "current-file",
+                "repository_id": "snapshot-repo",
+                "file_path": "current.go",
+                "snapshot_id": "snapshot-1",
+                "importance_score": 0.9,
+            },
+            {
+                "id": "stale-file",
+                "repository_id": "snapshot-repo",
+                "file_path": "stale.go",
+                "snapshot_id": "failed-snapshot",
+                "importance_score": 1.0,
+            },
+            {
+                "id": "legacy-file",
+                "repository_id": "legacy-repo",
+                "file_path": "legacy.go",
+                "snapshot_id": None,
+                "importance_score": 0.8,
+            },
+        ]),
+    }[name]
+
+    surfaces = RampEvidenceStore(supabase).implementation_surfaces("company-a")
+
+    assert {surface.path for surface in surfaces} == {"current.go", "legacy.go"}
+    assert {surface.repository_id for surface in surfaces} == {
+        "snapshot-repo", "legacy-repo"
+    }
+
+
+def test_module_records_include_legacy_repository_in_mixed_snapshot_company():
+    supabase = Mock()
+    supabase.table.side_effect = lambda name: {
+        "repositories": Query([
+            {"id": "snapshot-repo", "active_snapshot_id": "snapshot-1", "baseline_status": "ready"},
+            {"id": "legacy-repo", "active_snapshot_id": None, "baseline_status": "ready"},
+        ]),
+        "codebase_modules": Query([
+            {
+                "id": "current-module", "repository_id": "snapshot-repo",
+                "module_path": "api", "snapshot_id": "snapshot-1",
+            },
+            {
+                "id": "stale-module", "repository_id": "snapshot-repo",
+                "module_path": "old", "snapshot_id": "failed-snapshot",
+            },
+            {
+                "id": "legacy-module", "repository_id": "legacy-repo",
+                "module_path": "legacy", "snapshot_id": None,
+            },
+        ]),
+    }[name]
+
+    modules = RampEvidenceStore(supabase).module_records("company-a")
+
+    assert {module["id"] for module in modules} == {
+        "current-module", "legacy-module"
+    }

@@ -12,6 +12,7 @@ import os
 import re
 import threading
 import time
+import uuid
 from typing import Any, Callable, Dict, List, Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
@@ -57,19 +58,24 @@ class RampEvidenceStore:
             "codebase_files",
             "list implementation surfaces",
             lambda: (
-                self.supabase.table("codebase_files")
-                .select(
-                    "id, repository_id, file_path, module_path, language, file_name, "
-                    "last_author, last_commit_sha, importance_score, metadata"
+                (
+                    self.supabase.table("codebase_files")
+                    .select(
+                        "id, repository_id, file_path, module_path, language, file_name, "
+                        "last_author, last_commit_sha, importance_score, metadata, snapshot_id"
+                    )
+                    .in_("repository_id", repository_ids)
+                    .limit(5000)
+                    .execute()
                 )
-                .in_("repository_id", repository_ids)
-                .limit(5000)
-                .execute()
             ),
         )
 
         result: List[ImplementationSurface] = []
         for row in getattr(response, "data", []) or []:
+            active_snapshot_id = repository_by_id.get(str(row.get("repository_id")), {}).get("active_snapshot_id")
+            if str(row.get("snapshot_id") or "") != str(active_snapshot_id or ""):
+                continue
             path = str(row.get("file_path") or "").strip()
             if not path:
                 continue
@@ -93,26 +99,39 @@ class RampEvidenceStore:
         return sorted(result, key=lambda item: (-item.importance, item.path))
 
     def module_records(self, company_id: str) -> List[Dict[str, Any]]:
-        """Return company-scoped module records without interpreting their meaning."""
+        """Return module records from each repository's active snapshot."""
         self._require_company_id(company_id)
-        repository_ids = self._repository_ids(company_id)
+        repositories = self._repository_records(company_id)
+        repository_ids = [str(row["id"]) for row in repositories if row.get("id")]
         if not repository_ids:
             return []
+        active_by_repo = {
+            str(row["id"]): str(row.get("active_snapshot_id") or "")
+            for row in repositories if row.get("id")
+        }
         response = self._retrieve(
             "codebase_modules",
             "list module records",
             lambda: (
-                self.supabase.table("codebase_modules")
-                .select(
-                    "id, repository_id, module_path, module_name, inferred_type, "
-                    "description, importance_score, metadata"
+                (
+                    self.supabase.table("codebase_modules")
+                    .select(
+                        "id, repository_id, module_path, module_name, inferred_type, "
+                        "description, importance_score, metadata, snapshot_id"
+                    )
+                    .in_("repository_id", repository_ids)
+                    .limit(1000)
+                    .execute()
                 )
-                .in_("repository_id", repository_ids)
-                .limit(1000)
-                .execute()
             ),
         )
-        return [row for row in (getattr(response, "data", []) or []) if isinstance(row, dict)]
+        return [
+            row for row in (getattr(response, "data", []) or [])
+            if isinstance(row, dict)
+            and str(row.get("snapshot_id") or "") == active_by_repo.get(
+                str(row.get("repository_id")), ""
+            )
+        ]
 
     def _repository_records(self, company_id: str) -> List[Dict[str, Any]]:
         response = self._retrieve(
@@ -120,12 +139,19 @@ class RampEvidenceStore:
             "list company repositories",
             lambda: (
                 self.supabase.table("repositories")
-                .select("id, full_name, default_branch")
+                .select("id, full_name, default_branch, active_snapshot_id, baseline_status")
                 .eq("company_id", company_id)
                 .execute()
             ),
         )
-        return [row for row in (getattr(response, "data", []) or []) if isinstance(row, dict)]
+        return [
+            row for row in (getattr(response, "data", []) or [])
+            if isinstance(row, dict)
+            and (
+                row.get("baseline_status") in (None, "ready")
+                or row.get("active_snapshot_id")
+            )
+        ]
 
     def _repository_ids(self, company_id: str) -> List[str]:
         return [str(row["id"]) for row in self._repository_records(company_id) if row.get("id")]
@@ -137,15 +163,48 @@ class RampEvidenceStore:
             "edges",
             "list ownership relationships",
             lambda: (
-                self.supabase.table("edges")
-                .select("source_id, target_id, type, metadata, confidence")
-                .eq("company_id", company_id)
-                .eq("type", "OWNS")
-                .limit(5000)
-                .execute()
+                (
+                    self.supabase.table("edges")
+                    .select("source_id, target_id, type, metadata, confidence, snapshot_id")
+                    .eq("company_id", company_id)
+                    .eq("type", "OWNS")
+                    .limit(5000)
+                    .execute()
+                )
             ),
         )
-        return [row for row in (getattr(response, "data", []) or []) if isinstance(row, dict)]
+        active_snapshot_by_file: Dict[str, str] = {}
+        for repository in self._repository_records(company_id):
+            repository_id = str(repository.get("id") or "")
+            full_name = str(repository.get("full_name") or "")
+            if not repository_id or not full_name:
+                continue
+            active_snapshot_id = str(repository.get("active_snapshot_id") or "")
+            files = self._retrieve(
+                "codebase_files",
+                "resolve active ownership snapshot",
+                lambda repository_id=repository_id: (
+                    self.supabase.table("codebase_files")
+                    .select("file_path,snapshot_id")
+                    .eq("repository_id", repository_id)
+                    .execute()
+                ),
+            )
+            for file_row in getattr(files, "data", []) or []:
+                path = str(file_row.get("file_path") or "")
+                if path and str(file_row.get("snapshot_id") or "") == active_snapshot_id:
+                    entity_id = str(uuid.uuid5(
+                        uuid.NAMESPACE_URL, f"file:{company_id}:{full_name}:{path}"
+                    ))
+                    active_snapshot_by_file[entity_id] = active_snapshot_id
+
+        return [
+            row for row in (getattr(response, "data", []) or [])
+            if isinstance(row, dict)
+            and str(row.get("snapshot_id") or "") == active_snapshot_by_file.get(
+                str(row.get("target_id") or ""), ""
+            )
+        ]
 
     def implementation_relationships(self, company_id: str) -> List[Evidence]:
         """Return graph relationships whose endpoints resolve to FILE entities.
@@ -170,11 +229,13 @@ class RampEvidenceStore:
             "edges",
             "list implementation relationships",
             lambda: (
-                self.supabase.table("edges")
-                .select("id, source_id, target_id, type, confidence, company_id, metadata")
-                .eq("company_id", company_id)
-                .limit(20000)
-                .execute()
+                (
+                    self.supabase.table("edges")
+                    .select("id, source_id, target_id, type, confidence, company_id, metadata, snapshot_id")
+                    .eq("company_id", company_id)
+                    .limit(20000)
+                    .execute()
+                )
             ),
         )
 
@@ -187,13 +248,17 @@ class RampEvidenceStore:
             if path and row.get("id"):
                 file_paths[str(row["id"])] = path
 
-        repository_ids = self._repository_ids(company_id)
+        active_snapshot_by_repo = {
+            str(repo.get("id")): str(repo.get("active_snapshot_id") or "")
+            for repo in self._repository_records(company_id)
+        }
+        repository_ids = list(active_snapshot_by_repo)
         file_rows = self._retrieve(
             "codebase_files",
             "validate behavioral evidence repository membership",
             lambda: (
                 self.supabase.table("codebase_files")
-                .select("repository_id, file_path")
+                .select("repository_id, file_path, snapshot_id")
                 .in_("repository_id", repository_ids)
                 .limit(10000)
                 .execute()
@@ -201,7 +266,10 @@ class RampEvidenceStore:
         )
         path_repository_ids: Dict[str, set[str]] = {}
         for row in getattr(file_rows, "data", []) or []:
-            if isinstance(row, dict) and row.get("file_path") and row.get("repository_id"):
+            if (
+                isinstance(row, dict) and row.get("file_path") and row.get("repository_id")
+                and str(row.get("snapshot_id") or "") == active_snapshot_by_repo.get(str(row.get("repository_id")), "")
+            ):
                 path_repository_ids.setdefault(str(row["file_path"]), set()).add(
                     str(row["repository_id"])
                 )
@@ -225,6 +293,7 @@ class RampEvidenceStore:
                 or not all(isinstance(item, dict) for item in provenance_items)
                 or str(metadata.get("repository_id") or "") not in path_repository_ids.get(source_path, set())
                 or str(metadata.get("repository_id") or "") not in path_repository_ids.get(target_path, set())
+                or str(edge.get("snapshot_id") or "") != active_snapshot_by_repo.get(str(metadata.get("repository_id") or ""), "")
             ):
                 continue
             provenance = {

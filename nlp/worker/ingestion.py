@@ -79,7 +79,7 @@ class IngestionHandler:
                 "created_at": created_at,
             })
             if source == "github" and event_type == "push":
-                self._publish_codebase_analysis_job(job, stream_redis or redis_client)
+                self._publish_codebase_baseline_job(job, stream_redis or redis_client)
             mark_event_processed(supabase, record_id, company_id)
             return
 
@@ -141,33 +141,42 @@ class IngestionHandler:
 
         if source == "github" and event_type == "push":
             logging.info("Publishing codebase analysis job for GitHub push")
-            self._publish_codebase_analysis_job(job, stream_redis or redis_client)
+            self._publish_codebase_baseline_job(job, stream_redis or redis_client)
         mark_event_processed(supabase, record_id, company_id)
 
-    def _publish_codebase_analysis_job(self, job: dict, stream_redis):
+    def _publish_codebase_baseline_job(self, job: dict, stream_redis):
         """
         Publish a codebase analysis job to the Redis stream.
         This replaces the previous detached daemon thread approach.
         Ensures the job is durable and failures are observable/retryable.
         """
         try:
-            # Prepare the job payload for codebase analysis stream
-            analysis_job = {
+            # A push schedules a complete immutable baseline rebuild. Incremental
+            # writes to the published inventory would violate snapshot consistency.
+            push_payload = job.get("payload") if isinstance(job.get("payload"), dict) else {}
+            repository = push_payload.get("repository")
+            repo_name = (
+                repository.get("full_name") if isinstance(repository, dict) else None
+            ) or push_payload.get("repo")
+            if not isinstance(repo_name, str) or not repo_name.strip():
+                raise ValueError("GitHub push payload does not contain repository.full_name")
+
+            baseline_job = {
                 "RecordID": job.get("record_id"),
                 "Source": "github",
-                "EventType": job.get("event_type"),
-                "Payload": job.get("payload", {}),
+                "EventType": "baseline",
+                "Payload": {"repo": repo_name.strip()},
                 "CompanyID": job.get("company_id"),
                 "CreatedAt": job.get("created_at") or datetime.now(timezone.utc).isoformat(),
             }
             
-            # Publish to the durable codebase analysis stream
+            # Publish to the same durable baseline queue used by initial syncs.
             stream_redis.xadd(
-                "codebase_analysis_jobs",
-                {"data": json.dumps(analysis_job)},
+                "codebase_baseline_jobs",
+                {"data": json.dumps(baseline_job)},
             )
-            
-            logging.info(f"Codebase analysis job published | record_id={job.get('record_id')}")
+
+            logging.info(f"Repository baseline refresh queued | record_id={job.get('record_id')}")
         except Exception as e:
-            log_error(f"Failed to publish codebase analysis job: {e}")
+            log_error(f"Failed to publish repository baseline refresh: {e}")
             raise

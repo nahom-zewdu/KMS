@@ -9,6 +9,7 @@ Fully data-driven where possible.
 """
 
 import logging
+import uuid
 from typing import Dict, List, Any
 from supabase import Client
 
@@ -24,11 +25,16 @@ class VisualizerService:
         try:
             res = (
                 self.supabase.table("repositories")
-                .select("id")
+                .select("id,active_snapshot_id,baseline_status")
                 .eq("company_id", company_id)
                 .execute()
             )
-            return [r["id"] for r in (res.data or []) if r.get("id")]
+            return [
+                r["id"] for r in (res.data or [])
+                if r.get("id") and (
+                    r.get("baseline_status") in (None, "ready") or r.get("active_snapshot_id")
+                )
+            ]
         except Exception as e:
             logger.warning("repo_ids_for_company failed: %s", e)
             return []
@@ -39,14 +45,30 @@ class VisualizerService:
         if not repo_ids:
             return []
         try:
-            res = (
-                self.supabase.table("codebase_files")
-                .select("file_path, language, last_author, module_path, repository_id")
-                .in_("repository_id", repo_ids[:50])  # keep request size sane
-                .limit(limit)
+            repo_rows = (
+                self.supabase.table("repositories")
+                .select("id,active_snapshot_id")
+                .eq("company_id", company_id)
                 .execute()
+            ).data or []
+            active_by_repo = {
+                str(row["id"]): str(row.get("active_snapshot_id") or "")
+                for row in repo_rows if row.get("id")
+            }
+            repository_ids = [repo_id for repo_id in repo_ids[:50] if repo_id in active_by_repo]
+            if not repository_ids:
+                return []
+            file_query = (
+                self.supabase.table("codebase_files")
+                .select("file_path, language, last_author, module_path, repository_id, snapshot_id")
+                .in_("repository_id", repository_ids)  # keep request size sane
             )
-            return res.data or []
+            res = file_query.limit(10000).execute()
+            active_rows = [
+                row for row in (res.data or [])
+                if str(row.get("snapshot_id") or "") == active_by_repo.get(str(row.get("repository_id")), "")
+            ]
+            return active_rows[:limit]
         except Exception as e:
             logger.warning("files_for_company failed: %s", e)
             return []
@@ -109,14 +131,26 @@ class VisualizerService:
             repo_ids = self._repo_ids_for_company(company_id)
             if not repo_ids:
                 return []
-            res = self.supabase.table("codebase_modules")\
-                .select("*")\
-                .in_("repository_id", repo_ids)\
-                .order("importance_score", desc=True)\
-                .limit(15).execute()
-
+            repo_rows = (
+                self.supabase.table("repositories")
+                .select("id,active_snapshot_id")
+                .eq("company_id", company_id)
+                .execute()
+            ).data or []
+            active_by_repo = {
+                str(row["id"]): str(row.get("active_snapshot_id") or "")
+                for row in repo_rows if row.get("id")
+            }
+            module_query = (
+                self.supabase.table("codebase_modules")
+                .select("*")
+                .in_("repository_id", [repo_id for repo_id in repo_ids if repo_id in active_by_repo])
+            )
+            res = module_query.order("importance_score", desc=True).limit(1000).execute()
             modules = []
             for m in res.data or []:
+                if str(m.get("snapshot_id") or "") != active_by_repo.get(str(m.get("repository_id")), ""):
+                    continue
                 importance = float(m.get("importance_score", 0.5))
                 if any(kw in m.get("module_path", "").lower() for kw in role.lower().split()):
                     importance = min(1.0, importance + 0.35)
@@ -129,7 +163,7 @@ class VisualizerService:
                     "description": m.get("description", ""),
                     "file_count": m.get("metadata", {}).get("file_count", 0)
                 })
-            return modules
+            return modules[:15]
         except Exception as e:
             logger.warning(f"Modules query failed, falling back: {e}")
             return self._fallback_modules(role, company_id)
@@ -222,15 +256,54 @@ class VisualizerService:
     def _build_ownership(self, role: str, company_id: str) -> Dict:
         """Key ownership edges for the role, derived from KG."""
         try:
+            eligible_repository_ids = set(self._repo_ids_for_company(company_id))
+            if not eligible_repository_ids:
+                return {"key_owners": [], "note": "No ownership edges yet"}
+
+            repositories = (
+                self.supabase.table("repositories")
+                .select("id,full_name,active_snapshot_id")
+                .eq("company_id", company_id)
+                .execute()
+            ).data or []
+            repositories = [
+                repository for repository in repositories
+                if str(repository.get("id") or "") in eligible_repository_ids
+            ]
             res = (
                 self.supabase.table("edges")
-                .select("source_id,target_id,type,confidence")
+                .select("source_id,target_id,type,confidence,snapshot_id")
                 .eq("type", "OWNS")
                 .eq("company_id", company_id)
                 .limit(30)
                 .execute()
             )
-            edges = res.data or []
+            active_snapshot_by_file = {}
+            for repository in repositories:
+                repository_id = str(repository.get("id") or "")
+                full_name = str(repository.get("full_name") or "")
+                if not repository_id or not full_name:
+                    continue
+                active_snapshot_id = str(repository.get("active_snapshot_id") or "")
+                file_rows = (
+                    self.supabase.table("codebase_files")
+                    .select("file_path,snapshot_id")
+                    .eq("repository_id", repository_id)
+                    .execute()
+                ).data or []
+                for file_row in file_rows:
+                    path = str(file_row.get("file_path") or "")
+                    if path and str(file_row.get("snapshot_id") or "") == active_snapshot_id:
+                        entity_id = str(uuid.uuid5(
+                            uuid.NAMESPACE_URL, f"file:{company_id}:{full_name}:{path}"
+                        ))
+                        active_snapshot_by_file[entity_id] = active_snapshot_id
+            edges = [
+                edge for edge in (res.data or [])
+                if str(edge.get("snapshot_id") or "") == active_snapshot_by_file.get(
+                    str(edge.get("target_id") or ""), ""
+                )
+            ]
             if not edges:
                 return {"key_owners": [], "note": "No ownership edges yet"}
 
