@@ -702,7 +702,7 @@ class CodebaseBaselineSync:
 
     def _detect_language(self, file_path: str) -> str:
         ext = file_path.split(".")[-1].lower() if "." in file_path else ""
-        mapping = {"go": "Go", "py": "Python", "js": "JavaScript", "ts": "TypeScript", "java": "Java",
+        mapping = {"go": "Go", "py": "Python", "js": "JavaScript", "jsx": "JavaScript", "mjs": "JavaScript", "cjs": "JavaScript", "ts": "TypeScript", "tsx": "TSX", "mts": "TypeScript", "cts": "TypeScript", "java": "Java",
                    "cpp": "C++", "c": "C", "rs": "Rust", "rb": "Ruby", "php": "PHP", "swift": "Swift",
                    "kt": "Kotlin", "scala": "Scala", "hs": "Haskell", "lua": "Lua", "pl": "Perl",
                    "sh": "Shell", "bash": "Bash", "html": "HTML", "css": "CSS", "json": "JSON",
