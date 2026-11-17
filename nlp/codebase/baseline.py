@@ -215,6 +215,7 @@ class CodebaseBaselineSync:
                 "files_with_syntax_errors": 0,
                 "files_unsupported": 0,
                 "files_oversized": 0,
+                "files_unavailable": 0,
                 "symbols_persisted": 0,
                 "source_bytes_skipped": 0,
             }
@@ -503,6 +504,7 @@ class CodebaseBaselineSync:
             "files_with_syntax_errors": 0,
             "files_unsupported": 0,
             "files_oversized": 0,
+            "files_unavailable": 0,
             "symbols_persisted": 0,
             "source_bytes_skipped": 0,
         }
@@ -555,7 +557,8 @@ class CodebaseBaselineSync:
         from codebase.symbols import CodeSymbolExtractor
 
         language = CodeSymbolExtractor._language_for_path(file_path)
-        if language is not None:
+        symbol_indexer = getattr(self, "symbol_indexer", None)
+        if language is not None and symbol_indexer is not None:
             symbol_metrics["files_seen"] = 1
             source_size = getattr(gh_file, "size", None)
             if source_size is not None and source_size > self.symbol_indexer.max_source_bytes:
@@ -563,12 +566,11 @@ class CodebaseBaselineSync:
                 symbol_metrics["source_bytes_skipped"] = int(source_size)
             else:
                 try:
-                    decoded = gh_file.decoded_content
+                    decoded = getattr(gh_file, "decoded_content", None)
                     if decoded is None:
-                        symbol_metrics["files_oversized"] = 1
-                        symbol_metrics["source_bytes_skipped"] = int(source_size or 0)
+                        symbol_metrics["files_unavailable"] = 1
                     else:
-                        result = self.symbol_indexer.index_file(
+                        result = symbol_indexer.index_file(
                             repository_id=physical_repo_id,
                             snapshot_id=snapshot_id,
                             company_id=company_id,
@@ -588,7 +590,7 @@ class CodebaseBaselineSync:
                         else:
                             symbol_metrics["files_unsupported"] = 1
                         symbol_metrics["symbols_persisted"] = result["symbols_persisted"]
-                except (UnicodeDecodeError, AttributeError) as exc:
+                except UnicodeDecodeError as exc:
                     raise RuntimeError(
                         f"Cannot decode supported source file for symbol indexing: {file_path}"
                     ) from exc
