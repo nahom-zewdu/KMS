@@ -115,7 +115,7 @@ CREATE TRIGGER repository_snapshot_symbol_count_check
 
 ALTER TABLE public.code_symbols ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.code_symbols FROM PUBLIC, anon, authenticated;
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.code_symbols TO service_role;
+GRANT SELECT, INSERT, UPDATE ON TABLE public.code_symbols TO service_role;
 REVOKE ALL ON FUNCTION public.validate_code_symbol_snapshot() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.validate_snapshot_symbol_count() FROM PUBLIC, anon, authenticated;
 
