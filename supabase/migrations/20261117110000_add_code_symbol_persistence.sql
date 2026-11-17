@@ -63,7 +63,8 @@ BEGIN
   FROM public.repository_snapshots
   WHERE id = NEW.snapshot_id
     AND repository_id = NEW.repository_id
-    AND company_id = NEW.company_id;
+    AND company_id = NEW.company_id
+  FOR UPDATE;
 
   IF NOT FOUND OR v_status <> 'building' THEN
     RAISE EXCEPTION 'symbols can only be written to a building snapshot in the same tenant'
