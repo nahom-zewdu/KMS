@@ -553,11 +553,12 @@ Commits on `feat/krt-02-code-intelligence`:
 - `76a0b240` / `aad58167` — baseline integration test and multiline source fixture.
 - `bc3f5c08` — TSX and modern JavaScript language metadata.
 - `a4b07c86` — assert symbol coverage is stored before snapshot publication.
+- `65f6be6d` — serialize symbol writes against concurrent snapshot publication.
 
 The implementation now includes:
 
 1. `public.code_symbols`, keyed by immutable snapshot + deterministic symbol ID, with tenant/repository/file composite foreign keys, source revision/content hash, byte/line spans, language, kind, and extractor version.
-2. Database trigger validation that accepts symbol writes only while the owning snapshot is building and rejects source-revision mismatches. Snapshot publication checks the persisted symbol count.
+2. Database trigger validation that accepts symbol writes only while the owning snapshot is building, serializes symbol writes against publication with a row lock, and rejects source-revision mismatches. Snapshot publication checks the persisted symbol count.
 3. Service-role-only table access; browser roles receive no table grants. Published symbol rows are not mutable through the granted service-role operations.
 4. Bounded per-file Tree-sitter extraction and batched idempotent upserts, with explicit coverage for syntax errors, unsupported languages, oversized files, and unavailable GitHub content.
 5. Baseline sync integration using the same pinned Git revision and snapshot as file indexing; symbol coverage metadata is written before publication.
