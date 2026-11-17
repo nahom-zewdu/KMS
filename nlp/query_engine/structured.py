@@ -40,9 +40,6 @@ def _company_inventory(supabase: Any, company_id: str) -> tuple[list[dict], list
         if row.get("baseline_status") in (None, "ready") or row.get("active_snapshot_id")
     ]
     repository_ids = [str(row["id"]) for row in repositories if row.get("id")]
-    active_snapshot_ids = [
-        str(row["active_snapshot_id"]) for row in repositories if row.get("active_snapshot_id")
-    ]
     if not repository_ids:
         return repositories, []
     file_query = (
@@ -50,8 +47,6 @@ def _company_inventory(supabase: Any, company_id: str) -> tuple[list[dict], list
         .select("id,repository_id,file_path,language,module_path,last_author,last_commit_sha,snapshot_id")
         .in_("repository_id", repository_ids)
     )
-    if active_snapshot_ids:
-        file_query = file_query.in_("snapshot_id", active_snapshot_ids)
     files = _rows(file_query.limit(10000))
     active_by_repo = {
         str(row["id"]): str(row.get("active_snapshot_id") or "")
@@ -158,7 +153,6 @@ def _ownership_answer(
             supabase.table("codebase_files")
             .select("file_path,snapshot_id")
             .eq("repository_id", repository_id)
-            .eq("snapshot_id", active_snapshot_id)
         )
         for inventory_row in inventory_rows:
             path = str(inventory_row.get("file_path") or "")
