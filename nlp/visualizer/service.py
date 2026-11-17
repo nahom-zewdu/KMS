@@ -63,9 +63,6 @@ class VisualizerService:
                 .select("file_path, language, last_author, module_path, repository_id, snapshot_id")
                 .in_("repository_id", repository_ids)  # keep request size sane
             )
-            active_snapshot_ids = [snapshot_id for snapshot_id in active_by_repo.values() if snapshot_id]
-            if active_snapshot_ids:
-                file_query = file_query.in_("snapshot_id", active_snapshot_ids)
             res = file_query.limit(10000).execute()
             active_rows = [
                 row for row in (res.data or [])
@@ -144,14 +141,11 @@ class VisualizerService:
                 str(row["id"]): str(row.get("active_snapshot_id") or "")
                 for row in repo_rows if row.get("id")
             }
-            active_snapshot_ids = [snapshot_id for snapshot_id in active_by_repo.values() if snapshot_id]
             module_query = (
                 self.supabase.table("codebase_modules")
                 .select("*")
                 .in_("repository_id", [repo_id for repo_id in repo_ids if repo_id in active_by_repo])
             )
-            if active_snapshot_ids:
-                module_query = module_query.in_("snapshot_id", active_snapshot_ids)
             res = module_query.order("importance_score", desc=True).limit(1000).execute()
             modules = []
             for m in res.data or []:
@@ -268,18 +262,11 @@ class VisualizerService:
                 .eq("company_id", company_id)
                 .execute()
             ).data or []
-            active_snapshot_ids = [
-                str(repository["active_snapshot_id"])
-                for repository in repositories if repository.get("active_snapshot_id")
-            ]
-            if not active_snapshot_ids:
-                return {"key_owners": [], "note": "No ownership edges yet"}
             res = (
                 self.supabase.table("edges")
                 .select("source_id,target_id,type,confidence,snapshot_id")
                 .eq("type", "OWNS")
                 .eq("company_id", company_id)
-                .in_("snapshot_id", active_snapshot_ids)
                 .limit(30)
                 .execute()
             )
@@ -294,7 +281,6 @@ class VisualizerService:
                     self.supabase.table("codebase_files")
                     .select("file_path,snapshot_id")
                     .eq("repository_id", repository_id)
-                    .eq("snapshot_id", active_snapshot_id)
                     .execute()
                 ).data or []
                 for file_row in file_rows:
