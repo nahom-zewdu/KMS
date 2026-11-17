@@ -57,8 +57,9 @@ BEGIN
       'Python', 'run', 'run', 'function', 10, 11, 121, 140,
       repeat('e', 64), v_revision, '1'
     );
-  EXCEPTION WHEN foreign_key_violation THEN
-    v_failed := true;
+  EXCEPTION
+    WHEN insufficient_privilege OR foreign_key_violation THEN
+      v_failed := true;
   END;
   IF NOT v_failed THEN
     RAISE EXCEPTION 'cross-tenant symbol row was accepted';
@@ -81,6 +82,22 @@ BEGIN
   END;
   IF NOT v_failed THEN
     RAISE EXCEPTION 'revision-mismatched symbol row was accepted';
+  END IF;
+
+  -- Publication must reject a count that does not match persisted declarations.
+  v_failed := false;
+  BEGIN
+    UPDATE public.repository_snapshots
+    SET symbol_count = 2, status = 'published', completed_at = now()
+    WHERE id = v_snapshot;
+  EXCEPTION WHEN check_violation THEN
+    v_failed := true;
+  END;
+  IF NOT v_failed THEN
+    RAISE EXCEPTION 'snapshot published with an incorrect symbol count';
+  END IF;
+  IF (SELECT status FROM public.repository_snapshots WHERE id = v_snapshot) <> 'building' THEN
+    RAISE EXCEPTION 'failed symbol-count validation changed snapshot status';
   END IF;
 
   UPDATE public.repository_snapshots
