@@ -259,7 +259,7 @@ def test_baseline_passes_revision_pinned_source_to_symbol_indexer():
     sync = CodebaseBaselineSync.__new__(CodebaseBaselineSync)
     sync.supabase = database
     sync.symbol_indexer = SymbolIndexer()
-    source = b"class Worker:\\n    pass\\n"
+    source = b"class Worker:\n    pass\n"
 
     metrics = sync._index_file(
         SimpleNamespace(
@@ -281,7 +281,7 @@ def test_baseline_passes_revision_pinned_source_to_symbol_indexer():
         "snapshot_id": "snapshot-id",
         "company_id": "company-a",
         "file_path": "src/worker.py",
-        "source": "class Worker:\\n    pass\\n",
+        "source": "class Worker:\n    pass\n",
         "source_revision": "commit-sha",
         "language": "Python",
     }]
