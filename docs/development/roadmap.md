@@ -512,11 +512,22 @@ Backend branch now includes `supabase/migrations/20261114150000_enforce_company_
 
 SCIP is the selected candidate for semantic definitions/references, not a replacement for Tree-sitter. Its protocol is language-agnostic and has maintained indexers for Go, TypeScript/JavaScript, and Python. The indexers require language-specific project/toolchain context; they should be invoked as bounded indexing jobs and their output normalized into KMS provenance records, not assumed available for every repository. See the [SCIP protocol](https://github.com/scip-code/scip) and [Sourcegraph indexer support matrix](https://sourcegraph.com/docs/code-navigation/writing-an-indexer).
 
+### Repository-shape validation checkpoint — 2026-11-17
+
+The extractor was reviewed against representative source declarations from:
+- KMS Go: `api/handlers/github.go` (`GitHubHandler`, constructor, receiver method).
+- KMS Python: `nlp/codebase/baseline.py` (`CodebaseBaselineSync`, methods, nested helpers).
+- KMS frontend TSX: `app/dashboard/settings/UserList.tsx` (`User` interface and default component).
+
+Added regression fixtures for these shapes in `nlp/tests/test_symbols.py`. These fixtures preserve representative declarations rather than vendoring full application files. Commit: `e2bc047e02255cc82de22be99010d43fa2fafca7`.
+
+The user reported **198 passed** for the full suite after the Go receiver and TypeScript interface-signature fixes, before these three repository-shape fixtures were added. The new fixtures have not yet been executed, so they are not verification evidence yet.
+
 ### Not yet verified / next bounded work
 
-1. Run the focused symbol tests and full Python suite locally after installing the declared dependencies; fix only test failures.
-2. Validate parser output against the actual KMS Go, Python, and frontend TypeScript repositories, recording unsupported syntax/coverage rather than guessing.
+1. Run the focused symbol tests and full Python suite with the three new repository-shape fixtures. Fix genuine parser/test failures only.
+2. Validate extraction coverage against complete representative KMS Go, Python, and frontend TypeScript/TSX files; record supported/unsupported declarations and parser-error rates rather than guessing.
 3. Define and migrate tenant-scoped, snapshot-scoped symbol persistence with uniqueness and source-provenance constraints; add disposable-Postgres integration coverage.
-4. Only then integrate symbol records into navigation and evaluate SCIP ingestion for definitions/references. Do not create speculative call-graph edges.
+4. Only then integrate symbol records into navigation and ingest SCIP definitions/references. Do not create speculative call-graph edges.
 
 **Current state is IMPLEMENTED (initial parser slice), not VERIFIED or ACCEPTED.** Symbol persistence, SCIP ingestion, references, and end-to-end navigation remain outstanding.
