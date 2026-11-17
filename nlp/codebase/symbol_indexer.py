@@ -7,11 +7,10 @@ from syntax trees here.
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Iterable
 from typing import Any
 
-from codebase.symbols import CodeSymbolExtractor, SymbolExtraction
+from codebase.symbols import CodeSymbolExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -119,7 +118,7 @@ class CodeSymbolIndexer:
         written = 0
         for offset in range(0, len(rows), self.batch_size):
             batch = rows[offset:offset + self.batch_size]
-            response = self.supabase.table("code_symbols").upsert(
+            self.supabase.table("code_symbols").upsert(
                 batch,
                 on_conflict="snapshot_id,symbol_id",
             ).execute()
