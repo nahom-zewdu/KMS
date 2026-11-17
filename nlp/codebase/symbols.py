@@ -219,6 +219,8 @@ class CodeSymbolExtractor:
             if language == "Python" and node.parent and node.parent.type == "decorated_definition":
                 declaration_node = node.parent
 
+            if language == "Python" and kind == "function" and self._is_python_method(node):
+                kind = "method"
             qualified_name = self._qualified_name(
                 node, name, source, kind=kind
             )
@@ -232,7 +234,10 @@ class CodeSymbolExtractor:
                 if type_node and type_node.type in {"struct_type", "interface_type"}:
                     kind = "struct" if type_node.type == "struct_type" else "interface"
 
-            identity = "\0".join((repository_id, file_path, language, kind, qualified_name))
+            identity = "\0".join((
+                repository_id, file_path, language, kind, qualified_name,
+                str(declaration_node.start_byte),
+            ))
             symbol_id = hashlib.sha256(identity.encode("utf-8")).hexdigest()
             output.append(
                 CodeSymbol(
@@ -253,6 +258,18 @@ class CodeSymbolExtractor:
             )
 
         return sorted(output, key=lambda item: (item.start_byte, item.end_byte, item.qualified_name))
+
+    @staticmethod
+    def _is_python_method(node) -> bool:
+        """Return true only when a function is directly scoped by a class body."""
+        parent = node.parent
+        while parent is not None:
+            if parent.type in {"function_definition", "lambda"}:
+                return False
+            if parent.type == "class_definition":
+                return True
+            parent = parent.parent
+        return False
 
     @staticmethod
     def _qualified_name(node, name: str, source: bytes, *, kind: str) -> str:
