@@ -54,24 +54,11 @@ class RampEvidenceStore:
         if not repository_ids:
             return []
         repository_by_id = {str(row["id"]): row for row in repositories if row.get("id")}
-        active_snapshot_ids = [
-            str(row["active_snapshot_id"]) for row in repositories if row.get("active_snapshot_id")
-        ]
         response = self._retrieve(
             "codebase_files",
             "list implementation surfaces",
             lambda: (
                 (
-                    self.supabase.table("codebase_files")
-                    .select(
-                        "id, repository_id, file_path, module_path, language, file_name, "
-                        "last_author, last_commit_sha, importance_score, metadata, snapshot_id"
-                    )
-                    .in_("repository_id", repository_ids)
-                    .in_("snapshot_id", active_snapshot_ids)
-                    .limit(5000)
-                    .execute()
-                    if active_snapshot_ids else
                     self.supabase.table("codebase_files")
                     .select(
                         "id, repository_id, file_path, module_path, language, file_name, "
@@ -122,22 +109,11 @@ class RampEvidenceStore:
             str(row["id"]): str(row.get("active_snapshot_id") or "")
             for row in repositories if row.get("id")
         }
-        active_snapshot_ids = [snapshot_id for snapshot_id in active_by_repo.values() if snapshot_id]
         response = self._retrieve(
             "codebase_modules",
             "list module records",
             lambda: (
                 (
-                    self.supabase.table("codebase_modules")
-                    .select(
-                        "id, repository_id, module_path, module_name, inferred_type, "
-                        "description, importance_score, metadata, snapshot_id"
-                    )
-                    .in_("repository_id", repository_ids)
-                    .in_("snapshot_id", active_snapshot_ids)
-                    .limit(1000)
-                    .execute()
-                    if active_snapshot_ids else
                     self.supabase.table("codebase_modules")
                     .select(
                         "id, repository_id, module_path, module_name, inferred_type, "
@@ -183,23 +159,11 @@ class RampEvidenceStore:
     def ownership(self, company_id: str) -> List[Dict[str, Any]]:
         """Return ownership edges available in the existing knowledge graph."""
         self._require_company_id(company_id)
-        active_snapshot_ids = [
-            str(row.get("active_snapshot_id"))
-            for row in self._repository_records(company_id) if row.get("active_snapshot_id")
-        ]
         response = self._retrieve(
             "edges",
             "list ownership relationships",
             lambda: (
                 (
-                    self.supabase.table("edges")
-                    .select("source_id, target_id, type, metadata, confidence, snapshot_id")
-                    .eq("company_id", company_id)
-                    .eq("type", "OWNS")
-                    .in_("snapshot_id", active_snapshot_ids)
-                    .limit(5000)
-                    .execute()
-                    if active_snapshot_ids else
                     self.supabase.table("edges")
                     .select("source_id, target_id, type, metadata, confidence, snapshot_id")
                     .eq("company_id", company_id)
@@ -249,10 +213,6 @@ class RampEvidenceStore:
         or ownership, not behavioral control/data flow between implementation surfaces.
         """
         self._require_company_id(company_id)
-        active_snapshot_ids = [
-            str(row.get("active_snapshot_id"))
-            for row in self._repository_records(company_id) if row.get("active_snapshot_id")
-        ]
         entities = self._retrieve(
             "entities",
             "list file entities",
@@ -270,13 +230,6 @@ class RampEvidenceStore:
             "list implementation relationships",
             lambda: (
                 (
-                    self.supabase.table("edges")
-                    .select("id, source_id, target_id, type, confidence, company_id, metadata, snapshot_id")
-                    .eq("company_id", company_id)
-                    .in_("snapshot_id", active_snapshot_ids)
-                    .limit(20000)
-                    .execute()
-                    if active_snapshot_ids else
                     self.supabase.table("edges")
                     .select("id, source_id, target_id, type, confidence, company_id, metadata, snapshot_id")
                     .eq("company_id", company_id)
@@ -299,9 +252,6 @@ class RampEvidenceStore:
             str(repo.get("id")): str(repo.get("active_snapshot_id") or "")
             for repo in self._repository_records(company_id)
         }
-        active_snapshot_ids = [snapshot_id for snapshot_id in active_snapshot_by_repo.values() if snapshot_id]
-        if not active_snapshot_ids:
-            return []
         repository_ids = list(active_snapshot_by_repo)
         file_rows = self._retrieve(
             "codebase_files",
@@ -310,7 +260,6 @@ class RampEvidenceStore:
                 self.supabase.table("codebase_files")
                 .select("repository_id, file_path, snapshot_id")
                 .in_("repository_id", repository_ids)
-                .in_("snapshot_id", active_snapshot_ids)
                 .limit(10000)
                 .execute()
             ),
