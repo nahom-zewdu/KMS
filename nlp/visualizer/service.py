@@ -256,12 +256,20 @@ class VisualizerService:
     def _build_ownership(self, role: str, company_id: str) -> Dict:
         """Key ownership edges for the role, derived from KG."""
         try:
+            eligible_repository_ids = set(self._repo_ids_for_company(company_id))
+            if not eligible_repository_ids:
+                return {"key_owners": [], "note": "No ownership edges yet"}
+
             repositories = (
                 self.supabase.table("repositories")
                 .select("id,full_name,active_snapshot_id")
                 .eq("company_id", company_id)
                 .execute()
             ).data or []
+            repositories = [
+                repository for repository in repositories
+                if str(repository.get("id") or "") in eligible_repository_ids
+            ]
             res = (
                 self.supabase.table("edges")
                 .select("source_id,target_id,type,confidence,snapshot_id")
