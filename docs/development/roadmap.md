@@ -377,7 +377,7 @@ Do not start KRT implementation on this branch. After the requested merge:
 |---|---|---:|---|---|
 | KRT-00 | Supabase tenant isolation and RPC security | P0 | SPECIFIED | Cross-tenant access is denied and covered by role-aware tests |
 | KRT-01 | Durable source snapshots and provenance | P1 | PLANNED | Source is retrievable by exact commit/path/hash and stale deletions reconcile |
-| KRT-02 | Code intelligence (symbols and behavioral evidence) | P1 | PLANNED | Source-backed symbol/reference evidence is available for supported languages |
+| KRT-02 | Code intelligence (symbols and behavioral evidence) | P1 | IN_PROGRESS | Source-backed symbol/reference evidence is available for supported languages |
 | KRT-03 | Hybrid retrieval (SQL, FTS, path, vector, graph) | P1 | PLANNED | Retrieval benchmark shows correct scope and relevant evidence |
 | KRT-04 | Typed query planning and grounded synthesis | P1 | PLANNED | Correct tool routing, claim-level citations, and reliable abstention |
 | KRT-05 | Evaluation and observability | P1 | PLANNED | Versioned benchmark and end-to-end traces gate query changes |
@@ -531,3 +531,52 @@ The user reported **198 passed** for the full suite after the Go receiver and Ty
 4. Only then integrate symbol records into navigation and ingest SCIP definitions/references. Do not create speculative call-graph edges.
 
 **Current state is IMPLEMENTED (initial parser slice), not VERIFIED or ACCEPTED.** Symbol persistence, SCIP ingestion, references, and end-to-end navigation remain outstanding.
+
+
+### Symbol persistence and navigation implementation — 2026-11-17
+
+**Status:** IMPLEMENTED; runtime verification pending.
+
+Commits on `feat/krt-02-code-intelligence`:
+
+- `bbafc309` — snapshot-scoped symbol persistence migration.
+- `ddb78c11` — disposable-Postgres tenant/revision integration harness.
+- `1ed67f6c` — bounded symbol indexer.
+- `a3d93e56` — oversized-file and deterministic write-count handling.
+- `9b6f88b0` — baseline snapshot integration.
+- `5e10d185` — explicit unavailable-source coverage.
+- `c144dfbc` — indexer tests.
+- `f263cf20` — published symbol rows cannot be updated/deleted through normal service-role grants.
+- `dac2f8c9` — active-snapshot symbol navigation.
+- `caa78b3b` — navigation scope tests.
+- `e7da6ca8` — batch persistence cleanup.
+- `76a0b240` / `aad58167` — baseline integration test and multiline source fixture.
+- `bc3f5c08` — TSX and modern JavaScript language metadata.
+- `a4b07c86` — assert symbol coverage is stored before snapshot publication.
+
+The implementation now includes:
+
+1. `public.code_symbols`, keyed by immutable snapshot + deterministic symbol ID, with tenant/repository/file composite foreign keys, source revision/content hash, byte/line spans, language, kind, and extractor version.
+2. Database trigger validation that accepts symbol writes only while the owning snapshot is building and rejects source-revision mismatches. Snapshot publication checks the persisted symbol count.
+3. Service-role-only table access; browser roles receive no table grants. Published symbol rows are not mutable through the granted service-role operations.
+4. Bounded per-file Tree-sitter extraction and batched idempotent upserts, with explicit coverage for syntax errors, unsupported languages, oversized files, and unavailable GitHub content.
+5. Baseline sync integration using the same pinned Git revision and snapshot as file indexing; symbol coverage metadata is written before publication.
+6. `CodeSymbolRetriever` for exact qualified-name lookup, file declaration listing, and name search. Every query resolves the repository through both company and repository IDs, then filters by the active snapshot.
+
+New tests:
+- `nlp/tests/test_code_symbol_indexer.py`
+- `nlp/tests/test_code_symbol_retriever.py`
+- additional baseline source-forwarding and snapshot-coverage assertions in `nlp/tests/test_repository_updates_are_scoped.py`
+- `schema/tests/code_symbols.sql`
+
+**Important boundaries:** these changes do not implement SCIP, semantic references, call graphs, or behavioral inference. Syntax declarations are not runtime evidence. The SQL migration and integration harness have not been run against disposable PostgreSQL, and the new Python tests have not yet been executed. The user's latest reported full-suite result was **201 passed, 6 warnings** before this implementation batch; it does not verify these new commits.
+
+### Next implementation batch
+
+1. Run the focused indexer/retriever/baseline tests and full Python suite; fix only actual failures.
+2. Run `schema/tests/code_symbols.sql` and the existing repository snapshot SQL harness against disposable PostgreSQL after applying migrations in order.
+3. Add a full-file coverage report for representative KMS Go/Python/TSX sources, including unsupported declaration forms and parser errors.
+4. Add SCIP job capability detection and a bounded adapter contract (tool version, language/toolchain prerequisites, source revision, timeout/output limits, failure status); do not claim semantic indexing until an actual indexer run is validated.
+5. Integrate SCIP definitions/references into source navigation with explicit provenance and no inferred call edges.
+
+**KRT-02 remains IN_PROGRESS, not VERIFIED or ACCEPTED.**
