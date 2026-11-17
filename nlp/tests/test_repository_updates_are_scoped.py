@@ -137,6 +137,12 @@ def test_baseline_repository_update_filters_by_company():
     assert publication["p_snapshot_id"] == "snapshot-id"
     assert publication["p_file_count"] == 0
     assert publication["p_module_count"] == 0
+    snapshot_validation = next(
+        values for table, values in database.updates
+        if table == "repository_snapshots"
+    )
+    assert snapshot_validation["symbol_count"] == 0
+    assert snapshot_validation["symbol_validation"]["files_seen"] == 0
 
 
 
