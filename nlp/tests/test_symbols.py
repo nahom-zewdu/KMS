@@ -127,3 +127,95 @@ def test_syntax_errors_are_reported_without_claiming_clean_parse():
 
     assert result is not None
     assert result.has_syntax_errors
+
+
+def test_kms_go_handler_source_shape_extracts_struct_constructor_and_receiver_method():
+    # Representative declarations copied from api/handlers/github.go.
+    result = EXTRACTOR.extract_file(
+        repository_id="kms",
+        file_path="api/handlers/github.go",
+        source="""package handlers
+
+type GitHubHandler struct {
+    githubIngest domain.GitHubIngestService
+    secret string
+    storage domain.StoragePort
+}
+
+func NewGitHubHandler(githubIngest domain.GitHubIngestService, secret string, storage domain.StoragePort) *GitHubHandler {
+    return &GitHubHandler{githubIngest: githubIngest, secret: secret, storage: storage}
+}
+
+func (h *GitHubHandler) HandleGitHubWebhook(c *gin.Context) {
+    _ = h.storage
+}
+""",
+        source_revision=REVISION,
+    )
+
+    assert result is not None
+    assert [(item.qualified_name, item.kind) for item in result.symbols] == [
+        ("GitHubHandler", "struct"),
+        ("NewGitHubHandler", "function"),
+        ("GitHubHandler.HandleGitHubWebhook", "method"),
+    ]
+
+
+def test_kms_python_baseline_source_shape_extracts_class_methods_and_nested_helpers():
+    # Representative declarations copied from nlp/codebase/baseline.py.
+    result = EXTRACTOR.extract_file(
+        repository_id="kms",
+        file_path="nlp/codebase/baseline.py",
+        source="""class CodebaseBaselineSync:
+    def __init__(self, supabase):
+        self.supabase = supabase
+
+    def sync_repository(self, repo_full_name, company_id):
+        def ensure_lease():
+            return True
+
+        def renew_lease():
+            return ensure_lease()
+
+        return renew_lease()
+""",
+        source_revision=REVISION,
+    )
+
+    assert result is not None
+    assert [(item.qualified_name, item.kind) for item in result.symbols] == [
+        ("CodebaseBaselineSync", "class"),
+        ("CodebaseBaselineSync.__init__", "method"),
+        ("CodebaseBaselineSync.sync_repository", "method"),
+        ("ensure_lease", "function"),
+        ("renew_lease", "function"),
+    ]
+
+
+def test_kms_frontend_tsx_source_shape_extracts_interface_and_default_component():
+    # Representative declarations copied from kms-frontend/app/dashboard/settings/UserList.tsx.
+    result = EXTRACTOR.extract_file(
+        repository_id="kms-frontend",
+        file_path="app/dashboard/settings/UserList.tsx",
+        source="""'use client';
+interface User {
+    id: string;
+    email: string;
+    name: string;
+    role: string;
+}
+
+export default function UserList() {
+    return <div>Team members</div>;
+}
+""",
+        source_revision=REVISION,
+    )
+
+    assert result is not None
+    assert result.language == "TSX"
+    assert [(item.qualified_name, item.kind) for item in result.symbols] == [
+        ("User", "interface"),
+        ("UserList", "function"),
+    ]
+
