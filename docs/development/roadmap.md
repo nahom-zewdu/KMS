@@ -6,8 +6,8 @@
 > Current Ramp runtime: `docs/architecture/ramp.md`.
 > Scoring spec vs implemented subset: `docs/product/ramp-candidate-scoring.md`.
 
-**Last updated:** 2026-11-14
-**Current branch:** `feat/krt-00-tenant-isolation`
+**Last updated:** 2026-11-17
+**Current branch:** `feat/krt-02-code-intelligence`
 **Current milestone:** KRT — Knowledge Reliability & Trust
 **Current objective:** Prove that Ramp can move a new engineer from unfamiliarity to useful, safe contribution faster than normal onboarding.
 
@@ -491,3 +491,32 @@ Backend branch now includes `supabase/migrations/20261114150000_enforce_company_
 - The user-provided terminal excerpt does not show `git branch --show-current` or the backend/frontend commit SHAs. These results are recorded as local verification evidence, but exact branch/commit association still needs confirmation.
 - Still outstanding: execute `schema/tests/tenant_rls.sql` on disposable PostgreSQL; run the dedicated Slack OAuth state tests; review the migration; obtain approval before any live Supabase deployment.
 - No live Supabase migration or policy change is recorded.
+
+
+## KRT-02 execution checkpoint — 2026-11-17
+
+**Status:** IN_PROGRESS  
+**Branch:** `feat/krt-02-code-intelligence`  
+**Base:** merged `feat/ramp` at `08af5e2987c104a2b9f0523fcbd35bb95e409fe7`  
+**KRT-01:** PR #23 merged into `feat/ramp`; local Python suite reported 191 passed and snapshot SQL integration passed. Live baseline snapshot publication was verified before merge.
+
+### First implementation slice: syntax-aware symbol declarations
+
+- Added `nlp/codebase/symbols.py` with Tree-sitter grammars for Python, Go, JavaScript, TypeScript, and TSX.
+- Added revision-pinned declaration records with repository ID, path, language, qualified name, kind, exact byte/line spans, content hash, source revision, and extractor version.
+- Added deterministic symbol identity and explicit parser-error reporting. Unsupported languages or missing source revisions are not indexed.
+- Added focused tests in `nlp/tests/test_symbols.py` for Python, Go, TypeScript, JavaScript, identity/provenance, unsupported languages, and syntax errors.
+- Added Tree-sitter runtime and grammar dependencies to `nlp/pyproject.toml`.
+
+### SCIP evaluation
+
+SCIP is the selected candidate for semantic definitions/references, not a replacement for Tree-sitter. Its protocol is language-agnostic and has maintained indexers for Go, TypeScript/JavaScript, and Python. The indexers require language-specific project/toolchain context; they should be invoked as bounded indexing jobs and their output normalized into KMS provenance records, not assumed available for every repository. See the [SCIP protocol](https://github.com/scip-code/scip) and [Sourcegraph indexer support matrix](https://sourcegraph.com/docs/code-navigation/writing-an-indexer).
+
+### Not yet verified / next bounded work
+
+1. Run the focused symbol tests and full Python suite locally after installing the declared dependencies; fix only test failures.
+2. Validate parser output against the actual KMS Go, Python, and frontend TypeScript repositories, recording unsupported syntax/coverage rather than guessing.
+3. Define and migrate tenant-scoped, snapshot-scoped symbol persistence with uniqueness and source-provenance constraints; add disposable-Postgres integration coverage.
+4. Only then integrate symbol records into navigation and evaluate SCIP ingestion for definitions/references. Do not create speculative call-graph edges.
+
+**Current state is IMPLEMENTED (initial parser slice), not VERIFIED or ACCEPTED.** Symbol persistence, SCIP ingestion, references, and end-to-end navigation remain outstanding.
