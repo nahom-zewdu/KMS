@@ -200,3 +200,32 @@ def test_creator_is_not_confused_with_ramp_employee_name():
     assert "does not contain a creator identity" in result["answer"]
     assert "Kinfemichael Tariku" not in result["answer"]
     assert result["abstain_reason"] == "ramp_creator_not_recorded"
+
+
+def test_company_inventory_includes_legacy_repository_with_active_snapshot_peer():
+    db = Supabase(
+        repositories=[
+            {
+                "id": "snapshot-repo", "company_id": "c1", "full_name": "acme/current",
+                "baseline_status": "ready", "active_snapshot_id": "snapshot-1",
+            },
+            {
+                "id": "legacy-repo", "company_id": "c1", "full_name": "acme/legacy",
+                "baseline_status": "ready", "active_snapshot_id": None,
+            },
+        ],
+        codebase_files=[
+            {"repository_id": "snapshot-repo", "file_path": "current.go", "snapshot_id": "snapshot-1"},
+            {"repository_id": "snapshot-repo", "file_path": "stale.go", "snapshot_id": "failed-snapshot"},
+            {"repository_id": "legacy-repo", "file_path": "legacy.go", "snapshot_id": None},
+        ],
+    )
+
+    result = answer_structured_question(
+        db, "How many files are indexed for this company?", "c1"
+    )
+
+    assert "2 files" in result["answer"]
+    assert "acme/current: 1" in result["answer"]
+    assert "acme/legacy: 1" in result["answer"]
+    assert "stale.go" not in result["answer"]
