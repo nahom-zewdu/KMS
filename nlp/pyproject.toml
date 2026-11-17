@@ -29,3 +29,8 @@ dependencies = [
 # NLP-service-local imports (ramp.*, api). Keep both roots available when
 # pytest is invoked from the nlp/ project directory.
 pythonpath = ["..", "."]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
