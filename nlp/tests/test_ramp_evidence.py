@@ -413,3 +413,33 @@ def test_implementation_surfaces_include_legacy_repository_in_mixed_snapshot_com
     assert {surface.repository_id for surface in surfaces} == {
         "snapshot-repo", "legacy-repo"
     }
+
+
+def test_module_records_include_legacy_repository_in_mixed_snapshot_company():
+    supabase = Mock()
+    supabase.table.side_effect = lambda name: {
+        "repositories": Query([
+            {"id": "snapshot-repo", "active_snapshot_id": "snapshot-1", "baseline_status": "ready"},
+            {"id": "legacy-repo", "active_snapshot_id": None, "baseline_status": "ready"},
+        ]),
+        "codebase_modules": Query([
+            {
+                "id": "current-module", "repository_id": "snapshot-repo",
+                "module_path": "api", "snapshot_id": "snapshot-1",
+            },
+            {
+                "id": "stale-module", "repository_id": "snapshot-repo",
+                "module_path": "old", "snapshot_id": "failed-snapshot",
+            },
+            {
+                "id": "legacy-module", "repository_id": "legacy-repo",
+                "module_path": "legacy", "snapshot_id": None,
+            },
+        ]),
+    }[name]
+
+    modules = RampEvidenceStore(supabase).module_records("company-a")
+
+    assert {module["id"] for module in modules} == {
+        "current-module", "legacy-module"
+    }
