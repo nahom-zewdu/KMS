@@ -12,7 +12,6 @@ from typing import Any
 
 from codebase.symbols import CodeSymbolExtractor
 
-logger = logging.getLogger(__name__)
 
 DEFAULT_BATCH_SIZE = 100
 DEFAULT_MAX_SOURCE_BYTES = 1_000_000
