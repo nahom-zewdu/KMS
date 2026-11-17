@@ -581,3 +581,14 @@ New tests:
 5. Integrate SCIP definitions/references into source navigation with explicit provenance and no inferred call edges.
 
 **KRT-02 remains IN_PROGRESS, not VERIFIED or ACCEPTED.**
+
+### Python verification and SQL harness correction — 2026-11-18
+
+- User-reported full Python suite: **212 passed, 6 warnings** after fixing the stale logging reference in `symbol_indexer.py` (commit `71329122751c4b4283964761fe4a6bdb9335dcf9`).
+- This verifies the Python suite at the user's checked-out revision; it does not verify the SQL migration or Postgres integration.
+- Static review found the cross-tenant SQL test expected only a foreign-key violation, although the earlier snapshot guard correctly raises an insufficient-privilege error. Corrected the test to accept either enforcement path.
+- Added a negative publication test: publishing with a stored symbol count different from the persisted row count must fail and leave the snapshot in `building`; then the valid count is published.
+- SQL test correction commit: `831c311b7c983757cd4ebfd32ce6500d3d8b11ea`.
+- Still required: execute the complete migrations in order, then `schema/tests/repository_snapshots.sql` and `schema/tests/code_symbols.sql` against a disposable PostgreSQL database. No live Supabase DDL has been run.
+
+
