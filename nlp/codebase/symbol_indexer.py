@@ -51,7 +51,7 @@ class CodeSymbolIndexer:
         """Extract one bounded source file and persist its declarations idempotently."""
         source_bytes = source.encode("utf-8")
         if len(source_bytes) > self.max_source_bytes:
-            return self._result("skipped_oversized", 0, len(source_bytes))
+            return self._result("oversized", 0, len(source_bytes))
 
         extraction = self.extractor.extract_file(
             repository_id=repository_id,
@@ -125,7 +125,7 @@ class CodeSymbolIndexer:
             ).execute()
             # Supabase/PostgREST may omit representation unless requested. The
             # input batch is the deterministic count validated at publication.
-            written += len(response.data) if response.data is not None else len(batch)
+            written += len(batch)
         return written
 
     @staticmethod
