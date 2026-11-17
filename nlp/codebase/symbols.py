@@ -186,7 +186,6 @@ class CodeSymbolExtractor:
                 "type_alias_declaration": "type",
                 "enum_declaration": "enum",
                 "method_definition": "method",
-                "method_signature": "method",
             },
             "TSX": {
                 "function_declaration": "function",
@@ -195,7 +194,6 @@ class CodeSymbolExtractor:
                 "type_alias_declaration": "type",
                 "enum_declaration": "enum",
                 "method_definition": "method",
-                "method_signature": "method",
             },
         }[language]
 
@@ -288,13 +286,21 @@ class CodeSymbolExtractor:
 
     @staticmethod
     def _first_type_name(node, source: bytes) -> str | None:
-        """Find the declared receiver type without resolving aliases or interfaces."""
+        """Find the receiver's declared type, excluding its variable name."""
         if node is None:
             return None
+
         stack = [node]
+        identifiers = []
         while stack:
             current = stack.pop()
-            if current.type in {"type_identifier", "identifier"}:
+            if current.type == "type_identifier":
                 return source[current.start_byte:current.end_byte].decode("utf-8")
+            if current.type == "identifier":
+                identifiers.append(current)
             stack.extend(reversed(current.children))
+
+        # Some grammar forms may expose the type as a plain identifier.
+        if identifiers:
+            return source[identifiers[-1].start_byte:identifiers[-1].end_byte].decode("utf-8")
         return None
