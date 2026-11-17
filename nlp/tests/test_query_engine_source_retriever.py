@@ -192,7 +192,7 @@ def test_source_retrieval_keeps_legacy_files_in_mixed_snapshot_company(monkeypat
     assert {chunk["file_path"] for chunk in chunks} == {
         "api/current.go", "legacy/handler.go"
     }
-    assert "acme/legacy" in {chunk["repository"] for chunk in chunks}
+    assert any("Repository: acme/legacy" in chunk["content"] for chunk in chunks)
     github_repos["acme/legacy"].get_contents.assert_called_once_with(
         "legacy/handler.go", ref="legacy-revision"
     )
