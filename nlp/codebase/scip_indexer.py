@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -234,7 +234,7 @@ class ScipIndexRunner:
         if not root.is_dir():
             raise ScipJobError("invalid_repository_root", "repository root is not a directory")
         relative_index = PurePosixPath(index_path)
-        if relative_index.is_absolute() or any(part in {"", ".", ".."} for part in relative_index.parts):
+        if relative_index.is_absolute() or PureWindowsPath(index_path).is_absolute() or PureWindowsPath(index_path).drive or any(part in {"", ".", ".."} for part in index_path.split("/")):
             raise ValueError("index_path must be a canonical relative path")
         output_path = root.joinpath(*relative_index.parts)
         if output_path.exists() or output_path.is_symlink():
