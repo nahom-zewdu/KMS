@@ -340,6 +340,11 @@ class ScipIndexRunner:
                     raise ScipJobError("timeout", f"SCIP command exceeded {self.timeout_seconds}s")
                 time.sleep(0.02)
 
+            if max_stdout_bytes is not None and stdout_file is not None:
+                if os.fstat(stdout_file.fileno()).st_size > max_stdout_bytes:
+                    raise ScipJobError("decoded_index_too_large", "decoded SCIP JSON exceeds the configured byte limit")
+            if os.fstat(stderr_file.fileno()).st_size > 64 * 1024:
+                raise ScipJobError("diagnostics_too_large", "SCIP command diagnostics exceeded 64 KiB")
             if process.returncode != 0:
                 stderr_file.seek(0)
                 diagnostic = stderr_file.read(4096).decode("utf-8", errors="replace")
