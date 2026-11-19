@@ -15,6 +15,7 @@ def _index(root: Path, *, relative_path: str = "src/main.py", occurrences=None):
             "version": 1,
             "projectRoot": root.as_uri(),
             "toolInfo": {"name": "test-indexer", "version": "1.2.3"},
+            "textDocumentEncoding": 1,
         },
         "documents": [
             {
@@ -156,3 +157,27 @@ def test_rejects_occurrence_limit(tmp_path):
             source_revision="rev",
             max_occurrences=1,
         )
+
+
+
+def test_accepts_empty_half_open_occurrence_range(tmp_path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "main.py").write_text("foo\\n", encoding="utf-8")
+    result = normalize_scip_index(
+        _index(tmp_path, occurrences=[
+            {"range": [0, 0, 0, 0], "symbol": "scip-local local x", "symbolRoles": 1},
+        ]),
+        repository_root=tmp_path,
+        source_revision="rev",
+    )
+    assert len(result.occurrences) == 1
+    assert result.occurrences[0].start_byte == result.occurrences[0].end_byte == 0
+
+
+def test_rejects_non_utf8_document_encoding(tmp_path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "main.py").write_text("foo", encoding="utf-8")
+    index = _index(tmp_path, occurrences=[])
+    index["metadata"]["textDocumentEncoding"] = 2
+    with pytest.raises(ScipJobError, match="UTF-8"):
+        normalize_scip_index(index, repository_root=tmp_path, source_revision="rev")
