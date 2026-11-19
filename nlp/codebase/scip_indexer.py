@@ -230,10 +230,13 @@ class ScipIndexRunner:
         source_revision: str,
         index_path: str = "index.scip",
     ) -> ScipIndex:
-        """Execute the indexer in the pinned checkout and normalize its SCIP output.
+        """Execute an indexer in a temporary working directory and normalize its output.
 
-        The caller must provide an immutable, isolated checkout. This class does
-        not sandbox arbitrary build hooks or provide OS-level CPU/memory limits.
+        The indexer receives the immutable checkout through {repository_root};
+        its default index.scip output is collected from the temporary working
+        directory. Indexers supporting an output argument may instead consume
+        {index_path}. The caller must provide an isolated checkout: this class
+        does not sandbox arbitrary build hooks or impose OS-level resource limits.
         """
         root = Path(repository_root).resolve(strict=True)
         if not root.is_dir():
@@ -242,8 +245,8 @@ class ScipIndexRunner:
         if relative_index.is_absolute() or PureWindowsPath(index_path).is_absolute() or PureWindowsPath(index_path).drive or any(part in {"", ".", ".."} for part in index_path.split("/")):
             raise ValueError("index_path must be a canonical relative path")
 
-        if not any("{index_path}" in arg for arg in self.indexer_argv):
-            raise ValueError("indexer_argv must include an {index_path} output placeholder")
+        # Indexers such as scip-python write index.scip into their working
+        # directory. Other indexers can use the explicit {index_path} token.
 
         with tempfile.TemporaryDirectory(prefix="kms-scip-") as temporary_root:
             temporary_path = Path(temporary_root)
@@ -261,7 +264,7 @@ class ScipIndexRunner:
                 "NO_COLOR": "1",
                 "CI": "1",
             }
-            self._execute(command, root, "indexer_failed", env=safe_environment)
+            self._execute(command, temporary_path, "indexer_failed", env=safe_environment)
             if not output_path.is_file() or output_path.is_symlink():
                 raise ScipJobError("missing_output", "SCIP indexer did not produce the expected index file")
             if output_path.stat().st_size > self.max_index_bytes:
