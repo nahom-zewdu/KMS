@@ -332,3 +332,39 @@ def test_python_async_functions_are_extracted():
     assert [(item.qualified_name, item.kind) for item in result.symbols] == [
         ("run_job", "function"),
     ]
+
+
+
+def test_tsx_component_source_shape_extracts_typed_component_and_callback():
+    result = EXTRACTOR.extract_file(
+        repository_id="kms-frontend",
+        file_path="app/dashboard/settings/UserList.tsx",
+        source="""'use client';
+import { useState } from 'react';
+
+interface User {
+  id: string;
+  name: string;
+}
+
+export default function UserList() {
+  const [users, setUsers] = useState<User[]>([]);
+  const changeRole = async (userId: string, role: string) => {
+    await fetch('/api/users/role', {
+      method: 'POST',
+      body: JSON.stringify({ userId, role }),
+    });
+  };
+  return <div>{users.map((user) => <span key={user.id}>{user.name}</span>)}</div>;
+}
+""",
+        source_revision=REVISION,
+    )
+
+    assert result is not None
+    assert not result.has_syntax_errors
+    assert [(item.qualified_name, item.kind) for item in result.symbols] == [
+        ("User", "interface"),
+        ("UserList", "function"),
+        ("changeRole", "function"),
+    ]
