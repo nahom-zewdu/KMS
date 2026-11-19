@@ -72,6 +72,7 @@ function build(): Worker { return new Worker(); }
     assert result is not None
     assert [(item.qualified_name, item.kind) for item in result.symbols] == [
         ("Store", "interface"),
+        ("Store.save", "method"),
         ("Worker", "class"),
         ("Worker.run", "method"),
         ("build", "function"),
