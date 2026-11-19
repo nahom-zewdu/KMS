@@ -36,3 +36,27 @@ To run focused auth and Ramp regression tests:
 ```sh
 .venv/bin/python -m pytest -q tests/test_authz.py tests/test_ramp_v2.py
 ```
+
+### Optional real SCIP integration test
+
+The default test suite does not require Node.js or external SCIP binaries. To verify
+real cross-file Python semantic indexing, install the upstream tools in an isolated
+environment with Node.js 16+:
+
+```bash
+npm install --global @sourcegraph/scip-python
+# Install the matching SCIP CLI using the upstream installation instructions:
+# https://github.com/sourcegraph/scip
+```
+
+Then run the opt-in integration test:
+
+```bash
+KMS_SCIP_PYTHON_INTEGRATION=1 uv run pytest tests/test_scip_indexer.py -q
+```
+
+The test creates a two-file Python fixture, indexes it with `scip-python`, decodes
+the generated index with `scip print --json`, and checks that the call in
+`consumer.py` resolves to the same SCIP symbol as the definition in
+`library.py`. It is skipped unless explicitly enabled. Do not run indexers against
+untrusted repository code outside an isolated worker/sandbox.
