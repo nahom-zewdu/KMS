@@ -150,7 +150,7 @@ def test_rejects_missing_source_revision(tmp_path):
 
 def test_rejects_occurrence_limit(tmp_path):
     (tmp_path / "src").mkdir()
-    (tmp_path / "src" / "main.py").write_text("foo\n", encoding="utf-8")
+    (tmp_path / "src" / "main.py").write_text("foo\nfoo\n", encoding="utf-8")
     with pytest.raises(ScipJobError, match="limit"):
         normalize_scip_index(
             _index(tmp_path),
@@ -187,7 +187,7 @@ def test_rejects_non_utf8_document_encoding(tmp_path):
 
 def test_runner_executes_configured_indexer_and_scip_decoder(tmp_path):
     (tmp_path / "src").mkdir()
-    (tmp_path / "src" / "main.py").write_text("foo\n", encoding="utf-8")
+    (tmp_path / "src" / "main.py").write_text("foo\nfoo\n", encoding="utf-8")
     indexer_script = tmp_path / "fake_indexer.py"
     indexer_script.write_text(
         "from pathlib import Path\n"
