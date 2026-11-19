@@ -117,6 +117,10 @@ def normalize_scip_index(
     if not isinstance(protocol_version, int) or protocol_version < 0:
         raise ScipJobError("malformed_index", "invalid SCIP protocol version")
 
+    text_encoding = _get(metadata, "textDocumentEncoding", "text_document_encoding")
+    if text_encoding != 1:
+        raise ScipJobError("unsupported_text_encoding", "only UTF-8 source documents are supported")
+
     documents = index.get("documents")
     if not isinstance(documents, list):
         raise ScipJobError("malformed_index", "SCIP documents must be an array")
@@ -152,12 +156,12 @@ def normalize_scip_index(
             roles = _get(occurrence, "symbolRoles", "symbol_roles", default=0)
             if not isinstance(roles, int) or roles < 0:
                 raise ScipJobError("malformed_index", "SCIP symbol roles must be a non-negative integer")
-            role = "definition" if roles & 1 else "reference"
+            role = "definition" if roles & 1 else ("reference" if roles else "occurrence")
             start_line, start_character, end_line, end_character = _occurrence_range(occurrence)
             start_byte = _position_to_byte(source, start_line, start_character, position_encoding)
             end_byte = _position_to_byte(source, end_line, end_character, position_encoding)
-            if end_byte <= start_byte:
-                raise ScipJobError("invalid_range", f"empty or reversed SCIP range in {relative_path}")
+            if end_byte < start_byte:
+                raise ScipJobError("invalid_range", f"reversed SCIP range in {relative_path}")
 
             identity = "\0".join((
                 source_revision, relative_path, symbol, str(roles),
