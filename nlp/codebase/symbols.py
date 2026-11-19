@@ -188,6 +188,7 @@ class CodeSymbolExtractor:
                 "method_definition": "method",
                 "method_signature": "method",
                 "variable_declarator": "function",
+                "public_field_definition": "method",
             },
             "TSX": {
                 "function_declaration": "function",
@@ -198,6 +199,7 @@ class CodeSymbolExtractor:
                 "method_definition": "method",
                 "method_signature": "method",
                 "variable_declarator": "function",
+                "public_field_definition": "method",
             },
         }[language]
 
@@ -211,16 +213,13 @@ class CodeSymbolExtractor:
                 continue
 
             name_node = node.child_by_field_name("name")
-            if language in {"JavaScript", "TypeScript", "TSX"} and node.type == "variable_declarator":
+            if language in {"JavaScript", "TypeScript", "TSX"} and node.type in {"variable_declarator", "public_field_definition"}:
                 # Index named arrow/function expressions without treating ordinary
-                # variables as declarations. The variable name is the stable symbol.
+                # variables or class data fields as callable declarations.
                 value_node = node.child_by_field_name("value")
                 if value_node is None or value_node.type not in {"arrow_function", "function_expression"}:
                     continue
-                parent = node.parent
-                while parent is not None and parent.type not in {"class_body", "program", "statement_block"}:
-                    parent = parent.parent
-                if parent is not None and parent.type == "class_body":
+                if node.type == "public_field_definition":
                     kind = "method"
             if name_node is None:
                 continue
