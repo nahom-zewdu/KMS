@@ -380,7 +380,9 @@ def _validated_source_path(root: Path, relative_path: Any) -> Path:
     if not isinstance(relative_path, str) or not relative_path:
         raise ScipJobError("invalid_document", "SCIP document path is missing")
     path = PurePosixPath(relative_path)
-    if path.is_absolute() or "\\" in relative_path or any(part in {"", ".", ".."} for part in path.parts):
+    windows_path = PureWindowsPath(relative_path)
+    if (path.is_absolute() or windows_path.is_absolute() or windows_path.drive
+            or "\\" in relative_path or any(part in {"", ".", ".."} for part in relative_path.split("/"))):
         raise ScipJobError("invalid_document", f"non-canonical SCIP document path: {relative_path}")
     candidate = root
     for part in path.parts:
