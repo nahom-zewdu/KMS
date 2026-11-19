@@ -147,6 +147,8 @@ def normalize_scip_index(
             raise ScipJobError("malformed_index", "SCIP occurrences must be an array")
 
         for occurrence in occurrences:
+            if len(normalized) >= max_occurrences:
+                raise ScipJobError("occurrence_limit_exceeded", "SCIP occurrence limit exceeded")
             if not isinstance(occurrence, dict):
                 raise ScipJobError("malformed_index", "SCIP occurrence must be an object")
             symbol = occurrence.get("symbol")
@@ -185,8 +187,6 @@ def normalize_scip_index(
                 indexer_version=indexer_version,
                 protocol_version=protocol_version,
             ))
-            if len(normalized) > max_occurrences:
-                raise ScipJobError("occurrence_limit_exceeded", "SCIP occurrence limit exceeded")
 
     normalized.sort(key=lambda item: (item.file_path, item.start_byte, item.end_byte, item.symbol))
     return ScipIndex(
