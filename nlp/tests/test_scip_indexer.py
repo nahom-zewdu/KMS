@@ -163,7 +163,7 @@ def test_rejects_occurrence_limit(tmp_path):
 
 def test_accepts_empty_half_open_occurrence_range(tmp_path):
     (tmp_path / "src").mkdir()
-    (tmp_path / "src" / "main.py").write_text("foo\\n", encoding="utf-8")
+    (tmp_path / "src" / "main.py").write_text("foo\n", encoding="utf-8")
     result = normalize_scip_index(
         _index(tmp_path, occurrences=[
             {"range": [0, 0, 0, 0], "symbol": "scip-local local x", "symbolRoles": 1},
@@ -187,19 +187,19 @@ def test_rejects_non_utf8_document_encoding(tmp_path):
 
 def test_runner_executes_configured_indexer_and_scip_decoder(tmp_path):
     (tmp_path / "src").mkdir()
-    (tmp_path / "src" / "main.py").write_text("foo\\n", encoding="utf-8")
+    (tmp_path / "src" / "main.py").write_text("foo\n", encoding="utf-8")
     indexer_script = tmp_path / "fake_indexer.py"
     indexer_script.write_text(
-        "from pathlib import Path\\n"
-        "import sys\\n"
-        "Path(sys.argv[1]).write_bytes(b'fake-scip-index')\\n",
+        "from pathlib import Path\n"
+        "import sys\n"
+        "Path(sys.argv[1]).write_bytes(b'fake-scip-index')\n",
         encoding="utf-8",
     )
     decoder_script = tmp_path / "fake_scip.py"
     index_json = json.dumps(_index(tmp_path)).replace("\\", "\\\\")
     decoder_script.write_text(
-        "import json\\n"
-        "print(json.dumps(json.loads(" + repr(index_json) + ")))\\n",
+        "import json\n"
+        "print(json.dumps(json.loads(" + repr(index_json) + ")))\n",
         encoding="utf-8",
     )
 
