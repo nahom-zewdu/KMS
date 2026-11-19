@@ -6,7 +6,7 @@
 > Current Ramp runtime: `docs/architecture/ramp.md`.
 > Scoring spec vs implemented subset: `docs/product/ramp-candidate-scoring.md`.
 
-**Last updated:** 2026-11-17
+**Last updated:** 2026-11-19
 **Current branch:** `feat/krt-02-code-intelligence`
 **Current milestone:** KRT — Knowledge Reliability & Trust
 **Current objective:** Prove that Ramp can move a new engineer from unfamiliarity to useful, safe contribution faster than normal onboarding.
@@ -592,3 +592,16 @@ New tests:
 - Still required: execute the complete migrations in order, then `schema/tests/repository_snapshots.sql` and `schema/tests/code_symbols.sql` against a disposable PostgreSQL database. No live Supabase DDL has been run.
 
 
+
+
+### PostgreSQL integration verification — 2026-11-19
+
+- The existing local Podman PostgreSQL 16 test container `kms-krt-test-db` was restarted; the existing database `kms_krt_test` and volume were preserved. PostgreSQL reported ready and the connection identity was verified.
+- Applied `supabase/migrations/20261117110000_add_code_symbol_persistence.sql` successfully. The transaction completed with `COMMIT`.
+- `schema/tests/repository_snapshots.sql` passed; its integration-check notice was emitted and the test transaction rolled back.
+- The first `schema/tests/code_symbols.sql` run exposed a stale fixture reference to nonexistent `codebase_files.file_name`. The fixture was corrected to insert only the actual columns (`id`, `repository_id`, `file_path`, `snapshot_id`) in commit `988140b4242cd71534886e30b1f1f8a325bfa3e2`.
+- The corrected `schema/tests/code_symbols.sql` passed; its integration-check notice was emitted and the test transaction rolled back.
+- These are local PostgreSQL integration results, not a live Supabase deployment or production-data verification. No live Supabase DDL was run.
+- The full Python suite remains user-reported at **212 passed, 6 warnings** (2026-11-18).
+
+**KRT-02 status remains IN_PROGRESS.** The current verified slice covers syntax-symbol extraction/persistence/navigation and snapshot/tenant validation. The milestone exit condition also calls for source-backed reference evidence; SCIP definitions/references, semantic navigation, and broader representative-source coverage remain outstanding. Do not mark KRT-02 VERIFIED or ACCEPTED yet.
