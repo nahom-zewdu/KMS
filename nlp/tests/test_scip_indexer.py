@@ -3,10 +3,11 @@
 import hashlib
 import json
 from pathlib import Path
+import sys
 
 import pytest
 
-from codebase.scip_indexer import ScipJobError, normalize_scip_index
+from codebase.scip_indexer import ScipIndexRunner, ScipJobError, normalize_scip_index
 
 
 def _index(root: Path, *, relative_path: str = "src/main.py", occurrences=None):
@@ -181,3 +182,44 @@ def test_rejects_non_utf8_document_encoding(tmp_path):
     index["metadata"]["textDocumentEncoding"] = 2
     with pytest.raises(ScipJobError, match="UTF-8"):
         normalize_scip_index(index, repository_root=tmp_path, source_revision="rev")
+
+
+
+def test_runner_executes_configured_indexer_and_scip_decoder(tmp_path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "main.py").write_text("foo\\n", encoding="utf-8")
+    indexer_script = tmp_path / "fake_indexer.py"
+    indexer_script.write_text(
+        "from pathlib import Path\\n"
+        "import sys\\n"
+        "Path(sys.argv[1]).write_bytes(b'fake-scip-index')\\n",
+        encoding="utf-8",
+    )
+    decoder_script = tmp_path / "fake_scip.py"
+    index_json = json.dumps(_index(tmp_path)).replace("\\", "\\\\")
+    decoder_script.write_text(
+        "import json\\n"
+        "print(" + repr(index_json) + ")\\n",
+        encoding="utf-8",
+    )
+
+    runner = ScipIndexRunner(
+        indexer_argv=(sys.executable, str(indexer_script), "{index_path}"),
+        indexer_name="test-indexer",
+        scip_cli_argv=(sys.executable, str(decoder_script)),
+        timeout_seconds=5,
+        max_index_bytes=1024,
+        max_json_bytes=4096,
+    )
+    result = runner.run(repository_root=tmp_path, source_revision="pinned-revision")
+    assert result.indexer_name == "test-indexer"
+    assert [item.role for item in result.occurrences] == ["definition", "reference"]
+
+
+def test_runner_requires_explicit_output_placeholder():
+    runner = ScipIndexRunner(
+        indexer_argv=("scip-go", "index"),
+        indexer_name="scip-go",
+    )
+    with pytest.raises(ValueError, match="index_path"):
+        runner.run(repository_root=Path.cwd(), source_revision="rev")
