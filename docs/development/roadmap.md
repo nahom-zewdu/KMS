@@ -669,3 +669,22 @@ The initial adapter must be a job orchestrator and normalizer, not a new languag
 7. Tenant and active-snapshot isolation are verified in disposable PostgreSQL integration tests.
 
 **Implementation is not started by this design checkpoint.** No SCIP executable has been run, no semantic occurrence has been persisted, and no semantic navigation capability is claimed.
+
+
+
+### SCIP adapter implementation — first bounded slice
+
+Implemented on `feat/krt-02-code-intelligence`:
+
+- `nlp/codebase/scip_indexer.py` adds immutable normalized occurrence records and a parser for SCIP JSON emitted by the upstream `scip print --json` command.
+- Definition and reference roles remain distinct; zero-role occurrences are retained as `occurrence`, not mislabeled as references.
+- Source positions are converted from SCIP UTF-8/UTF-16/UTF-32 line offsets into UTF-8 byte offsets. UTF-8 source documents are required for this first slice; unsupported document encodings fail closed.
+- Every occurrence carries the pinned source revision supplied by the job, source-file SHA-256, indexer identity/version, protocol version, exact path/range, SCIP symbol, and a deterministic occurrence identity.
+- Document paths are checked for canonical relative form, Windows/Unix absolute paths, traversal, symlink components, and containment inside the supplied checkout.
+- The subprocess runner accepts an explicit argv template with `{index_path}` and optional `{repository_root}` placeholders; it uses no shell, a temporary output directory, a reduced environment (does not inherit application credentials), wall-clock timeout, index/JSON byte limits, and bounded diagnostics.
+- The caller remains responsible for supplying an immutable, isolated checkout and OS-level CPU/memory/network sandboxing. This Python runner is not itself a security sandbox.
+- The current adapter normalizes output in memory. It does **not** persist occurrences, publish semantic coverage, or expose semantic retrieval yet.
+
+Tests added in `nlp/tests/test_scip_indexer.py` cover deterministic normalization, definition/reference distinction, revision/hash provenance, path traversal and symlink rejection, invalid ranges and encodings, occurrence limits, empty half-open ranges, and a fake subprocess indexer/decoder round trip.
+
+**Not yet verified locally.** The next required check is the focused SCIP test file, followed by the complete NLP suite. After test fixes, run an actual pinned language indexer against a tiny cross-file fixture; do not treat the fake runner test as evidence that a real indexer works.
