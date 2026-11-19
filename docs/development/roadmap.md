@@ -605,3 +605,67 @@ New tests:
 - The full Python suite remains user-reported at **212 passed, 6 warnings** (2026-11-18).
 
 **KRT-02 status remains IN_PROGRESS.** The current verified slice covers syntax-symbol extraction/persistence/navigation and snapshot/tenant validation. The milestone exit condition also calls for source-backed reference evidence; SCIP definitions/references, semantic navigation, and broader representative-source coverage remain outstanding. Do not mark KRT-02 VERIFIED or ACCEPTED yet.
+
+
+
+### Repository-backed parser verification — 2026-11-20
+
+The user ran the following checks after the parser coverage changes:
+
+- `uv run pytest tests/test_symbols.py -q`: **15 passed**.
+- `uv run pytest -q`: **217 passed, 6 warnings, 4 subtests passed** (18.95s).
+- The warnings are deprecations from `python-json-logger` and PyGithub's `login_or_token` argument; no test failures were reported.
+
+Coverage fixtures now exercise checked-in Go and Python source shapes plus representative TSX component syntax. Additional focused fixtures cover TypeScript interface method signatures, top-level arrow functions, class arrow-function fields, and Python async functions.
+
+This is regression evidence for representative syntax shapes, not a measured declaration-recall percentage across every file in each repository. The TSX test uses a compact representative source fixture based on the frontend's `UserList.tsx` structure, not the complete file contents. KRT-02 remains IN_PROGRESS.
+
+### SCIP adapter contract — design checkpoint, 2026-11-20
+
+SCIP is the semantic-index interchange format; Tree-sitter remains the bounded syntax fallback. SCIP documents contain source-relative paths, symbol definitions, and source occurrences. Occurrences with symbol roles provide the evidence needed for definitions and references. The protocol is language-agnostic, but the indexers are language/toolchain-specific. See the [SCIP protocol](https://scip-code.org/), [SCIP schema](https://github.com/scip-code/scip/blob/main/scip.proto), and [Sourcegraph indexer support matrix](https://sourcegraph.com/docs/code-navigation/writing-an-indexer).
+
+The initial adapter must be a job orchestrator and normalizer, not a new language indexer. It must not assume that installing a Python package installs the Go, TypeScript, or Python compiler/indexer toolchains.
+
+**Job input (immutable):**
+- Company ID and physical repository ID from the trusted ingestion context (never caller-supplied query text).
+- Canonical source snapshot ID and exact source revision/commit SHA.
+- A read-only checkout/worktree of that exact revision.
+- Explicit repository root and detected language/project manifests.
+- Configured per-language indexer executable, pinned version, and argument template.
+- Hard limits: wall-clock timeout, CPU/memory where the execution environment supports them, maximum output bytes, maximum indexed files, and maximum diagnostics captured.
+
+**Execution and isolation:**
+- Run each language indexer as a separate bounded job against the immutable checkout.
+- Invoke an argument vector directly (no shell interpolation); use a controlled working directory and environment.
+- Do not execute repository-provided build scripts or arbitrary project hooks as a privileged service. Any indexer requiring package installation/build execution must run in a restricted worker with no application secrets and constrained network access.
+- Record the executable identity/version and exact arguments. Do not silently fall back to a different indexer version.
+- Treat timeout, nonzero exit, missing output, oversized output, malformed SCIP, unsupported language, missing toolchain, and partial indexing as explicit outcomes, not as empty successful indexes.
+
+**Output normalization:**
+- Parse SCIP using the official schema/bindings; validate metadata, canonical relative paths, source ranges, document paths, and symbol identifiers before persistence.
+- Normalize each definition and reference occurrence into KMS records carrying company, repository, snapshot, source revision, file path, byte/line range, SCIP symbol string, occurrence role, indexer name/version, and protocol version.
+- Persist only records whose document path resolves inside the indexed snapshot and whose file revision matches that snapshot. Reject absolute paths, traversal components, symlink escapes, unknown files, and out-of-range source spans.
+- Keep definitions and references distinct. A reference is not a definition; neither Tree-sitter name matching nor an unverified textual match may be promoted to semantic evidence.
+- Preserve indexer diagnostics and coverage metadata. Partial output may be retained only with an explicit partial status and measured coverage; never mark it complete.
+
+**Idempotency and publication:**
+- Uniqueness is scoped by company + repository + snapshot + SCIP symbol + occurrence identity (file/range/role); retries for the same pinned job must be idempotent.
+- Index rows are writable only while the owning snapshot is building. Publication validates expected persisted counts and coverage metadata, using the same serialization boundary as code-symbol publication.
+- Active-snapshot retrieval must filter by company, repository, and snapshot. No cross-tenant or cross-revision joins are permitted.
+- Failed or partial SCIP jobs must not block the syntax-symbol fallback or cause a snapshot to claim semantic coverage it does not have.
+
+**Initial language rollout:**
+- Go, TypeScript/JavaScript, and Python are candidates because maintained SCIP indexers are listed for all three languages. This is a capability shortlist, not proof that each indexer can run against arbitrary repositories without setup.
+- Start with one representative repository and one language at a time. Verify toolchain prerequisites, deterministic output, source-range correctness, definitions, and cross-file references before enabling a language in production ingestion.
+- Do not implement call-graph inference or relationship synthesis in this adapter.
+
+**Acceptance tests before integration:**
+1. A pinned, minimal Go fixture yields at least one definition and one cross-file reference with exact source ranges.
+2. A pinned TypeScript fixture yields a definition and cross-file reference, including a TSX source file.
+3. A pinned Python fixture yields a definition and cross-file reference.
+4. Re-running the same job produces identical normalized records and stable content hashes.
+5. Changing the source revision prevents stale SCIP records from being attached to the new snapshot.
+6. Malformed, traversal, absolute-path, symlink-escape, timeout, nonzero-exit, and oversized-output cases fail closed with explicit statuses.
+7. Tenant and active-snapshot isolation are verified in disposable PostgreSQL integration tests.
+
+**Implementation is not started by this design checkpoint.** No SCIP executable has been run, no semantic occurrence has been persisted, and no semantic navigation capability is claimed.
