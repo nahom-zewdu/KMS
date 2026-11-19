@@ -2,7 +2,9 @@
 
 import hashlib
 import json
+import os
 from pathlib import Path
+import shutil
 import sys
 
 import pytest
@@ -216,3 +218,60 @@ def test_runner_executes_configured_indexer_and_scip_decoder(tmp_path):
     assert [item.role for item in result.occurrences] == ["definition", "reference"]
 
 
+
+
+
+@pytest.mark.skipif(
+    os.getenv("KMS_SCIP_PYTHON_INTEGRATION") != "1",
+    reason="set KMS_SCIP_PYTHON_INTEGRATION=1 to run the real scip-python integration",
+)
+def test_real_scip_python_indexes_cross_file_definition_and_reference(tmp_path):
+    """Verify real SCIP output links a Python call to its cross-file definition."""
+    scip_python = shutil.which("scip-python")
+    scip_cli = shutil.which("scip")
+    if not scip_python or not scip_cli:
+        pytest.skip("scip-python and scip CLI must both be installed")
+
+    package = tmp_path / "src"
+    package.mkdir()
+    (package / "library.py").write_text(
+        "def normalize_name(value: str) -> str:\\n"
+        "    return value.strip().lower()\\n",
+        encoding="utf-8",
+    )
+    (package / "consumer.py").write_text(
+        "from library import normalize_name\\n"
+        "def display_name(value: str) -> str:\\n"
+        "    return normalize_name(value)\\n",
+        encoding="utf-8",
+    )
+
+    runner = ScipIndexRunner(
+        indexer_argv=(
+            scip_python,
+            "index",
+            "{repository_root}",
+            "--project-name=kms-scip-fixture",
+            "--project-version=0.0.0",
+        ),
+        indexer_name="scip-python",
+        scip_cli_argv=(scip_cli,),
+        timeout_seconds=180,
+        max_index_bytes=32 * 1024 * 1024,
+        max_json_bytes=64 * 1024 * 1024,
+    )
+    result = runner.run(repository_root=tmp_path, source_revision="fixture-revision")
+
+    matching = [
+        item for item in result.occurrences
+        if item.symbol.endswith("normalize_name().")
+    ]
+    definitions = [item for item in matching if item.role == "definition"]
+    references = [
+        item for item in matching
+        if item.role in {"reference", "occurrence"}
+        and item.file_path == "src/consumer.py"
+    ]
+    assert definitions, "SCIP output did not contain normalize_name's definition"
+    assert references, "SCIP output did not link the cross-file call to normalize_name"
+    assert definitions[0].symbol == references[0].symbol
