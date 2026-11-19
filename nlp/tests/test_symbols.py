@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from codebase.symbols import CodeSymbolExtractor
 
 
@@ -219,3 +221,69 @@ export default function UserList() {
         ("UserList", "function"),
     ]
 
+
+
+
+def test_repository_go_source_has_representative_declaration_coverage():
+    """Exercise the extractor against the checked-in GitHub webhook implementation."""
+    repository_root = Path(__file__).resolve().parents[2]
+    source_path = repository_root / "api" / "handlers" / "github.go"
+    source = source_path.read_text(encoding="utf-8")
+
+    result = EXTRACTOR.extract_file(
+        repository_id="kms",
+        file_path="api/handlers/github.go",
+        source=source,
+        source_revision=REVISION,
+    )
+
+    assert result is not None
+    assert not result.has_syntax_errors
+    qualified_names = {symbol.qualified_name for symbol in result.symbols}
+    expected = {
+        "GitHubHandler",
+        "NewGitHubHandler",
+        "extractRichContent",
+        "extractIssueSnapshot",
+        "truncateText",
+        "extractIssueLabels",
+        "getString",
+        "interfaceSlice",
+        "summarizeFiles",
+        "inferContextFromFiles",
+        "GitHubHandler.HandleGitHubWebhook",
+        "extractHeadCommit",
+        "GitHubHandler.verifyGitHubSignature",
+    }
+    assert expected <= qualified_names
+    assert len(result.symbols) >= len(expected)
+
+
+def test_repository_python_source_has_representative_declaration_coverage():
+    """Exercise nested and class-scoped declarations in the checked-in baseline syncer."""
+    repository_root = Path(__file__).resolve().parents[2]
+    source_path = repository_root / "nlp" / "codebase" / "baseline.py"
+    source = source_path.read_text(encoding="utf-8")
+
+    result = EXTRACTOR.extract_file(
+        repository_id="kms",
+        file_path="nlp/codebase/baseline.py",
+        source=source,
+        source_revision=REVISION,
+    )
+
+    assert result is not None
+    assert not result.has_syntax_errors
+    qualified_names = {symbol.qualified_name for symbol in result.symbols}
+    expected = {
+        "CodebaseBaselineSync",
+        "CodebaseBaselineSync.__init__",
+        "CodebaseBaselineSync.sync_repository",
+        "ensure_lease",
+        "renew_lease",
+        "CodebaseBaselineSync._backfill_issue_events",
+        "CodebaseBaselineSync._index_file",
+        "CodebaseBaselineSync._create_module",
+    }
+    assert expected <= qualified_names
+    assert len(result.symbols) >= len(expected)
