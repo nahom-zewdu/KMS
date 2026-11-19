@@ -192,7 +192,7 @@ def test_runner_executes_configured_indexer_and_scip_decoder(tmp_path):
     indexer_script.write_text(
         "from pathlib import Path\n"
         "import sys\n"
-        "Path(sys.argv[1]).write_bytes(b'fake-scip-index')\n",
+        "Path('index.scip').write_bytes(b'fake-scip-index')\n",
         encoding="utf-8",
     )
     decoder_script = tmp_path / "fake_scip.py"
@@ -204,7 +204,7 @@ def test_runner_executes_configured_indexer_and_scip_decoder(tmp_path):
     )
 
     runner = ScipIndexRunner(
-        indexer_argv=(sys.executable, str(indexer_script), "{index_path}"),
+        indexer_argv=(sys.executable, str(indexer_script)),
         indexer_name="test-indexer",
         scip_cli_argv=(sys.executable, str(decoder_script)),
         timeout_seconds=5,
@@ -216,10 +216,3 @@ def test_runner_executes_configured_indexer_and_scip_decoder(tmp_path):
     assert [item.role for item in result.occurrences] == ["definition", "reference"]
 
 
-def test_runner_requires_explicit_output_placeholder():
-    runner = ScipIndexRunner(
-        indexer_argv=("scip-go", "index"),
-        indexer_name="scip-go",
-    )
-    with pytest.raises(ValueError, match="index_path"):
-        runner.run(repository_root=Path.cwd(), source_revision="rev")
