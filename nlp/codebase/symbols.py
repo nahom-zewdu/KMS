@@ -186,6 +186,8 @@ class CodeSymbolExtractor:
                 "type_alias_declaration": "type",
                 "enum_declaration": "enum",
                 "method_definition": "method",
+                "method_signature": "method",
+                "variable_declarator": "function",
             },
             "TSX": {
                 "function_declaration": "function",
@@ -194,6 +196,8 @@ class CodeSymbolExtractor:
                 "type_alias_declaration": "type",
                 "enum_declaration": "enum",
                 "method_definition": "method",
+                "method_signature": "method",
+                "variable_declarator": "function",
             },
         }[language]
 
@@ -207,6 +211,17 @@ class CodeSymbolExtractor:
                 continue
 
             name_node = node.child_by_field_name("name")
+            if language in {"JavaScript", "TypeScript", "TSX"} and node.type == "variable_declarator":
+                # Index named arrow/function expressions without treating ordinary
+                # variables as declarations. The variable name is the stable symbol.
+                value_node = node.child_by_field_name("value")
+                if value_node is None or value_node.type not in {"arrow_function", "function_expression"}:
+                    continue
+                parent = node.parent
+                while parent is not None and parent.type not in {"class_body", "program", "statement_block"}:
+                    parent = parent.parent
+                if parent is not None and parent.type == "class_body":
+                    kind = "method"
             if name_node is None:
                 continue
             name = source[name_node.start_byte:name_node.end_byte].decode("utf-8")
