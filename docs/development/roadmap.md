@@ -688,3 +688,12 @@ Implemented on `feat/krt-02-code-intelligence`:
 Tests added in `nlp/tests/test_scip_indexer.py` cover deterministic normalization, definition/reference distinction, revision/hash provenance, path traversal and symlink rejection, invalid ranges and encodings, occurrence limits, empty half-open ranges, and a fake subprocess indexer/decoder round trip.
 
 **Not yet verified locally.** The next required check is the focused SCIP test file, followed by the complete NLP suite. After test fixes, run an actual pinned language indexer against a tiny cross-file fixture; do not treat the fake runner test as evidence that a real indexer works.
+
+
+### SCIP adapter verification update
+
+- Local verification reported by the developer on 2026-11-20: focused SCIP tests **18 passed**; complete NLP suite **235 passed**, with 6 existing dependency deprecation warnings and 4 subtests passed.
+- The subprocess runner was adjusted to support indexers that emit the conventional `index.scip` in their working directory. It now runs in the isolated temporary output directory; indexers can still use explicit `{index_path}` and `{repository_root}` argument placeholders.
+- The fake runner fixture now exercises the conventional default output behavior rather than requiring every indexer to accept a custom output argument.
+- This runner adjustment is committed but has **not yet been verified locally**.
+- Real indexer execution remains outstanding. The fake indexer/decoder round trip validates runner plumbing only; it is not evidence of semantic indexing compatibility.
