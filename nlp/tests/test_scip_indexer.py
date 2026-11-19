@@ -199,7 +199,7 @@ def test_runner_executes_configured_indexer_and_scip_decoder(tmp_path):
     index_json = json.dumps(_index(tmp_path)).replace("\\", "\\\\")
     decoder_script.write_text(
         "import json\\n"
-        "print(" + repr(index_json) + ")\\n",
+        "print(json.dumps(json.loads(" + repr(index_json) + ")))\\n",
         encoding="utf-8",
     )
 
