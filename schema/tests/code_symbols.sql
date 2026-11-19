@@ -29,8 +29,8 @@ BEGIN
   ) VALUES (v_snapshot, v_repo, v_company, v_revision, v_run, 'building');
 
   INSERT INTO public.codebase_files (
-    id, repository_id, file_path, file_name, snapshot_id
-  ) VALUES (gen_random_uuid(), v_repo, 'src/worker.py', 'worker.py', v_snapshot);
+    id, repository_id, file_path, snapshot_id
+  ) VALUES (gen_random_uuid(), v_repo, 'src/worker.py', v_snapshot);
 
   INSERT INTO public.code_symbols (
     id, repository_id, snapshot_id, company_id, symbol_id, file_path,
