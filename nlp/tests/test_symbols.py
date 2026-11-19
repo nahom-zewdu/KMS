@@ -287,3 +287,47 @@ def test_repository_python_source_has_representative_declaration_coverage():
     }
     assert expected <= qualified_names
     assert len(result.symbols) >= len(expected)
+
+
+
+def test_typescript_indexes_arrow_functions_and_interface_method_signatures():
+    result = EXTRACTOR.extract_file(
+        repository_id="repo-1",
+        file_path="src/service.ts",
+        source="""interface Store {
+  save(): void;
+}
+export const build = () => new Worker();
+class Worker {
+  run = async () => true;
+}
+""",
+        source_revision=REVISION,
+    )
+
+    assert result is not None
+    assert not result.has_syntax_errors
+    assert [(item.qualified_name, item.kind) for item in result.symbols] == [
+        ("Store", "interface"),
+        ("Store.save", "method"),
+        ("build", "function"),
+        ("Worker", "class"),
+        ("Worker.run", "method"),
+    ]
+
+
+def test_python_async_functions_are_extracted():
+    result = EXTRACTOR.extract_file(
+        repository_id="repo-1",
+        file_path="src/worker.py",
+        source="""async def run_job():
+    return True
+""",
+        source_revision=REVISION,
+    )
+
+    assert result is not None
+    assert not result.has_syntax_errors
+    assert [(item.qualified_name, item.kind) for item in result.symbols] == [
+        ("run_job", "function"),
+    ]
