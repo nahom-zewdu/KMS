@@ -697,3 +697,11 @@ Tests added in `nlp/tests/test_scip_indexer.py` cover deterministic normalizatio
 - The fake runner fixture now exercises the conventional default output behavior rather than requiring every indexer to accept a custom output argument.
 - This runner adjustment is committed but has **not yet been verified locally**.
 - Real indexer execution remains outstanding. The fake indexer/decoder round trip validates runner plumbing only; it is not evidence of semantic indexing compatibility.
+
+
+### Real SCIP integration gate
+
+- Added an opt-in integration test for upstream `@sourcegraph/scip-python` plus the SCIP CLI. It creates a two-file Python fixture and verifies that a cross-file call and its definition share one SCIP symbol.
+- The integration is intentionally excluded from the normal test suite; enable it with `KMS_SCIP_PYTHON_INTEGRATION=1`.
+- Installation and invocation instructions are documented in `nlp/README.md`.
+- The integration has **not yet been executed** in the developer's environment. Until it passes, the adapter has only fake-runner coverage.
