@@ -12,6 +12,7 @@ import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
 import subprocess
 import tempfile
+import time
 from dataclasses import dataclass
 from typing import Any, Sequence
 from urllib.parse import unquote, urlparse
@@ -240,35 +241,63 @@ class ScipIndexRunner:
         relative_index = PurePosixPath(index_path)
         if relative_index.is_absolute() or PureWindowsPath(index_path).is_absolute() or PureWindowsPath(index_path).drive or any(part in {"", ".", ".."} for part in index_path.split("/")):
             raise ValueError("index_path must be a canonical relative path")
-        output_path = root.joinpath(*relative_index.parts)
-        if output_path.exists() or output_path.is_symlink():
-            raise ScipJobError("output_exists", "refusing to overwrite an existing SCIP index")
-        output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        self._execute(self.indexer_argv, root, "indexer_failed")
-        if not output_path.is_file() or output_path.is_symlink():
-            raise ScipJobError("missing_output", "SCIP indexer did not produce the expected index file")
-        if output_path.stat().st_size > self.max_index_bytes:
-            raise ScipJobError("index_too_large", "SCIP index exceeds the configured byte limit")
+        if not any("{index_path}" in arg for arg in self.indexer_argv):
+            raise ValueError("indexer_argv must include an {index_path} output placeholder")
 
-        with tempfile.TemporaryFile() as stdout_file:
-            command = (*self.scip_cli_argv, "print", "--json", str(output_path))
-            self._execute(command, root, "scip_decode_failed", stdout_file=stdout_file)
-            stdout_file.seek(0)
-            payload = stdout_file.read(self.max_json_bytes + 1)
-        if len(payload) > self.max_json_bytes:
-            raise ScipJobError("decoded_index_too_large", "decoded SCIP JSON exceeds the configured byte limit")
-        try:
-            decoded = json.loads(payload)
-        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise ScipJobError("malformed_index", "SCIP CLI returned invalid JSON") from exc
-        if not isinstance(decoded, dict):
-            raise ScipJobError("malformed_index", "SCIP CLI output must be a JSON object")
-        return normalize_scip_index(
-            decoded,
-            repository_root=root,
-            source_revision=source_revision,
-        )
+        with tempfile.TemporaryDirectory(prefix="kms-scip-") as temporary_root:
+            temporary_path = Path(temporary_root)
+            output_path = temporary_path.joinpath(*relative_index.parts)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            command = tuple(
+                arg.replace("{repository_root}", str(root)).replace("{index_path}", str(output_path))
+                for arg in self.indexer_argv
+            )
+            # Do not inherit application credentials or unrelated environment
+            # variables into a repository indexer process.
+            safe_environment = {
+                "PATH": os.environ.get("PATH", ""),
+                "HOME": temporary_root,
+                "NO_COLOR": "1",
+                "CI": "1",
+            }
+            self._execute(command, root, "indexer_failed", env=safe_environment)
+            if not output_path.is_file() or output_path.is_symlink():
+                raise ScipJobError("missing_output", "SCIP indexer did not produce the expected index file")
+            if output_path.stat().st_size > self.max_index_bytes:
+                raise ScipJobError("index_too_large", "SCIP index exceeds the configured byte limit")
+
+            with tempfile.TemporaryFile() as stdout_file:
+                decode_command = (*self.scip_cli_argv, "print", "--json", str(output_path))
+                self._execute(
+                    decode_command,
+                    root,
+                    "scip_decode_failed",
+                    stdout_file=stdout_file,
+                    max_stdout_bytes=self.max_json_bytes,
+                    env=safe_environment,
+                )
+                stdout_file.seek(0)
+                payload = stdout_file.read(self.max_json_bytes + 1)
+            if len(payload) > self.max_json_bytes:
+                raise ScipJobError("decoded_index_too_large", "decoded SCIP JSON exceeds the configured byte limit")
+            try:
+                decoded = json.loads(payload)
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise ScipJobError("malformed_index", "SCIP CLI returned invalid JSON") from exc
+            if not isinstance(decoded, dict):
+                raise ScipJobError("malformed_index", "SCIP CLI output must be a JSON object")
+            result = normalize_scip_index(
+                decoded,
+                repository_root=root,
+                source_revision=source_revision,
+            )
+            if result.indexer_name != self.indexer_name:
+                raise ScipJobError(
+                    "indexer_identity_mismatch",
+                    f"expected indexer {self.indexer_name!r}, received {result.indexer_name!r}",
+                )
+            return result
 
     def _execute(
         self,
@@ -277,28 +306,44 @@ class ScipIndexRunner:
         failure_status: str,
         *,
         stdout_file=None,
+        max_stdout_bytes: int | None = None,
+        env: dict[str, str],
     ) -> None:
-        """Execute one argument-vector command with a timeout and bounded diagnostics."""
+        """Execute an argument-vector command with timeout and bounded output."""
         with tempfile.TemporaryFile() as stderr_file:
             try:
-                completed = subprocess.run(
+                process = subprocess.Popen(
                     list(command),
                     cwd=cwd,
-                    env={**os.environ, "NO_COLOR": "1"},
+                    env=env,
                     stdin=subprocess.DEVNULL,
                     stdout=stdout_file if stdout_file is not None else subprocess.DEVNULL,
                     stderr=stderr_file,
-                    timeout=self.timeout_seconds,
-                    check=False,
                 )
-            except subprocess.TimeoutExpired as exc:
-                raise ScipJobError("timeout", f"SCIP command exceeded {self.timeout_seconds}s") from exc
             except OSError as exc:
                 raise ScipJobError("tool_unavailable", f"unable to execute SCIP command: {command[0]}") from exc
-            if completed.returncode != 0:
+
+            deadline = time.monotonic() + self.timeout_seconds
+            while process.poll() is None:
+                if max_stdout_bytes is not None and stdout_file is not None:
+                    if os.fstat(stdout_file.fileno()).st_size > max_stdout_bytes:
+                        process.kill()
+                        process.wait()
+                        raise ScipJobError("decoded_index_too_large", "decoded SCIP JSON exceeds the configured byte limit")
+                if os.fstat(stderr_file.fileno()).st_size > 64 * 1024:
+                    process.kill()
+                    process.wait()
+                    raise ScipJobError("diagnostics_too_large", "SCIP command diagnostics exceeded 64 KiB")
+                if time.monotonic() >= deadline:
+                    process.kill()
+                    process.wait()
+                    raise ScipJobError("timeout", f"SCIP command exceeded {self.timeout_seconds}s")
+                time.sleep(0.02)
+
+            if process.returncode != 0:
                 stderr_file.seek(0)
                 diagnostic = stderr_file.read(4096).decode("utf-8", errors="replace")
-                raise ScipJobError(failure_status, diagnostic or f"command exited {completed.returncode}")
+                raise ScipJobError(failure_status, diagnostic or f"command exited {process.returncode}")
 
 
 def _get(mapping: dict[str, Any], camel: str, snake: str | None = None, *, default=None):
