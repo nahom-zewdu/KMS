@@ -61,10 +61,13 @@ the generated index with `scip print --json`, and checks that the call in
 `consumer.py` resolves to the same SCIP symbol as the definition in
 `library.py`.
 
-**Verified locally (2026-11-22):** the opt-in SCIP test module passed 20 tests;
-the full NLP suite passed 236 tests, with 1 opt-in test skipped in the default
-run, 6 deprecation warnings, and 4 subtests passed. The real integration was
-run separately with the opt-in environment variable and passed.
+**Verified locally (2026-11-22):** the full NLP suite passed **245 tests**, with
+3 opt-in SCIP integrations skipped in the default run, 6 dependency deprecation
+warnings, and 4 subtests passed. The real Python, Go, and TypeScript integrations
+were each run separately and passed. The occurrence persistence SQL integration
+test also passed against the local PostgreSQL 16 test database. See
+`docs/development/milestones/2026-11-22-krt-02-code-intelligence.md` for the
+milestone close-out and remaining boundaries.
 
 Compatibility note: `scip-python 0.6.8` omits per-document position encoding.
 The integration configures an explicit UTF-32 code-point offset override for
