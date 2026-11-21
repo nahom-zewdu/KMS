@@ -25,7 +25,8 @@
 | `docs/product/ramp-candidate-evaluation-2026-09-20.md` | Read-only live candidate-quality snapshot |
 | `docs/decisions/ADR-003-deterministic-ramp.md` | Deterministic fact/selection layer |
 | `docs/decisions/ADR-004-imports-are-not-workflows.md` | Import edges are structural, not behavioral proof |
-| `docs/architecture/knowledge-reliability.md` | Current knowledge-pipeline audit and target architecture |\n| `docs/development/milestones/2026-11-14-knowledge-reliability.md` | Specified implementation milestone and acceptance criteria |\n| this file | Task state, verified status, selected next work |
+| `docs/architecture/knowledge-reliability.md` | Current knowledge-pipeline audit and target architecture |
+| `docs/development/milestones/2026-11-22-krt-03-hybrid-retrieval-design.md` | KRT-03 retrieval design, sequence, and acceptance criteria |\n| `docs/development/milestones/2026-11-14-knowledge-reliability.md` | Specified implementation milestone and acceptance criteria |\n| this file | Task state, verified status, selected next work |
 
 Do not copy pipeline diagrams into every document. Link here or to the intelligence model.
 
@@ -71,6 +72,7 @@ An `IMPORTS` edge (`A imports B`) is a structural dependency. It does not, by it
 | Area | Status | Notes |
 |---|---|---|
 | KRT-02 code intelligence | VERIFIED | Tree-sitter declarations and persisted SCIP occurrences; Python, Go, and TypeScript integrations exercised separately. See `docs/development/milestones/2026-11-22-krt-02-code-intelligence.md`. |
+| KRT-03 hybrid retrieval | SPECIFIED | Design and evaluation plan recorded in `docs/development/milestones/2026-11-22-krt-03-hybrid-retrieval-design.md`; implementation not started. |
 | Reliability Batch 1 | ACCEPTED | Tenant/failure semantics hardened. Unchanged by this branch; not re-verified on 2026-09-21. |
 | Reliability Batch 2 | ACCEPTED | Redis pending-message recovery/ACK semantics hardened. Not re-verified on 2026-09-21. |
 | Reliability Batch 3 | ACCEPTED | Durable codebase-analysis lifecycle and failure propagation. Not re-verified on 2026-09-21. |
