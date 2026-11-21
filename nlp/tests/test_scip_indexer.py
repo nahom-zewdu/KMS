@@ -290,7 +290,7 @@ def test_real_scip_go_indexes_cross_file_definition_and_reference(tmp_path):
         pytest.skip("Go, scip-go, and scip CLI must all be installed")
 
     (tmp_path / "go.mod").write_text(
-        "module example.com/kms-scip-fixture\\n\\ngo 1.23\\n",
+        "module example.com/kms-scip-fixture\n\ngo 1.23\n",
         encoding="utf-8",
     )
     library = tmp_path / "library"
@@ -298,18 +298,18 @@ def test_real_scip_go_indexes_cross_file_definition_and_reference(tmp_path):
     library.mkdir()
     consumer.mkdir()
     (library / "normalize.go").write_text(
-        'package library\\n\\nimport "strings"\\n\\n'
-        'func NormalizeName(value string) string {\\n'
-        '    return strings.ToLower(strings.TrimSpace(value))\\n'
-        '}\\n',
+        'package library\n\nimport "strings"\n\n'
+        'func NormalizeName(value string) string {\n'
+        '    return strings.ToLower(strings.TrimSpace(value))\n'
+        '}\n',
         encoding="utf-8",
     )
     consumer_source = (
-        'package consumer\\n\\n'
-        'import "example.com/kms-scip-fixture/library"\\n\\n'
-        'func DisplayName(value string) string {\\n'
-        '    return library.NormalizeName(value)\\n'
-        '}\\n'
+        'package consumer\n\n'
+        'import "example.com/kms-scip-fixture/library"\n\n'
+        'func DisplayName(value string) string {\n'
+        '    return library.NormalizeName(value)\n'
+        '}\n'
     )
     (consumer / "display.go").write_text(consumer_source, encoding="utf-8")
 
