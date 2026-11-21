@@ -129,7 +129,7 @@ RETURNS integer
 LANGUAGE plpgsql
 SECURITY INVOKER
 SET search_path = pg_catalog, public
-AS $
+AS $$
 DECLARE
   v_status text;
   v_actual integer;
@@ -159,7 +159,7 @@ BEGIN
 
   RETURN v_actual;
 END;
-$;
+$$;
 
 REVOKE ALL ON FUNCTION public.refresh_snapshot_occurrence_validation(uuid,text)
   FROM PUBLIC, anon, authenticated;
