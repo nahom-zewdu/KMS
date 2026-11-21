@@ -68,6 +68,8 @@ An `IMPORTS` edge (`A imports B`) is a structural dependency. It does not, by it
 
 ## Current status
 
+| KRT-02 code intelligence | VERIFIED | Tree-sitter declarations and persisted SCIP occurrences; Python, Go, and TypeScript integrations exercised separately. See `docs/development/milestones/2026-11-22-krt-02-code-intelligence.md`. |
+
 | Area | Status | Notes |
 |---|---|---|
 | Reliability Batch 1 | ACCEPTED | Tenant/failure semantics hardened. Unchanged by this branch; not re-verified on 2026-09-21. |
@@ -705,3 +707,21 @@ Tests added in `nlp/tests/test_scip_indexer.py` cover deterministic normalizatio
 - The integration is intentionally excluded from the normal test suite; enable it with `KMS_SCIP_PYTHON_INTEGRATION=1`.
 - Installation and invocation instructions are documented in `nlp/README.md`.
 - The integration has **not yet been executed** in the developer's environment. Until it passes, the adapter has only fake-runner coverage.
+
+
+---
+
+## 2026-11-22 — KRT-02 close-out
+
+**Status: VERIFIED.** The implementation and local verification for KRT-02 are complete. The earlier dated KRT-02 notes below record the state at those checkpoints; statements that SCIP persistence, language integrations, or SQL verification were still outstanding are superseded by this close-out.
+
+- Tree-sitter declarations are extracted for Python, Go, JavaScript, TypeScript, and TSX and persisted with source-snapshot provenance.
+- SCIP definitions and occurrences are normalized, persisted separately, and retrievable within company, repository, and active-snapshot scope.
+- Database constraints and SQL integration tests cover ownership, revision matching, publication counts, idempotency, and published-row protection.
+- Real Python, Go, and TypeScript SCIP integrations were each exercised in opt-in runs.
+- User-reported full NLP suite: **245 passed, 3 skipped, 6 warnings, 4 subtests passed**. The three skips are opt-in SCIP integrations, which were run separately.
+- Local PostgreSQL 16 migration and occurrence persistence integration checks passed.
+
+The verification is local and does not claim a live Supabase deployment or production-data validation. The SCIP subprocess runner is bounded but is not an OS-level sandbox; untrusted repositories still require isolated workers with resource and network restrictions. SCIP indexing is not automatically enabled for every repository.
+
+**Next:** KRT-03 Hybrid Retrieval. Inspect existing text/vector stores and retrieval interfaces, then write the retrieval and evaluation design before implementation. Existing raw-event embeddings must not be mistaken for a source-code semantic index.
