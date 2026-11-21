@@ -207,7 +207,7 @@ def test_accepts_empty_half_open_occurrence_range(tmp_path):
 
 def test_normalizes_protobuf_typed_range_shape(tmp_path):
     """Accept SCIP CLI's capitalized protobuf JSON wrapper and range fields."""
-    source = b"package library\\n\\nfunc NormalizeName(value string) string { return value }\\n"
+    source = b"package library\n\nfunc NormalizeName(value string) string { return value }\n"
     (tmp_path / "library").mkdir()
     (tmp_path / "library" / "normalize.go").write_bytes(source)
     index = _index(
