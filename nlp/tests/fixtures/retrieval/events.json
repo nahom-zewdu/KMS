@@ -1,0 +1,20 @@
+[
+  {
+    "company_id": "company-a",
+    "source": "github",
+    "record_id": "pull/42",
+    "content": "PR 42 added retry handling to the payment service."
+  },
+  {
+    "company_id": "company-a",
+    "source": "slack",
+    "record_id": "slack/88",
+    "content": "The team agreed to record only successful payments in the ledger."
+  },
+  {
+    "company_id": "company-b",
+    "source": "github",
+    "record_id": "pull/42",
+    "content": "A different tenant's pull request changed billing."
+  }
+]
