@@ -12,6 +12,7 @@ import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
 import subprocess
 import tempfile
+import shutil
 import time
 from dataclasses import dataclass
 from typing import Any, Sequence
@@ -279,7 +280,7 @@ class ScipIndexRunner:
                 if not has_explicit_output:
                     if not default_output_path.is_file() or default_output_path.is_symlink():
                         raise ScipJobError("missing_output", "SCIP indexer did not produce the expected index file")
-                    os.replace(default_output_path, output_path)
+                    shutil.move(str(default_output_path), str(output_path))
                 if not output_path.is_file() or output_path.is_symlink():
                     raise ScipJobError("missing_output", "SCIP indexer did not produce the expected index file")
                 if output_path.stat().st_size > self.max_index_bytes:
