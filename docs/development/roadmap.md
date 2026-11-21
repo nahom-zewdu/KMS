@@ -6,7 +6,7 @@
 > Current Ramp runtime: `docs/architecture/ramp.md`.
 > Scoring spec vs implemented subset: `docs/product/ramp-candidate-scoring.md`.
 
-**Last updated:** 2026-11-19
+**Last updated:** 2026-11-22
 **Current branch:** `feat/krt-02-code-intelligence`
 **Current milestone:** KRT — Knowledge Reliability & Trust
 **Current objective:** Prove that Ramp can move a new engineer from unfamiliarity to useful, safe contribution faster than normal onboarding.
