@@ -89,6 +89,7 @@ class EvidenceCandidate:
                 "company_id": self.company_id,
                 "repository_id": self.repository_id,
                 "snapshot_id": self.snapshot_id,
+                "source_revision": self.source_revision,
                 "file_path": self.file_path,
                 "start_line": self.start_line,
                 "end_line": self.end_line,
