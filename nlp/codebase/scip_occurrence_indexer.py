@@ -76,6 +76,13 @@ class ScipOccurrenceIndexer:
                 on_conflict="snapshot_id,occurrence_id",
             ).execute()
 
+        # Refresh from the database rather than this batch's input count: multiple
+        # language-specific SCIP jobs may contribute to the same snapshot.
+        self.supabase.rpc(
+            "refresh_snapshot_occurrence_validation",
+            {"p_snapshot_id": snapshot_id, "p_company_id": company_id},
+        ).execute()
+
         return {
             "occurrences_seen": len(rows),
             "occurrences_persisted": len(rows),
