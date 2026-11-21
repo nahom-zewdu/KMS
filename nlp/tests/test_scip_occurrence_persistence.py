@@ -1,7 +1,5 @@
 """Tests for snapshot-scoped SCIP occurrence persistence and retrieval."""
 
-from types import SimpleNamespace
-
 import pytest
 
 from codebase.scip_indexer import ScipIndex, ScipOccurrence
@@ -33,6 +31,10 @@ class FakeQuery:
 
     def order(self, key):
         self.orders.append(key)
+        return self
+
+    def in_(self, key, values):
+        self.filters[key] = values
         return self
 
     def limit(self, value):
@@ -200,3 +202,20 @@ def test_retriever_returns_empty_when_repository_has_no_active_snapshot():
     )
     assert rows == []
     assert len(client.calls) == 1
+
+
+def test_retriever_treats_non_definition_scip_occurrences_as_references():
+    client = FakeSupabase({
+        "repositories": [{"active_snapshot_id": "snapshot-current"}],
+        "code_symbol_occurrences": [
+            {"symbol": "scip-symbol", "role": "reference"},
+            {"symbol": "scip-symbol", "role": "occurrence"},
+        ],
+    })
+    rows = ScipOccurrenceRetriever(client).find_references(
+        company_id="company-a",
+        repository_id="repo-1",
+        symbol="scip-symbol",
+    )
+    assert len(rows) == 2
+    assert client.calls[1].filters["role"] == ["reference", "occurrence"]
