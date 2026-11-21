@@ -126,3 +126,6 @@ def _validate_scope(
         expected_snapshot = scope.get("snapshot_id")
         if expected_snapshot and candidate.snapshot_id != expected_snapshot:
             raise ValueError(f"{query_id}: candidate crossed snapshot scope")
+        expected_revision = scope.get("source_revision")
+        if expected_revision and candidate.source_revision != expected_revision:
+            raise ValueError(f"{query_id}: candidate crossed source revision")
