@@ -205,7 +205,203 @@ def test_accepts_empty_half_open_occurrence_range(tmp_path):
     assert result.occurrences[0].start_byte == result.occurrences[0].end_byte == 0
 
 
+def test_normalizes_protobuf_typed_range_shape(tmp_path):
+    """Accept SCIP CLI's capitalized protobuf JSON wrapper and range fields."""
+    source = b"package library\\n\\nfunc NormalizeName(value string) string { return value }\\n"
+    (tmp_path / "library").mkdir()
+    (tmp_path / "library" / "normalize.go").write_bytes(source)
+    index = _index(
+        tmp_path,
+        relative_path="library/normalize.go",
+        occurrences=[
+            {
+                "TypedRange": {
+                    "SingleLineRange": {
+                        "line": 2,
+                        "start_character": 5,
+                        "end_character": 18,
+                    }
+                },
+                "symbol": "scip-go gomod fixture . `library`/NormalizeName().",
+                "symbol_roles": 1,
+            }
+        ],
+    )
+    index["documents"][0]["position_encoding"] = 1
+    result = normalize_scip_index(index, repository_root=tmp_path, source_revision="go-fixture")
+    occurrence = result.occurrences[0]
+    assert occurrence.role == "definition"
+    assert source[occurrence.start_byte:occurrence.end_byte] == b"NormalizeName"
+
+
 def test_rejects_non_utf8_document_encoding(tmp_path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "main.py").write_text("foo", encoding="utf-8")
+    index = _index(tmp_path, occurrences=[])
+    index["metadata"]["textDocumentEncoding"] = 2
+    with pytest.raises(ScipJobError, match="UTF-8"):
+        normalize_scip_index(index, repository_root=tmp_path, source_revision="rev")
+
+
+
+def test_runner_executes_configured_indexer_and_scip_decoder(tmp_path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "main.py").write_text("foo\nfoo\n", encoding="utf-8")
+    indexer_script = tmp_path / "fake_indexer.py"
+    indexer_script.write_text(
+        "from pathlib import Path\n"
+        "import sys\n"
+        "Path('index.scip').write_bytes(b'fake-scip-index')\n",
+        encoding="utf-8",
+    )
+    decoder_script = tmp_path / "fake_scip.py"
+    index_json = json.dumps(_index(tmp_path)).replace("\\", "\\\\")
+    decoder_script.write_text(
+        "import json\n"
+        "print(json.dumps(json.loads(" + repr(index_json) + ")))\n",
+        encoding="utf-8",
+    )
+
+    runner = ScipIndexRunner(
+        indexer_argv=(sys.executable, str(indexer_script)),
+        indexer_name="test-indexer",
+        scip_cli_argv=(sys.executable, str(decoder_script)),
+        timeout_seconds=5,
+        max_index_bytes=1024,
+        max_json_bytes=4096,
+    )
+    result = runner.run(repository_root=tmp_path, source_revision="pinned-revision")
+    assert result.indexer_name == "test-indexer"
+    assert [item.role for item in result.occurrences] == ["definition", "reference"]
+
+
+
+
+
+@pytest.mark.skipif(
+    os.getenv("KMS_SCIP_GO_INTEGRATION") != "1",
+    reason="set KMS_SCIP_GO_INTEGRATION=1 to run the real scip-go integration",
+)
+def test_real_scip_go_indexes_cross_file_definition_and_reference(tmp_path):
+    """Verify real Go SCIP output links a cross-package call to its definition."""
+    scip_go = shutil.which("scip-go")
+    scip_cli = shutil.which("scip")
+    if not scip_go or not scip_cli or not shutil.which("go"):
+        pytest.skip("Go, scip-go, and scip CLI must all be installed")
+
+    (tmp_path / "go.mod").write_text(
+        "module example.com/kms-scip-fixture\\n\\ngo 1.23\\n",
+        encoding="utf-8",
+    )
+    library = tmp_path / "library"
+    consumer = tmp_path / "consumer"
+    library.mkdir()
+    consumer.mkdir()
+    (library / "normalize.go").write_text(
+        'package library\\n\\nimport "strings"\\n\\n'
+        'func NormalizeName(value string) string {\\n'
+        '    return strings.ToLower(strings.TrimSpace(value))\\n'
+        '}\\n',
+        encoding="utf-8",
+    )
+    consumer_source = (
+        'package consumer\\n\\n'
+        'import "example.com/kms-scip-fixture/library"\\n\\n'
+        'func DisplayName(value string) string {\\n'
+        '    return library.NormalizeName(value)\\n'
+        '}\\n'
+    )
+    (consumer / "display.go").write_text(consumer_source, encoding="utf-8")
+
+    runner = ScipIndexRunner(
+        indexer_argv=(scip_go,),
+        indexer_name="scip-go",
+        scip_cli_argv=(scip_cli,),
+        timeout_seconds=180,
+        max_index_bytes=32 * 1024 * 1024,
+        max_json_bytes=64 * 1024 * 1024,
+    )
+    result = runner.run(repository_root=tmp_path, source_revision="go-fixture-revision")
+
+    matching = [
+        item for item in result.occurrences
+        if item.symbol.endswith("/NormalizeName().")
+    ]
+    definitions = [
+        item for item in matching
+        if item.role == "definition" and item.file_path == "library/normalize.go"
+    ]
+    references = [
+        item for item in matching
+        if item.role == "reference" and item.file_path == "consumer/display.go"
+    ]
+    assert definitions, "SCIP output did not contain NormalizeName's definition"
+    assert references, "SCIP output did not link the cross-package call to NormalizeName"
+    assert definitions[0].symbol == references[0].symbol
+
+    for occurrence in (definitions[0], references[0]):
+        source = (tmp_path / occurrence.file_path).read_bytes()
+        assert source[occurrence.start_byte:occurrence.end_byte] == b"NormalizeName"
+
+
+@pytest.mark.skipif(
+    os.getenv("KMS_SCIP_PYTHON_INTEGRATION") != "1",
+    reason="set KMS_SCIP_PYTHON_INTEGRATION=1 to run the real scip-python integration",
+)
+def test_real_scip_python_indexes_cross_file_definition_and_reference(tmp_path):
+    """Verify real SCIP output links a Python call to its cross-file definition."""
+    scip_python = shutil.which("scip-python")
+    scip_cli = shutil.which("scip")
+    if not scip_python or not scip_cli:
+        pytest.skip("scip-python and scip CLI must both be installed")
+
+    package = tmp_path / "src"
+    package.mkdir()
+    (package / "library.py").write_text(
+        "def normalize_name(value: str) -> str:\\n"
+        "    return value.strip().lower()\\n",
+        encoding="utf-8",
+    )
+    (package / "consumer.py").write_text(
+        "from library import normalize_name\\n"
+        "def display_name(value: str) -> str:\\n"
+        "    return normalize_name(value)\\n",
+        encoding="utf-8",
+    )
+
+    runner = ScipIndexRunner(
+        indexer_argv=(
+            scip_python,
+            "index",
+            "{repository_root}",
+            "--project-name=kms-scip-fixture",
+            "--project-version=0.0.0",
+        ),
+        indexer_name="scip-python",
+        scip_cli_argv=(scip_cli,),
+        timeout_seconds=180,
+        max_index_bytes=32 * 1024 * 1024,
+        max_json_bytes=64 * 1024 * 1024,
+        # SCIP's Python guidance specifies UTF-32 code-point offsets. scip-python
+        # 0.6.8 omits this field, so make that compatibility assumption explicit.
+        position_encoding_override=3,
+    )
+    result = runner.run(repository_root=tmp_path, source_revision="fixture-revision")
+
+    matching = [
+        item for item in result.occurrences
+        if item.symbol.endswith("normalize_name().")
+    ]
+    definitions = [item for item in matching if item.role == "definition"]
+    references = [
+        item for item in matching
+        if item.role in {"reference", "occurrence"}
+        and item.file_path == "src/consumer.py"
+    ]
+    assert definitions, "SCIP output did not contain normalize_name's definition"
+    assert references, "SCIP output did not link the cross-file call to normalize_name"
+    assert definitions[0].symbol == references[0].symbol
+
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "main.py").write_text("foo", encoding="utf-8")
     index = _index(tmp_path, occurrences=[])
