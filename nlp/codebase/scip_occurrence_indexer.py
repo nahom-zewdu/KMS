@@ -69,6 +69,16 @@ class ScipOccurrenceIndexer:
                 **occurrence.to_dict(),
             })
 
+        if not rows:
+            return {
+                "occurrences_seen": 0,
+                "occurrences_persisted": 0,
+                "definitions": 0,
+                "references": 0,
+                "other_occurrences": 0,
+                "files_with_occurrences": 0,
+            }
+
         for offset in range(0, len(rows), self.batch_size):
             batch = rows[offset:offset + self.batch_size]
             self.supabase.table("code_symbol_occurrences").upsert(
