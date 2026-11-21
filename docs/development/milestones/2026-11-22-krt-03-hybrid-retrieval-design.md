@@ -1,6 +1,6 @@
 # KRT-03 — Hybrid Retrieval Design
 
-**Status:** IN_PROGRESS — first evidence/lexical slice locally verified; benchmark runner and measured baseline next  
+**Status:** IN_PROGRESS — first evidence/lexical slice locally verified; lexical metric harness added, integration baseline pending  
 **Date:** 2026-11-22  
 **Working branch:** `feat/krt-03-hybrid-retrieval`  
 **Base branch:** `feat/ramp`  
@@ -155,6 +155,9 @@ Added:
 - `nlp/tests/test_retrieval_benchmark_fixture.py`: checks that benchmark expectations resolve to fixture files, symbols, and tenant-owned event records.
 - `nlp/query_engine/code_lexical.py`: adds a first lexical adapter over active-snapshot declarations. It prioritizes exact qualified-name matches, then exact file-path declarations, then identifier matches; deduplicates by stable evidence ID and retains the match modes.
 - `nlp/tests/test_code_lexical_retriever.py`: covers scope forwarding, deduplication, ranking, provenance, and invalid tenant rejection.
+- `nlp/query_engine/lexical_benchmark.py`: adds a reusable evaluator for Recall@1/5/10 and MRR, with hard company/repository/snapshot leakage checks.
+- Eight fixture queries now declare explicit lexical inputs. The other twelve remain unsupported by this lexical slice and are not counted as misses.
+- `nlp/tests/test_lexical_benchmark.py`: covers metric calculation, late/missing relevant evidence, invalid cutoffs, and company/repository/snapshot leakage.
 
 **Local verification — developer-reported, 2026-11-22:**
 
@@ -167,4 +170,4 @@ This verifies the current slice's tests, not retrieval quality. The benchmark re
 
 ### Next bounded implementation
 
-Implement a deterministic benchmark runner over the existing fixture and lexical retriever. Measure exact-path and symbol retrieval with Recall@k and MRR, preserve tenant/repository scope in every query, and test that out-of-scope fixtures never appear. Report unsupported question classes as unsupported rather than counting them as retrieval failures or silently skipping them. Do not add source chunks or embeddings until this lexical baseline is measurable.
+Run the evaluator against an indexed copy of the synthetic repository using the real `CodeLexicalRetriever`. The current tests validate the evaluator with controlled candidates; they do **not** establish a retrieval baseline. The integration run must prove that fixture declarations are indexed under the declared company/repository/snapshot IDs, then record Recall@1/5/10, MRR, and zero scope leakage. If fixture indexing cannot reproduce the declared snapshot identity cleanly, fix the fixture/indexing boundary rather than weakening provenance checks. Do not add source chunks or embeddings until this lexical baseline is measured.
