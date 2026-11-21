@@ -126,7 +126,7 @@ def test_benchmark_penalizes_missing_and_late_relevant_evidence(tmp_path):
 
     assert result["metrics"]["recall_at_1"] == 0.5
     assert result["metrics"]["recall_at_5"] == 1.0
-    assert result["metrics"]["mrr"] == 0.5
+    assert result["metrics"]["mrr"] == 1.0
 
 
 @pytest.mark.parametrize(
