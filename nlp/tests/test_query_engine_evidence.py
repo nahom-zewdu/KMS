@@ -57,6 +57,7 @@ def test_code_evidence_identity_is_stable_for_same_source_range():
         {"company_id": "company-b"},
         {"repository_id": "repo-b"},
         {"snapshot_id": "snapshot-b"},
+        {"source_revision": "d" * 40},
         {"file_path": "src/other.py"},
         {"start_byte": 121, "end_byte": 139},
         {"content_hash": "c" * 64},
