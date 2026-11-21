@@ -10,7 +10,6 @@ DECLARE
   v_repo uuid := gen_random_uuid();
   v_run uuid := gen_random_uuid();
   v_snapshot uuid := gen_random_uuid();
-  v_occurrence uuid := gen_random_uuid();
   v_count integer;
 BEGIN
   INSERT INTO public.companies (id, name)
@@ -107,9 +106,9 @@ BEGIN
   EXCEPTION WHEN check_violation THEN NULL;
   END;
 
-  UPDATE public.repository_snapshots
-  SET occurrence_count = 1
-  WHERE id = v_snapshot;
+  IF public.refresh_snapshot_occurrence_validation(v_snapshot, v_company) <> 1 THEN
+    RAISE EXCEPTION 'occurrence coverage refresh returned an incorrect count';
+  END IF;
 
   UPDATE public.repository_snapshots
   SET status = 'published'
