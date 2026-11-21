@@ -1,9 +1,9 @@
 # KMS Knowledge Pipeline — Current State and Target Architecture
 
-**Status:** Architecture audit / target direction  
-**Reviewed:** 2026-11-14  
-**Repository baseline:** `feat/implementation-relations`  
-**Implementation status:** No KRT implementation has started  
+**Status:** Current architecture audit / target direction  
+**Reviewed:** 2026-11-22  
+**Repository baseline:** `feat/ramp`  
+**Implementation status:** KRT-00 through KRT-02 are implemented and locally verified; KRT-03 design is specified. Production rollout and live Supabase validation are separate.  
 **Milestone specification:** `docs/development/milestones/2026-11-14-knowledge-reliability.md`
 
 ## 1. Purpose and scope
@@ -33,11 +33,11 @@ GitHub baseline sync separately enumerates repository files and records reposito
 
 The current Postgres knowledge model includes raw source/event records (`events`, `raw_data`), extracted entities and relationships (`entities`, `edges`), repository and source inventory (`repositories`, `codebase_files`, `codebase_modules`), product artifacts such as `ramp_plans`, and vector embeddings on raw event records.
 
-The previous live data audit reported 235 indexed files, 96 modules, 406 entities, 600 edges, and 140 raw records (139 embedded). These are point-in-time figures, not current counters. Indexed file rows are metadata, not a durable, revisioned source-code chunk store. Source text is fetched from GitHub on demand by the bounded source retriever.
+The previous live data audit reported 235 indexed files, 96 modules, 406 entities, 600 edges, and 140 raw records (139 embedded). These are point-in-time figures, not current counters. Indexed file rows remain inventory metadata, not a durable, revisioned source-code chunk store. Source text is still fetched from GitHub on demand by the bounded source retriever. KRT-01 adds immutable repository snapshots and KRT-02 adds snapshot-scoped declarations and SCIP occurrences; neither is a persisted source-chunk index.
 
 ### 3.3 Analysis
 
-Current analysis includes entity/relation extraction from events, embeddings for raw records, file/module inventory, and Python/Go import extraction. Ramp's Go route/handler/direct-operation evidence extractors provide narrow source-level evidence, but they are read-only and not integrated into the durable index.
+Current analysis includes entity/relation extraction from events, embeddings for raw records, file/module inventory, Python/Go import extraction, Tree-sitter declarations for Python/Go/JavaScript/TypeScript/TSX, and separately persisted SCIP definitions/references for supported indexer runs. The declaration and occurrence records are tied to immutable snapshots. Ramp's Go route/handler/direct-operation evidence extractors remain narrow and read-only.
 
 A structural import is not a runtime trace. A direct call to an interface method is not proof of its concrete implementation or runtime dispatch. Evidence types must retain these distinctions.
 
@@ -51,7 +51,7 @@ Current query handling consists of several partially separate paths:
 - bounded source-file retrieval that heuristically selects indexed paths and fetches source from GitHub;
 - LLM answer synthesis.
 
-There is no single typed query planner routing structured, code, graph, historical, and conversational questions through a coherent retrieval plan. There is no unified lexical + vector + graph candidate fusion or consistently validated claim-level citation pipeline.
+There is no single typed query planner routing structured, code, graph, historical, and conversational questions through a coherent retrieval plan. There is no unified lexical + vector + graph candidate fusion or consistently validated claim-level citation pipeline. KRT-03 is specified to add snapshot-pinned source chunks, lexical retrieval, code embeddings, and rank fusion; implementation has not started.
 
 Adding RAG alone is insufficient: KMS first needs reliable source data, tenant filters, query intent, and the correct retrieval method for each question.
 
@@ -60,10 +60,10 @@ Adding RAG alone is insufficient: KMS first needs reliable source data, tenant f
 | Layer | Current limitation | Consequence |
 |---|---|---|
 | Collection | Baseline lifecycle and webhook events are separate paths; reconciliation/deletion semantics need verification | Stale or missing source state can persist |
-| Source storage | No durable code-chunk snapshot index | Source retrieval depends on live GitHub access and bounded file selection |
-| Code analysis | Imports are the main persisted implementation relation | Dependencies can be mistaken for behavior if labels overstate evidence |
-| Language coverage | Persisted import extraction is Python/Go; Go route/call evidence is narrow and read-only | Frontend TypeScript/TSX and broader symbol relationships are absent |
-| Retrieval | Event embeddings are not code embeddings | Semantic search cannot reliably find relevant source-code passages |
+| Source storage | No durable code-chunk snapshot index yet | Source retrieval depends on live GitHub access and bounded file selection |
+| Code analysis | Snapshot-scoped declarations and SCIP references now complement imports | Structural references are not runtime behavior or a complete call graph |
+| Language coverage | Tree-sitter declarations cover Python/Go/JavaScript/TypeScript/TSX; real SCIP integrations exercised for Python/Go/TypeScript | Coverage is not complete; SCIP is not automatically enabled for every repository |
+| Retrieval | Event embeddings exist; source chunks and code embeddings do not | Semantic search cannot reliably find relevant source-code passages |
 | Query routing | Structured facts, graph, vectors, and source retrieval are disconnected | Wrong tool, wrong scope, or generic answer |
 | Ranking | No evaluated hybrid fusion/reranker pipeline | Relevant evidence may be missed or ranked poorly |
 | Synthesis | Citation and claim support are not consistently validated | Unsupported answers can appear more certain than evidence warrants |
@@ -155,15 +155,7 @@ The LLM explains retrieved facts, not invent them. Validate each factual claim a
 
 ## 6. Security and tenant isolation
 
-A read-only live Supabase audit reported:
-- RLS disabled on `raw_data`, `edges`, `repositories`, `codebase_files`, `codebase_modules`, and `events`;
-- broad grants to `anon` and `authenticated` on those tables;
-- permissive `entities` policies using `USING (true)`;
-- `match_documents` permits an omitted company filter;
-- `search_edges_by_entity` lacks a company filter and its deployed signature does not match the Python caller's company-scoped invocation;
-- both RPCs were executable by `anon` and `authenticated`.
-
-This is a potential cross-tenant exposure, not evidence of an actual unauthorized read. Re-run the audit before changes. Verify Data API exposure, role privileges, function security mode/search path, and actual frontend/server/service-role access.
+A read-only live Supabase audit on 2026-11-14 reported potential tenant-boundary exposure in several tables and RPCs. KRT-00 subsequently added company isolation, RLS/grant hardening, and scoped RPC contracts, and its changes were merged into `feat/ramp`. The migration and disposable-PostgreSQL checks were verified locally; this does **not** establish that the live Supabase project has been migrated or that production grants/Data API exposure have been re-audited. Before broad customer exposure, verify the deployed schema, role privileges, function security mode/search path, and actual frontend/server/service-role access.
 
 Tenant scope must be enforced in database policies and RPC contracts, not merely in UI filters or optional application parameters.
 
@@ -183,7 +175,7 @@ See `docs/development/milestones/2026-11-14-knowledge-reliability.md`:
 5. KRT-04 — typed query planning and grounded synthesis;
 6. KRT-05 — evaluation and observability.
 
-KRT-00 is the only first implementation batch. Do not begin code chunk embeddings or retrieval redesign before the security gate is accepted.
+KRT-00, KRT-01, and KRT-02 are complete and locally verified. KRT-03 is specified in `docs/development/milestones/2026-11-22-krt-03-hybrid-retrieval-design.md`; its implementation begins with the evidence contract, fixtures, and lexical retrieval—not embeddings first. Do not treat local migration tests as live Supabase deployment verification.
 
 ## 9. Related documentation
 
