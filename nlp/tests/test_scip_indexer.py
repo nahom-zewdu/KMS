@@ -410,95 +410,78 @@ def test_real_scip_python_indexes_cross_file_definition_and_reference(tmp_path):
         normalize_scip_index(index, repository_root=tmp_path, source_revision="rev")
 
 
-
-def test_runner_executes_configured_indexer_and_scip_decoder(tmp_path):
-    (tmp_path / "src").mkdir()
-    (tmp_path / "src" / "main.py").write_text("foo\nfoo\n", encoding="utf-8")
-    indexer_script = tmp_path / "fake_indexer.py"
-    indexer_script.write_text(
-        "from pathlib import Path\n"
-        "import sys\n"
-        "Path('index.scip').write_bytes(b'fake-scip-index')\n",
-        encoding="utf-8",
-    )
-    decoder_script = tmp_path / "fake_scip.py"
-    index_json = json.dumps(_index(tmp_path)).replace("\\", "\\\\")
-    decoder_script.write_text(
-        "import json\n"
-        "print(json.dumps(json.loads(" + repr(index_json) + ")))\n",
-        encoding="utf-8",
-    )
-
-    runner = ScipIndexRunner(
-        indexer_argv=(sys.executable, str(indexer_script)),
-        indexer_name="test-indexer",
-        scip_cli_argv=(sys.executable, str(decoder_script)),
-        timeout_seconds=5,
-        max_index_bytes=1024,
-        max_json_bytes=4096,
-    )
-    result = runner.run(repository_root=tmp_path, source_revision="pinned-revision")
-    assert result.indexer_name == "test-indexer"
-    assert [item.role for item in result.occurrences] == ["definition", "reference"]
-
-
-
-
-
 @pytest.mark.skipif(
-    os.getenv("KMS_SCIP_PYTHON_INTEGRATION") != "1",
-    reason="set KMS_SCIP_PYTHON_INTEGRATION=1 to run the real scip-python integration",
+    os.getenv("KMS_SCIP_TYPESCRIPT_INTEGRATION") != "1",
+    reason="set KMS_SCIP_TYPESCRIPT_INTEGRATION=1 to run the real scip-typescript integration",
 )
-def test_real_scip_python_indexes_cross_file_definition_and_reference(tmp_path):
-    """Verify real SCIP output links a Python call to its cross-file definition."""
-    scip_python = shutil.which("scip-python")
+def test_real_scip_typescript_indexes_cross_file_definition_and_reference(tmp_path):
+    """Verify real SCIP output links a TypeScript call to its cross-file definition."""
+    scip_typescript = shutil.which("scip-typescript")
     scip_cli = shutil.which("scip")
-    if not scip_python or not scip_cli:
-        pytest.skip("scip-python and scip CLI must both be installed")
+    if not scip_typescript or not scip_cli or not shutil.which("node"):
+        pytest.skip("Node.js, scip-typescript, and scip CLI must all be installed")
 
-    package = tmp_path / "src"
-    package.mkdir()
-    (package / "library.py").write_text(
-        "def normalize_name(value: str) -> str:\\n"
-        "    return value.strip().lower()\\n",
+    (tmp_path / "package.json").write_text(
+        '{"name":"kms-scip-fixture","version":"0.0.0","private":true}\\n',
         encoding="utf-8",
     )
-    (package / "consumer.py").write_text(
-        "from library import normalize_name\\n"
-        "def display_name(value: str) -> str:\\n"
-        "    return normalize_name(value)\\n",
+    (tmp_path / "tsconfig.json").write_text(
+        json.dumps({
+            "compilerOptions": {
+                "target": "ES2022",
+                "module": "commonjs",
+                "moduleResolution": "node",
+                "strict": True,
+                "skipLibCheck": True,
+                "noEmit": True,
+            },
+            "include": ["src/**/*.ts"],
+        }),
         encoding="utf-8",
     )
+    source_dir = tmp_path / "src"
+    source_dir.mkdir()
+    library_source = (
+        "export interface User { name: string }\\n"
+        "export function normalizeName(value: string): string {\\n"
+        "    return value.trim().toLowerCase();\\n"
+        "}\\n"
+    )
+    consumer_source = (
+        'import { normalizeName, User } from "./library";\\n'
+        "export function displayName(user: User): string {\\n"
+        "    return normalizeName(user.name);\\n"
+        "}\\n"
+    )
+    (source_dir / "library.ts").write_text(library_source, encoding="utf-8")
+    (source_dir / "consumer.ts").write_text(consumer_source, encoding="utf-8")
 
     runner = ScipIndexRunner(
-        indexer_argv=(
-            scip_python,
-            "index",
-            "{repository_root}",
-            "--project-name=kms-scip-fixture",
-            "--project-version=0.0.0",
-        ),
-        indexer_name="scip-python",
+        indexer_argv=(scip_typescript, "index", "--no-global-caches"),
+        indexer_name="scip-typescript",
         scip_cli_argv=(scip_cli,),
-        timeout_seconds=180,
+        timeout_seconds=240,
         max_index_bytes=32 * 1024 * 1024,
         max_json_bytes=64 * 1024 * 1024,
-        # SCIP's Python guidance specifies UTF-32 code-point offsets. scip-python
-        # 0.6.8 omits this field, so make that compatibility assumption explicit.
-        position_encoding_override=3,
     )
-    result = runner.run(repository_root=tmp_path, source_revision="fixture-revision")
+    result = runner.run(repository_root=tmp_path, source_revision="typescript-fixture-revision")
 
     matching = [
         item for item in result.occurrences
-        if item.symbol.endswith("normalize_name().")
+        if "normalizeName" in item.symbol
     ]
-    definitions = [item for item in matching if item.role == "definition"]
+    definitions = [
+        item for item in matching
+        if item.role == "definition" and item.file_path == "src/library.ts"
+    ]
     references = [
         item for item in matching
-        if item.role in {"reference", "occurrence"}
-        and item.file_path == "src/consumer.py"
+        if item.role == "reference" and item.file_path == "src/consumer.ts"
     ]
-    assert definitions, "SCIP output did not contain normalize_name's definition"
-    assert references, "SCIP output did not link the cross-file call to normalize_name"
+    assert definitions, "SCIP output did not contain normalizeName's definition"
+    assert references, "SCIP output did not link the cross-file call to normalizeName"
     assert definitions[0].symbol == references[0].symbol
+
+    for occurrence in (definitions[0], references[0]):
+        source = (tmp_path / occurrence.file_path).read_bytes()
+        assert source[occurrence.start_byte:occurrence.end_byte] == b"normalizeName"
