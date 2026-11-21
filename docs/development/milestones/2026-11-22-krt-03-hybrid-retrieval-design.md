@@ -1,6 +1,6 @@
 # KRT-03 — Hybrid Retrieval Design
 
-**Status:** IN_PROGRESS — evidence contract and benchmark fixture added; local verification pending  
+**Status:** IN_PROGRESS — evidence contract, benchmark fixture, and lexical symbol retrieval added; local verification pending  
 **Date:** 2026-11-22  
 **Base branch:** `feat/ramp`  
 **Prerequisite:** KRT-00, KRT-01, and KRT-02 completed  
@@ -87,7 +87,7 @@ Event retrieval remains company-scoped. Graph retrieval remains company-scoped. 
 1. **Evidence contract and fixtures**
    - Define the shared candidate shape and stable identity rules.
    - Create a small repository fixture with known paths, declarations, references, and source ranges.
-   - Create a small query set with expected evidence IDs/ranges.
+   - Create a small query set with expected paths, symbols, and event IDs. Add exact evidence IDs/ranges when the indexer-backed benchmark runner is implemented.
 
 2. **Lexical source retrieval**
    - Add exact path, qualified-name, and identifier lookup using existing snapshot metadata.
