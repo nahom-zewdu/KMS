@@ -143,6 +143,34 @@ def test_rejects_unknown_position_encoding(tmp_path):
         normalize_scip_index(index, repository_root=tmp_path, source_revision="rev")
 
 
+def test_rejects_unspecified_position_encoding_without_explicit_override(tmp_path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "main.py").write_text("éx\\n", encoding="utf-8")
+    index = _index(tmp_path, occurrences=[
+        {"range": [0, 1, 0, 2], "symbol": "x", "symbolRoles": 1},
+    ])
+    index["documents"][0]["positionEncoding"] = 0
+    with pytest.raises(ScipJobError, match="unspecified"):
+        normalize_scip_index(index, repository_root=tmp_path, source_revision="rev")
+
+
+def test_uses_explicit_utf32_override_for_unspecified_position_encoding(tmp_path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "main.py").write_text("éx\\n", encoding="utf-8")
+    index = _index(tmp_path, occurrences=[
+        {"range": [0, 1, 0, 2], "symbol": "x", "symbolRoles": 1},
+    ])
+    index["documents"][0]["positionEncoding"] = 0
+    result = normalize_scip_index(
+        index,
+        repository_root=tmp_path,
+        source_revision="rev",
+        position_encoding_override=3,
+    )
+    assert result.occurrences[0].start_byte == 2
+    assert result.occurrences[0].end_byte == 3
+
+
 def test_rejects_missing_source_revision(tmp_path):
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "main.py").write_text("foo", encoding="utf-8")
@@ -259,6 +287,9 @@ def test_real_scip_python_indexes_cross_file_definition_and_reference(tmp_path):
         timeout_seconds=180,
         max_index_bytes=32 * 1024 * 1024,
         max_json_bytes=64 * 1024 * 1024,
+        # SCIP's Python guidance specifies UTF-32 code-point offsets. scip-python
+        # 0.6.8 omits this field, so make that compatibility assumption explicit.
+        position_encoding_override=3,
     )
     result = runner.run(repository_root=tmp_path, source_revision="fixture-revision")
 
