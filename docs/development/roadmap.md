@@ -7,7 +7,7 @@
 > Scoring spec vs implemented subset: `docs/product/ramp-candidate-scoring.md`.
 
 **Last updated:** 2026-11-22
-**Current branch:** `feat/ramp`
+**Current branch:** `feat/krt-03-hybrid-retrieval`
 **Current milestone:** KRT-03 — Hybrid Retrieval
 **Current objective:** Build a scoped, evaluated hybrid retrieval layer that returns relevant, revision-aware evidence for grounded KMS answers.
 
@@ -72,7 +72,7 @@ An `IMPORTS` edge (`A imports B`) is a structural dependency. It does not, by it
 | Area | Status | Notes |
 |---|---|---|
 | KRT-02 code intelligence | VERIFIED | Tree-sitter declarations and persisted SCIP occurrences; Python, Go, and TypeScript integrations exercised separately. See `docs/development/milestones/2026-11-22-krt-02-code-intelligence.md`. |
-| KRT-03 hybrid retrieval | IN_PROGRESS | Shared evidence contract, 20-query synthetic benchmark, and active-snapshot lexical symbol retriever added; local verification pending. See the KRT-03 design note. |
+| KRT-03 hybrid retrieval | IN_PROGRESS | Evidence contract, 20-query fixture, and active-snapshot lexical symbol retriever pass focused and full local NLP tests (29 focused; 274 passed, 3 skipped). Benchmark runner and measured retrieval baseline are next. See the KRT-03 design note. |
 | Reliability Batch 1 | ACCEPTED | Tenant/failure semantics hardened. Unchanged by this branch; not re-verified on 2026-09-21. |
 | Reliability Batch 2 | ACCEPTED | Redis pending-message recovery/ACK semantics hardened. Not re-verified on 2026-09-21. |
 | Reliability Batch 3 | ACCEPTED | Durable codebase-analysis lifecycle and failure propagation. Not re-verified on 2026-09-21. |
@@ -725,4 +725,4 @@ Tests added in `nlp/tests/test_scip_indexer.py` cover deterministic normalizatio
 
 The verification is local and does not claim a live Supabase deployment or production-data validation. The SCIP subprocess runner is bounded but is not an OS-level sandbox; untrusted repositories still require isolated workers with resource and network restrictions. SCIP indexing is not automatically enabled for every repository.
 
-**Next:** KRT-03 Hybrid Retrieval. Inspect existing text/vector stores and retrieval interfaces, then write the retrieval and evaluation design before implementation. Existing raw-event embeddings must not be mistaken for a source-code semantic index.
+**Next:** KRT-03 Hybrid Retrieval is underway on `feat/krt-03-hybrid-retrieval`. The first evidence/lexical slice is locally verified: 29 focused tests passed; full NLP suite: 274 passed, 3 skipped, 6 warnings, 4 subtests passed. Build a benchmark runner for exact-path and symbol retrieval before adding full-text chunks or code embeddings. Existing raw-event embeddings must not be mistaken for a source-code semantic index.
