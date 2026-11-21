@@ -113,12 +113,12 @@ def test_benchmark_reports_recall_mrr_and_unsupported_queries(tmp_path):
 def test_benchmark_penalizes_missing_and_late_relevant_evidence(tmp_path):
     retriever = FakeRetriever(
         [
+            _candidate(rank=1, qualified_name="PaymentService.validate"),
             _candidate(
-                rank=1,
+                rank=2,
                 path="src/payments/retry.py",
-                qualified_name="RetryPolicy.should_retry",
+                qualified_name="PaymentService.charge",
             ),
-            _candidate(rank=2),
         ]
     )
 
