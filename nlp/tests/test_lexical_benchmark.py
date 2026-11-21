@@ -16,6 +16,7 @@ def _candidate(
     company_id="company-a",
     repository_id="mini-repo-a",
     snapshot_id="mini-repo-a@fixture-v1",
+    source_revision="fixture-v1",
 ):
     return EvidenceCandidate(
         company_id=company_id,
@@ -27,7 +28,7 @@ def _candidate(
         rank=rank,
         repository_id=repository_id,
         snapshot_id=snapshot_id,
-        source_revision="fixture-v1",
+        source_revision=source_revision,
         file_path=path,
         content_hash="a" * 64,
         start_line=1,
@@ -135,6 +136,7 @@ def test_benchmark_penalizes_missing_and_late_relevant_evidence(tmp_path):
         (_candidate(company_id="company-b"), "company scope"),
         (_candidate(repository_id="mini-repo-b"), "repository scope"),
         (_candidate(snapshot_id="mini-repo-a@old"), "snapshot scope"),
+        (_candidate(source_revision="older-revision"), "source revision"),
     ],
 )
 def test_benchmark_fails_on_scope_leakage(tmp_path, candidate, message):
