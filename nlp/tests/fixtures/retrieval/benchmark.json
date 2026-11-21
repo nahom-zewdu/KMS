@@ -1,0 +1,204 @@
+{
+  "version": 1,
+  "description": "Small deterministic KRT-03 retrieval fixture. Expected paths/symbols are ground truth for the synthetic repository, not production claims.",
+  "default_scope": {
+    "company_id": "company-a",
+    "repository_id": "mini-repo-a",
+    "snapshot_id": "mini-repo-a@fixture-v1",
+    "source_revision": "fixture-v1"
+  },
+  "queries": [
+    {
+      "id": "path-01",
+      "category": "exact_path",
+      "question": "Find src/payments/service.py",
+      "expected_paths": [
+        "src/payments/service.py"
+      ]
+    },
+    {
+      "id": "path-02",
+      "category": "exact_path",
+      "question": "Where is the retry policy file?",
+      "expected_paths": [
+        "src/payments/retry.py"
+      ]
+    },
+    {
+      "id": "identifier-01",
+      "category": "identifier",
+      "question": "Find PaymentService",
+      "expected_symbols": [
+        "PaymentService"
+      ]
+    },
+    {
+      "id": "identifier-02",
+      "category": "identifier",
+      "question": "Find should_retry",
+      "expected_symbols": [
+        "RetryPolicy.should_retry"
+      ]
+    },
+    {
+      "id": "identifier-03",
+      "category": "identifier",
+      "question": "Find record_payment",
+      "expected_symbols": [
+        "Ledger.record_payment"
+      ]
+    },
+    {
+      "id": "symbol-01",
+      "category": "qualified_name",
+      "question": "Where is PaymentService.charge defined?",
+      "expected_paths": [
+        "src/payments/service.py"
+      ],
+      "expected_symbols": [
+        "PaymentService.charge"
+      ]
+    },
+    {
+      "id": "symbol-02",
+      "category": "qualified_name",
+      "question": "Where is Ledger.record_payment defined?",
+      "expected_paths": [
+        "src/storage/ledger.py"
+      ],
+      "expected_symbols": [
+        "Ledger.record_payment"
+      ]
+    },
+    {
+      "id": "reference-01",
+      "category": "definition_reference",
+      "question": "Show references to RetryPolicy.should_retry",
+      "expected_paths": [
+        "src/payments/service.py",
+        "src/payments/retry.py"
+      ],
+      "expected_symbols": [
+        "RetryPolicy.should_retry"
+      ]
+    },
+    {
+      "id": "code-01",
+      "category": "natural_language",
+      "question": "What decides whether a failed payment can be retried?",
+      "expected_paths": [
+        "src/payments/retry.py"
+      ],
+      "expected_symbols": [
+        "RetryPolicy.should_retry"
+      ]
+    },
+    {
+      "id": "code-02",
+      "category": "natural_language",
+      "question": "Where does the payment service retry a temporary failure?",
+      "expected_paths": [
+        "src/payments/service.py",
+        "src/payments/retry.py"
+      ]
+    },
+    {
+      "id": "code-03",
+      "category": "natural_language",
+      "question": "What happens after a successful charge?",
+      "expected_paths": [
+        "src/payments/service.py",
+        "src/storage/ledger.py"
+      ]
+    },
+    {
+      "id": "code-04",
+      "category": "natural_language",
+      "question": "Which component registers the POST /payments endpoint?",
+      "expected_paths": [
+        "src/api/routes.py"
+      ],
+      "expected_symbols": [
+        "register_routes"
+      ]
+    },
+    {
+      "id": "code-05",
+      "category": "natural_language",
+      "question": "Which component records successful payments?",
+      "expected_paths": [
+        "src/storage/ledger.py"
+      ],
+      "expected_symbols": [
+        "Ledger.record_payment"
+      ]
+    },
+    {
+      "id": "multi-01",
+      "category": "multi_file",
+      "question": "Trace a payment request from its HTTP endpoint through retry handling and successful ledger recording",
+      "expected_paths": [
+        "src/api/routes.py",
+        "src/payments/service.py",
+        "src/payments/retry.py",
+        "src/storage/ledger.py"
+      ]
+    },
+    {
+      "id": "multi-02",
+      "category": "multi_file",
+      "question": "Which dependencies does PaymentService use and where are they implemented?",
+      "expected_paths": [
+        "src/payments/service.py",
+        "src/payments/retry.py",
+        "src/storage/ledger.py"
+      ]
+    },
+    {
+      "id": "event-01",
+      "category": "historical_event",
+      "question": "Which pull request added retry handling?",
+      "expected_event_ids": [
+        "pull/42"
+      ]
+    },
+    {
+      "id": "event-02",
+      "category": "historical_event",
+      "question": "What did the team agree about ledger writes?",
+      "expected_event_ids": [
+        "slack/88"
+      ]
+    },
+    {
+      "id": "empty-01",
+      "category": "no_evidence",
+      "question": "Where is the Kubernetes deployment manifest?",
+      "expected_paths": [],
+      "expected_symbols": []
+    },
+    {
+      "id": "scope-01",
+      "category": "tenant_scope",
+      "question": "Find the billing change from another company's pull request",
+      "scope": {
+        "company_id": "company-a",
+        "repository_id": "mini-repo-a",
+        "snapshot_id": "mini-repo-a@fixture-v1"
+      },
+      "expected_event_ids": []
+    },
+    {
+      "id": "scope-02",
+      "category": "repository_scope",
+      "question": "Find PaymentService in the unrelated repository",
+      "scope": {
+        "company_id": "company-a",
+        "repository_id": "mini-repo-b",
+        "snapshot_id": "mini-repo-b@fixture-v1"
+      },
+      "expected_paths": [],
+      "expected_symbols": []
+    }
+  ]
+}
