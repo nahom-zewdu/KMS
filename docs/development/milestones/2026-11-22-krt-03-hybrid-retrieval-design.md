@@ -152,9 +152,11 @@ Added:
 - `nlp/tests/test_query_engine_evidence.py`: validation, identity stability, tenant separation, and serialization tests.
 - `nlp/tests/fixtures/retrieval/`: a small synthetic four-file repository, historical event records, and a 20-query benchmark covering paths, identifiers, definitions/references, natural-language code questions, multi-file questions, historical events, no-evidence queries, and scope boundaries.
 - `nlp/tests/test_retrieval_benchmark_fixture.py`: checks that benchmark expectations resolve to fixture files, symbols, and tenant-owned event records.
+- `nlp/query_engine/code_lexical.py`: adds a first lexical adapter over active-snapshot declarations. It prioritizes exact qualified-name matches, then exact file-path declarations, then identifier matches; deduplicates by stable evidence ID and retains the match modes.
+- `nlp/tests/test_code_lexical_retriever.py`: covers scope forwarding, deduplication, ranking, provenance, and invalid tenant rejection.
 
 **Not yet verified locally.** The new focused tests and full NLP suite must be run before treating this slice as verified. The benchmark is a deterministic synthetic baseline; it does not yet measure retrieval quality or represent a production repository.
 
 ### Next bounded implementation
 
-Implement exact path and symbol lexical retrieval over active snapshots, adapt its results to `EvidenceCandidate`, and measure it against the fixture before adding source chunks or code embeddings.
+Run the focused evidence/lexical/fixture tests and full NLP suite. Fix failures before adding full-text source chunks. Then add a benchmark runner that measures exact-path and symbol recall using the fixture; do not claim retrieval-quality gains from fixture sanity tests alone.
