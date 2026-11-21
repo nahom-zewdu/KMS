@@ -43,4 +43,4 @@ The three default-suite skips are opt-in language integrations, which were exerc
 
 ## Next
 
-Proceed to KRT-03 Hybrid Retrieval. First inspect the current text/vector stores and retrieval interfaces, then specify candidate generation, tenant/revision filtering, fusion, and a small evaluation set before implementation. Do not assume that existing raw-event embeddings already provide source-code semantic retrieval.
+Proceed to KRT-03 Hybrid Retrieval. The current retrieval audit, design decisions, implementation sequence, and acceptance criteria are recorded in `docs/development/milestones/2026-11-22-krt-03-hybrid-retrieval-design.md`. Begin with the shared evidence contract and a small benchmark fixture. Existing raw-event embeddings are not a source-code semantic index.
