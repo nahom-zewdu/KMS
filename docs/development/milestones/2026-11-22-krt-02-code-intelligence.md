@@ -43,4 +43,4 @@ The three default-suite skips are opt-in language integrations, which were exerc
 
 ## Next
 
-Proceed to KRT-03 Hybrid Retrieval. The current retrieval audit, design decisions, implementation sequence, and acceptance criteria are recorded in `docs/development/milestones/2026-11-22-krt-03-hybrid-retrieval-design.md`. Begin with the shared evidence contract and a small benchmark fixture. Existing raw-event embeddings are not a source-code semantic index.
+Proceed to KRT-03 Hybrid Retrieval. The current audit, design decisions, acceptance criteria, and implementation progress are recorded in `docs/development/milestones/2026-11-22-krt-03-hybrid-retrieval-design.md`. The shared evidence contract, 20-query benchmark fixture, and first active-snapshot lexical symbol retriever are implemented; local verification is pending. Existing raw-event embeddings are not a source-code semantic index.
