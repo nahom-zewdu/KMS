@@ -55,8 +55,22 @@ Then run the opt-in integration test:
 KMS_SCIP_PYTHON_INTEGRATION=1 uv run pytest tests/test_scip_indexer.py -q
 ```
 
+The verified local toolchain was `scip-python 0.6.8` and SCIP CLI `v0.10.0`.
 The test creates a two-file Python fixture, indexes it with `scip-python`, decodes
 the generated index with `scip print --json`, and checks that the call in
 `consumer.py` resolves to the same SCIP symbol as the definition in
-`library.py`. It is skipped unless explicitly enabled. Do not run indexers against
-untrusted repository code outside an isolated worker/sandbox.
+`library.py`.
+
+**Verified locally (2026-11-22):** the opt-in SCIP test module passed 20 tests;
+the full NLP suite passed 236 tests, with 1 opt-in test skipped in the default
+run, 6 deprecation warnings, and 4 subtests passed. The real integration was
+run separately with the opt-in environment variable and passed.
+
+Compatibility note: `scip-python 0.6.8` omits per-document position encoding.
+The integration configures an explicit UTF-32 code-point offset override for
+this indexer version. The normalizer rejects unspecified encodings by default;
+it does not infer an encoding from a file extension.
+
+Do not run indexers against untrusted repository code outside an isolated
+worker/sandbox. The current subprocess runner applies time/output bounds but is
+not an OS-level security sandbox.
