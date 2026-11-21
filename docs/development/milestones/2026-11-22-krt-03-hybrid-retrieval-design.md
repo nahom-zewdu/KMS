@@ -1,6 +1,6 @@
 # KRT-03 — Hybrid Retrieval Design
 
-**Status:** SPECIFIED — implementation not started  
+**Status:** IN_PROGRESS — evidence contract and benchmark fixture added; local verification pending  
 **Date:** 2026-11-22  
 **Base branch:** `feat/ramp`  
 **Prerequisite:** KRT-00, KRT-01, and KRT-02 completed  
@@ -139,3 +139,22 @@ KRT-03 is accepted only when lexical and semantic retrieval are independently te
 - LLM reranking before a benchmark justifies it.
 - Generic call-graph or runtime-flow inference.
 - Production rollout of a new embedding pipeline before local database and retrieval evaluation pass.
+
+## Implementation progress — 2026-11-22
+
+### First slice: evidence contract and benchmark fixture
+
+Added:
+
+- `nlp/query_engine/evidence.py`: immutable `EvidenceCandidate` contract for code chunks, symbols, SCIP occurrences, events, and graph evidence.
+- Code candidate validation requires company, repository, active snapshot, source revision, path, content hash, and source ranges.
+- Stable evidence IDs are based on tenant and source identity, not retriever rank or score. Code identity includes the exact snapshot, revision, path, range, and content hash; event/graph identity includes company, source, and record ID.
+- `nlp/tests/test_query_engine_evidence.py`: validation, identity stability, tenant separation, and serialization tests.
+- `nlp/tests/fixtures/retrieval/`: a small synthetic four-file repository, historical event records, and a 20-query benchmark covering paths, identifiers, definitions/references, natural-language code questions, multi-file questions, historical events, no-evidence queries, and scope boundaries.
+- `nlp/tests/test_retrieval_benchmark_fixture.py`: checks that benchmark expectations resolve to fixture files, symbols, and tenant-owned event records.
+
+**Not yet verified locally.** The new focused tests and full NLP suite must be run before treating this slice as verified. The benchmark is a deterministic synthetic baseline; it does not yet measure retrieval quality or represent a production repository.
+
+### Next bounded implementation
+
+Implement exact path and symbol lexical retrieval over active snapshots, adapt its results to `EvidenceCandidate`, and measure it against the fixture before adding source chunks or code embeddings.
