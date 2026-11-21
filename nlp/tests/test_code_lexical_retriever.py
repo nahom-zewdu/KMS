@@ -101,12 +101,8 @@ def test_lexical_retrieval_uses_company_and_repository_scope(monkeypatch):
 
 
 def test_lexical_retrieval_rejects_invalid_tenant_before_database_access(monkeypatch):
-    constructed = []
-    monkeypatch.setattr(
-        code_lexical,
-        "CodeSymbolRetriever",
-        lambda *_args, **_kwargs: constructed.append(True),
-    )
+    fake = FakeSymbols(None, max_results=10)
+    monkeypatch.setattr(code_lexical, "CodeSymbolRetriever", lambda *_args, **_kwargs: fake)
     retriever = code_lexical.CodeLexicalRetriever(object())
 
     try:
@@ -120,8 +116,7 @@ def test_lexical_retrieval_rejects_invalid_tenant_before_database_access(monkeyp
     else:
         raise AssertionError("invalid company scope was accepted")
 
-    assert constructed == [True]
-
+    assert fake.calls == []
 
 def test_lexical_retrieval_returns_no_candidates_without_search_terms(monkeypatch):
     fake = FakeSymbols(None, max_results=10)
