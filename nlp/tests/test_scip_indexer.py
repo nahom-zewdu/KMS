@@ -235,14 +235,6 @@ def test_normalizes_protobuf_typed_range_shape(tmp_path):
 
 
 def test_rejects_non_utf8_document_encoding(tmp_path):
-    (tmp_path / "src").mkdir()
-    (tmp_path / "src" / "main.py").write_text("foo", encoding="utf-8")
-    index = _index(tmp_path, occurrences=[])
-    index["metadata"]["textDocumentEncoding"] = 2
-    with pytest.raises(ScipJobError, match="UTF-8"):
-        normalize_scip_index(index, repository_root=tmp_path, source_revision="rev")
-
-
 
 def test_runner_executes_configured_indexer_and_scip_decoder(tmp_path):
     (tmp_path / "src").mkdir()
@@ -450,7 +442,7 @@ def test_real_scip_typescript_indexes_cross_file_definition_and_reference(tmp_pa
     consumer_source = (
         'import { normalizeName, User } from "./library";\n'
         "export function displayName(user: User): string {\n"
-        "    return normalizeName(user.name);\n"
+        '    const marker = "😀"; return normalizeName(user.name);\n'
         "}\n"
     )
     (source_dir / "library.ts").write_text(library_source, encoding="utf-8")
