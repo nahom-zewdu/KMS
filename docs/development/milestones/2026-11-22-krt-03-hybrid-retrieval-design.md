@@ -157,7 +157,8 @@ Added:
 - `nlp/tests/test_code_lexical_retriever.py`: covers scope forwarding, deduplication, ranking, provenance, and invalid tenant rejection.
 - `nlp/query_engine/lexical_benchmark.py`: adds a reusable evaluator for Recall@1/5/10 and MRR, with hard company/repository/snapshot leakage checks.
 - Eight fixture queries now declare explicit lexical inputs. The other twelve remain unsupported by this lexical slice and are not counted as misses.
-- `nlp/tests/test_lexical_benchmark.py`: covers metric calculation, late/missing relevant evidence, invalid cutoffs, and company/repository/snapshot leakage.
+- `nlp/tests/test_lexical_benchmark.py`: covers metric calculation, late/missing relevant evidence, invalid cutoffs, and company/repository/snapshot/source-revision leakage.
+- `nlp/tests/test_lexical_benchmark_integration.py`: indexes the four real fixture source files with `CodeSymbolIndexer`, retrieves them through `CodeLexicalRetriever`, and runs the evaluator end to end against an in-memory PostgREST double. It asserts the expected fixture baseline (Recall@1/5/10 and MRR), active-repository isolation, and persisted provenance. This is application-pipeline integration, not PostgreSQL/RLS integration.
 
 **Local verification — developer-reported, 2026-11-22:**
 
