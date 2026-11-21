@@ -68,10 +68,9 @@ An `IMPORTS` edge (`A imports B`) is a structural dependency. It does not, by it
 
 ## Current status
 
-| KRT-02 code intelligence | VERIFIED | Tree-sitter declarations and persisted SCIP occurrences; Python, Go, and TypeScript integrations exercised separately. See `docs/development/milestones/2026-11-22-krt-02-code-intelligence.md`. |
-
 | Area | Status | Notes |
 |---|---|---|
+| KRT-02 code intelligence | VERIFIED | Tree-sitter declarations and persisted SCIP occurrences; Python, Go, and TypeScript integrations exercised separately. See `docs/development/milestones/2026-11-22-krt-02-code-intelligence.md`. |
 | Reliability Batch 1 | ACCEPTED | Tenant/failure semantics hardened. Unchanged by this branch; not re-verified on 2026-09-21. |
 | Reliability Batch 2 | ACCEPTED | Redis pending-message recovery/ACK semantics hardened. Not re-verified on 2026-09-21. |
 | Reliability Batch 3 | ACCEPTED | Durable codebase-analysis lifecycle and failure propagation. Not re-verified on 2026-09-21. |
@@ -379,7 +378,7 @@ Do not start KRT implementation on this branch. After the requested merge:
 |---|---|---:|---|---|
 | KRT-00 | Supabase tenant isolation and RPC security | P0 | SPECIFIED | Cross-tenant access is denied and covered by role-aware tests |
 | KRT-01 | Durable source snapshots and provenance | P1 | PLANNED | Source is retrievable by exact commit/path/hash and stale deletions reconcile |
-| KRT-02 | Code intelligence (symbols and behavioral evidence) | P1 | IN_PROGRESS | Source-backed symbol/reference evidence is available for supported languages |
+| KRT-02 | Code intelligence (symbols and semantic references) | P1 | VERIFIED | Source-backed symbol/reference evidence is available for supported languages |
 | KRT-03 | Hybrid retrieval (SQL, FTS, path, vector, graph) | P1 | PLANNED | Retrieval benchmark shows correct scope and relevant evidence |
 | KRT-04 | Typed query planning and grounded synthesis | P1 | PLANNED | Correct tool routing, claim-level citations, and reliable abstention |
 | KRT-05 | Evaluation and observability | P1 | PLANNED | Versioned benchmark and end-to-end traces gate query changes |
