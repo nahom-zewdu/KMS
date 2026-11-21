@@ -55,7 +55,7 @@ class ScipOccurrenceRetriever:
             repository_id=repository_id,
             snapshot_id=snapshot_id,
             symbol=symbol,
-            role="reference",
+            roles=("reference", "occurrence"),
         )
 
     def list_file_occurrences(
@@ -85,6 +85,7 @@ class ScipOccurrenceRetriever:
         snapshot_id: str,
         symbol: str,
         role: str | None = None,
+        roles: tuple[str, ...] | None = None,
     ) -> list[dict[str, Any]]:
         self._validate_scope(company_id, repository_id)
         if not symbol or not symbol.strip():
@@ -94,6 +95,8 @@ class ScipOccurrenceRetriever:
         )
         if role is not None:
             query = query.eq("role", role)
+        if roles is not None:
+            query = query.in_("role", list(roles))
         response = (
             query.order("file_path")
             .order("start_byte")
