@@ -110,12 +110,13 @@ def test_persists_bounded_idempotent_batches_with_scope():
         source_revision="revision-a",
     )
 
-    assert [len(call.payload) for call in client.calls] == [2, 1]
-    assert all(call.table_name == "code_symbol_occurrences" for call in client.calls)
-    assert all(call.conflict == "snapshot_id,occurrence_id" for call in client.calls)
-    assert all(row["company_id"] == "company-a" for call in client.calls[:2] for row in call.payload)
-    assert client.calls[-1].table_name == "refresh_snapshot_occurrence_validation"
-    assert client.calls[-1].payload == {
+    upserts = [call for call in client.calls if call.table_name == "code_symbol_occurrences"]
+    refreshes = [call for call in client.calls if call.table_name == "refresh_snapshot_occurrence_validation"]
+    assert [len(call.payload) for call in upserts] == [2, 1]
+    assert all(call.conflict == "snapshot_id,occurrence_id" for call in upserts)
+    assert all(row["company_id"] == "company-a" for call in upserts for row in call.payload)
+    assert len(refreshes) == 1
+    assert refreshes[0].payload == {
         "p_snapshot_id": "snapshot-1",
         "p_company_id": "company-a",
     }
