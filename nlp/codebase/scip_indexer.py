@@ -82,6 +82,7 @@ def normalize_scip_index(
     repository_root: str | Path,
     source_revision: str,
     max_occurrences: int = 1_000_000,
+    position_encoding_override: int | None = None,
 ) -> ScipIndex:
     """Validate SCIP paths and source ranges, then normalize definitions/references.
 
@@ -93,6 +94,8 @@ def normalize_scip_index(
         raise ValueError("source_revision is required")
     if max_occurrences < 1:
         raise ValueError("max_occurrences must be positive")
+    if position_encoding_override not in {None, 1, 2, 3}:
+        raise ValueError("position_encoding_override must be one of 1, 2, or 3")
 
     root = Path(repository_root).resolve(strict=True)
     if not root.is_dir():
@@ -138,9 +141,16 @@ def normalize_scip_index(
         except OSError as exc:
             raise ScipJobError("invalid_document", f"unable to read SCIP document: {relative_path}") from exc
 
-        position_encoding = _get(document, "positionEncoding", "position_encoding")
+        position_encoding = _get(document, "positionEncoding", "position_encoding", default=0)
+        if position_encoding == 0:
+            # SCIP defines zero as unspecified; only an explicit, indexer-specific
+            # override may resolve it. Never guess from the file extension.
+            position_encoding = position_encoding_override
         if position_encoding not in {1, 2, 3}:
-            raise ScipJobError("unsupported_position_encoding", f"unsupported position encoding for {relative_path}")
+            raise ScipJobError(
+                "unsupported_position_encoding",
+                f"SCIP position encoding is unspecified or unsupported for {relative_path}",
+            )
 
         content_hash = hashlib.sha256(source).hexdigest()
         occurrences = document.get("occurrences", [])
@@ -210,6 +220,7 @@ class ScipIndexRunner:
         timeout_seconds: int = 600,
         max_index_bytes: int = 100 * 1024 * 1024,
         max_json_bytes: int = 100 * 1024 * 1024,
+        position_encoding_override: int | None = None,
     ) -> None:
         if not indexer_argv or not all(isinstance(arg, str) and arg and "\0" not in arg for arg in indexer_argv):
             raise ValueError("indexer_argv must contain non-empty argument strings")
@@ -217,6 +228,9 @@ class ScipIndexRunner:
             raise ValueError("scip_cli_argv must contain non-empty argument strings")
         if timeout_seconds < 1 or max_index_bytes < 1 or max_json_bytes < 1:
             raise ValueError("SCIP job limits must be positive")
+        if position_encoding_override not in {None, 1, 2, 3}:
+            raise ValueError("position_encoding_override must be one of 1, 2, or 3")
+        self.position_encoding_override = position_encoding_override
         self.indexer_argv = tuple(indexer_argv)
         self.indexer_name = indexer_name
         self.scip_cli_argv = tuple(scip_cli_argv)
@@ -310,6 +324,7 @@ class ScipIndexRunner:
                     decoded,
                     repository_root=root,
                     source_revision=source_revision,
+                    position_encoding_override=self.position_encoding_override,
                 )
                 if result.indexer_name != self.indexer_name:
                     raise ScipJobError(
