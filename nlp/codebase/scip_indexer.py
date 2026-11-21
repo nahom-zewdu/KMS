@@ -452,16 +452,19 @@ def _occurrence_range(occurrence: dict[str, Any]) -> tuple[int, int, int, int]:
         multi = container.get("MultiLineRange")
 
     if isinstance(single, dict):
-        line = _get(single, "line")
-        start = _get(single, "startCharacter", "start_character")
-        end = _get(single, "endCharacter", "end_character")
+        # Protobuf JSON omits scalar fields whose value is the default (zero).
+        # A missing line therefore means line 0, not an incomplete range.
+        line = _get(single, "line", default=0)
+        start = _get(single, "startCharacter", "start_character", default=0)
+        end = _get(single, "endCharacter", "end_character", default=0)
         values = (line, start, line, end)
     elif isinstance(multi, dict):
+        # Apply the same protobuf-default rule to both endpoints.
         values = (
-            _get(multi, "startLine", "start_line"),
-            _get(multi, "startCharacter", "start_character"),
-            _get(multi, "endLine", "end_line"),
-            _get(multi, "endCharacter", "end_character"),
+            _get(multi, "startLine", "start_line", default=0),
+            _get(multi, "startCharacter", "start_character", default=0),
+            _get(multi, "endLine", "end_line", default=0),
+            _get(multi, "endCharacter", "end_character", default=0),
         )
     else:
         packed = occurrence.get("range")
