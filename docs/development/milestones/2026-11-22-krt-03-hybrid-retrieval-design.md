@@ -1,7 +1,8 @@
 # KRT-03 — Hybrid Retrieval Design
 
-**Status:** IN_PROGRESS — evidence contract, benchmark fixture, and lexical symbol retrieval added; local verification pending  
+**Status:** IN_PROGRESS — first evidence/lexical slice locally verified; benchmark runner and measured baseline next  
 **Date:** 2026-11-22  
+**Working branch:** `feat/krt-03-hybrid-retrieval`  
 **Base branch:** `feat/ramp`  
 **Prerequisite:** KRT-00, KRT-01, and KRT-02 completed  
 **Next:** Build and evaluate retrieval slices before integrating them into the query engine
@@ -155,8 +156,15 @@ Added:
 - `nlp/query_engine/code_lexical.py`: adds a first lexical adapter over active-snapshot declarations. It prioritizes exact qualified-name matches, then exact file-path declarations, then identifier matches; deduplicates by stable evidence ID and retains the match modes.
 - `nlp/tests/test_code_lexical_retriever.py`: covers scope forwarding, deduplication, ranking, provenance, and invalid tenant rejection.
 
-**Not yet verified locally.** The new focused tests and full NLP suite must be run before treating this slice as verified. The benchmark is a deterministic synthetic baseline; it does not yet measure retrieval quality or represent a production repository.
+**Local verification — developer-reported, 2026-11-22:**
+
+- Focused evidence, lexical retriever, and benchmark-fixture tests: **29 passed**.
+- Full NLP suite: **274 passed, 3 skipped, 6 warnings, 4 subtests passed**.
+- No failures. The skipped tests are opt-in SCIP integrations; Python, Go, and TypeScript integrations were exercised separately in the KRT-02 close-out.
+- The warnings are existing dependency deprecations (`pythonjsonlogger` and PyGithub), not failures.
+
+This verifies the current slice's tests, not retrieval quality. The benchmark remains a deterministic synthetic fixture; it does not yet measure end-to-end retrieval quality or represent a production repository.
 
 ### Next bounded implementation
 
-Run the focused evidence/lexical/fixture tests and full NLP suite. Fix failures before adding full-text source chunks. Then add a benchmark runner that measures exact-path and symbol recall using the fixture; do not claim retrieval-quality gains from fixture sanity tests alone.
+Implement a deterministic benchmark runner over the existing fixture and lexical retriever. Measure exact-path and symbol retrieval with Recall@k and MRR, preserve tenant/repository scope in every query, and test that out-of-scope fixtures never appear. Report unsupported question classes as unsupported rather than counting them as retrieval failures or silently skipping them. Do not add source chunks or embeddings until this lexical baseline is measurable.
