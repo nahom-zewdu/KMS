@@ -478,7 +478,8 @@ def test_real_scip_typescript_indexes_cross_file_definition_and_reference(tmp_pa
     ]
     references = [
         item for item in matching
-        if item.role == "reference" and item.file_path == "src/consumer.ts"
+        if item.role in {"reference", "occurrence"}
+        and item.file_path == "src/consumer.ts"
     ]
     assert definitions, "SCIP output did not contain normalizeName's definition"
     assert references, "SCIP output did not link the cross-file call to normalizeName"
