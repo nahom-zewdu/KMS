@@ -245,13 +245,23 @@ class ScipIndexRunner:
         if relative_index.is_absolute() or PureWindowsPath(index_path).is_absolute() or PureWindowsPath(index_path).drive or any(part in {"", ".", ".."} for part in index_path.split("/")):
             raise ValueError("index_path must be a canonical relative path")
 
-        # Indexers such as scip-python write index.scip into their working
-        # directory. Other indexers can use the explicit {index_path} token.
-
+        # SCIP indexers resolve projectRoot from their working directory.
+        # Run inside the pinned checkout so the index metadata and source files
+        # share one root. The conventional index.scip artifact is moved into the
+        # temporary job directory immediately after indexing, then cleaned up
+        # on every exit path. Callers must supply an isolated checkout.
         with tempfile.TemporaryDirectory(prefix="kms-scip-") as temporary_root:
             temporary_path = Path(temporary_root)
             output_path = temporary_path.joinpath(*relative_index.parts)
             output_path.parent.mkdir(parents=True, exist_ok=True)
+            has_explicit_output = any("{index_path}" in arg for arg in self.indexer_argv)
+            default_output_path = root.joinpath(*relative_index.parts)
+            if not has_explicit_output and (default_output_path.exists() or default_output_path.is_symlink()):
+                raise ScipJobError(
+                    "output_exists",
+                    f"refusing to overwrite an existing index artifact: {relative_index.as_posix()}",
+                )
+
             command = tuple(
                 arg.replace("{repository_root}", str(root)).replace("{index_path}", str(output_path))
                 for arg in self.indexer_argv
@@ -264,43 +274,53 @@ class ScipIndexRunner:
                 "NO_COLOR": "1",
                 "CI": "1",
             }
-            self._execute(command, temporary_path, "indexer_failed", env=safe_environment)
-            if not output_path.is_file() or output_path.is_symlink():
-                raise ScipJobError("missing_output", "SCIP indexer did not produce the expected index file")
-            if output_path.stat().st_size > self.max_index_bytes:
-                raise ScipJobError("index_too_large", "SCIP index exceeds the configured byte limit")
-
-            with tempfile.TemporaryFile() as stdout_file:
-                decode_command = (*self.scip_cli_argv, "print", "--json", str(output_path))
-                self._execute(
-                    decode_command,
-                    root,
-                    "scip_decode_failed",
-                    stdout_file=stdout_file,
-                    max_stdout_bytes=self.max_json_bytes,
-                    env=safe_environment,
-                )
-                stdout_file.seek(0)
-                payload = stdout_file.read(self.max_json_bytes + 1)
-            if len(payload) > self.max_json_bytes:
-                raise ScipJobError("decoded_index_too_large", "decoded SCIP JSON exceeds the configured byte limit")
             try:
-                decoded = json.loads(payload)
-            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-                raise ScipJobError("malformed_index", "SCIP CLI returned invalid JSON") from exc
-            if not isinstance(decoded, dict):
-                raise ScipJobError("malformed_index", "SCIP CLI output must be a JSON object")
-            result = normalize_scip_index(
-                decoded,
-                repository_root=root,
-                source_revision=source_revision,
-            )
-            if result.indexer_name != self.indexer_name:
-                raise ScipJobError(
-                    "indexer_identity_mismatch",
-                    f"expected indexer {self.indexer_name!r}, received {result.indexer_name!r}",
+                self._execute(command, root, "indexer_failed", env=safe_environment)
+                if not has_explicit_output:
+                    if not default_output_path.is_file() or default_output_path.is_symlink():
+                        raise ScipJobError("missing_output", "SCIP indexer did not produce the expected index file")
+                    os.replace(default_output_path, output_path)
+                if not output_path.is_file() or output_path.is_symlink():
+                    raise ScipJobError("missing_output", "SCIP indexer did not produce the expected index file")
+                if output_path.stat().st_size > self.max_index_bytes:
+                    raise ScipJobError("index_too_large", "SCIP index exceeds the configured byte limit")
+
+                with tempfile.TemporaryFile() as stdout_file:
+                    decode_command = (*self.scip_cli_argv, "print", "--json", str(output_path))
+                    self._execute(
+                        decode_command,
+                        root,
+                        "scip_decode_failed",
+                        stdout_file=stdout_file,
+                        max_stdout_bytes=self.max_json_bytes,
+                        env=safe_environment,
+                    )
+                    stdout_file.seek(0)
+                    payload = stdout_file.read(self.max_json_bytes + 1)
+                if len(payload) > self.max_json_bytes:
+                    raise ScipJobError("decoded_index_too_large", "decoded SCIP JSON exceeds the configured byte limit")
+                try:
+                    decoded = json.loads(payload)
+                except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                    raise ScipJobError("malformed_index", "SCIP CLI returned invalid JSON") from exc
+                if not isinstance(decoded, dict):
+                    raise ScipJobError("malformed_index", "SCIP CLI output must be a JSON object")
+                result = normalize_scip_index(
+                    decoded,
+                    repository_root=root,
+                    source_revision=source_revision,
                 )
-            return result
+                if result.indexer_name != self.indexer_name:
+                    raise ScipJobError(
+                        "indexer_identity_mismatch",
+                        f"expected indexer {self.indexer_name!r}, received {result.indexer_name!r}",
+                    )
+                return result
+            finally:
+                # Never leave generated SCIP artifacts in the pinned checkout.
+                if not has_explicit_output and (default_output_path.exists() or default_output_path.is_symlink()):
+                    if default_output_path.is_file() or default_output_path.is_symlink():
+                        default_output_path.unlink()
 
     def _execute(
         self,
