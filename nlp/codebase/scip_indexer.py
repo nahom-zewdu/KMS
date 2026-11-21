@@ -438,9 +438,19 @@ def _validated_source_path(root: Path, relative_path: Any) -> Path:
 
 
 def _occurrence_range(occurrence: dict[str, Any]) -> tuple[int, int, int, int]:
-    """Read typed SCIP ranges, falling back to the deprecated packed range."""
-    single = _get(occurrence, "singleLineRange", "single_line_range")
-    multi = _get(occurrence, "multiLineRange", "multi_line_range")
+    """Read SCIP ranges from protobuf JSON and legacy packed representations."""
+    typed = occurrence.get(
+        "typedRange",
+        occurrence.get("typed_range", occurrence.get("TypedRange")),
+    )
+    container = typed if isinstance(typed, dict) else occurrence
+    single = _get(container, "singleLineRange", "single_line_range")
+    if single is None:
+        single = container.get("SingleLineRange")
+    multi = _get(container, "multiLineRange", "multi_line_range")
+    if multi is None:
+        multi = container.get("MultiLineRange")
+
     if isinstance(single, dict):
         line = _get(single, "line")
         start = _get(single, "startCharacter", "start_character")
