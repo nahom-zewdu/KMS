@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any, Iterable
 
 from .evidence import EvidenceCandidate
@@ -32,6 +33,11 @@ class CodeLexicalRetriever:
         identifiers: Iterable[str] = (),
     ) -> list[EvidenceCandidate]:
         """Return ranked declaration candidates for explicit lexical signals."""
+        if not company_id or not company_id.strip() or company_id.strip().lower() == "default":
+            raise ValueError("a real company_id is required")
+        if not repository_id or not repository_id.strip():
+            raise ValueError("repository_id is required")
+
         paths = self._normalize_terms(file_paths, limit=10)
         qualified = self._normalize_terms(qualified_names, limit=20)
         names = self._normalize_terms(identifiers, limit=20)
@@ -83,12 +89,9 @@ class CodeLexicalRetriever:
                 modes = list(existing.metadata.get("match_modes", []))
                 if match_mode not in modes:
                     modes.append(match_mode)
-                    candidates[existing_rank] = EvidenceCandidate(
-                        **{
-                            **existing.to_dict(),
-                            "evidence_id": None,
-                            "metadata": {**existing.metadata, "match_modes": modes},
-                        }
+                    candidates[existing_rank] = replace(
+                        existing,
+                        metadata={**existing.metadata, "match_modes": modes},
                     )
                 continue
 
@@ -98,13 +101,7 @@ class CodeLexicalRetriever:
                 break
 
         return [
-            EvidenceCandidate(
-                **{
-                    **candidate.to_dict(),
-                    "evidence_id": None,
-                    "rank": index,
-                }
-            )
+            replace(candidate, rank=index)
             for index, candidate in enumerate(candidates, start=1)
         ]
 
