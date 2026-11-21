@@ -235,6 +235,13 @@ def test_normalizes_protobuf_typed_range_shape(tmp_path):
 
 
 def test_rejects_non_utf8_document_encoding(tmp_path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "main.py").write_text("foo", encoding="utf-8")
+    index = _index(tmp_path, occurrences=[])
+    index["metadata"]["textDocumentEncoding"] = 2
+    with pytest.raises(ScipJobError, match="UTF-8"):
+        normalize_scip_index(index, repository_root=tmp_path, source_revision="rev")
+
 
 def test_runner_executes_configured_indexer_and_scip_decoder(tmp_path):
     (tmp_path / "src").mkdir()
@@ -393,13 +400,6 @@ def test_real_scip_python_indexes_cross_file_definition_and_reference(tmp_path):
     assert definitions, "SCIP output did not contain normalize_name's definition"
     assert references, "SCIP output did not link the cross-file call to normalize_name"
     assert definitions[0].symbol == references[0].symbol
-
-    (tmp_path / "src").mkdir()
-    (tmp_path / "src" / "main.py").write_text("foo", encoding="utf-8")
-    index = _index(tmp_path, occurrences=[])
-    index["metadata"]["textDocumentEncoding"] = 2
-    with pytest.raises(ScipJobError, match="UTF-8"):
-        normalize_scip_index(index, repository_root=tmp_path, source_revision="rev")
 
 
 @pytest.mark.skipif(
