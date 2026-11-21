@@ -119,6 +119,53 @@ CREATE TRIGGER repository_snapshot_occurrence_count_check
   BEFORE UPDATE OF status ON public.repository_snapshots
   FOR EACH ROW EXECUTE FUNCTION public.validate_snapshot_occurrence_count();
 
+-- Recompute from persisted rows so multiple language indexers can contribute to
+-- the same snapshot without overwriting one another's counts.
+CREATE OR REPLACE FUNCTION public.refresh_snapshot_occurrence_validation(
+  p_snapshot_id uuid,
+  p_company_id text
+)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = pg_catalog, public
+AS $
+DECLARE
+  v_status text;
+  v_actual integer;
+BEGIN
+  SELECT status INTO v_status
+  FROM public.repository_snapshots
+  WHERE id = p_snapshot_id AND company_id = p_company_id
+  FOR UPDATE;
+
+  IF NOT FOUND OR v_status <> 'building' THEN
+    RAISE EXCEPTION 'occurrence metrics can only be refreshed for a building snapshot'
+      USING ERRCODE = '42501';
+  END IF;
+
+  SELECT count(*) INTO v_actual
+  FROM public.code_symbol_occurrences
+  WHERE snapshot_id = p_snapshot_id
+    AND company_id = p_company_id;
+
+  UPDATE public.repository_snapshots
+  SET occurrence_count = v_actual,
+      occurrence_validation = jsonb_build_object(
+        'occurrences_persisted', v_actual,
+        'validated_at', now()
+      )
+  WHERE id = p_snapshot_id AND company_id = p_company_id;
+
+  RETURN v_actual;
+END;
+$;
+
+REVOKE ALL ON FUNCTION public.refresh_snapshot_occurrence_validation(uuid,text)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.refresh_snapshot_occurrence_validation(uuid,text)
+  TO service_role;
+
 ALTER TABLE public.code_symbol_occurrences ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.code_symbol_occurrences FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT, UPDATE ON TABLE public.code_symbol_occurrences TO service_role;
