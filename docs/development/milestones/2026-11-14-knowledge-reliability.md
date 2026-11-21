@@ -1,6 +1,6 @@
 # KMS Knowledge Reliability & Trust — Implementation Brief
 
-**Status:** IN_PROGRESS — audit confirmed critical exposure; frontend hardening and DB remediation authored, verification pending
+**Status:** KRT-00 and KRT-01 completed on the prior branch; KRT-02 completed and verified on `feat/krt-02-code-intelligence` (see the 2026-11-22 close-out).
 **Document date:** 2026-11-14
 **Target implementation base:** merged `feat/ramp` at `68ad38f4d2b40f9e9cb535243f1a2dab4ab1ea9b`
 **Implementation branch:** `feat/krt-00-tenant-isolation` (backend and frontend repositories)
@@ -364,3 +364,11 @@ KRT-00 remains **IN_PROGRESS**, not VERIFIED. No live SQL changes have been appl
 5. Run the relevant SQL, parser, indexer, and full NLP checks together before acceptance.
 
 No live Supabase DDL was applied as part of this checkpoint. Do not mark KRT-02 VERIFIED or ACCEPTED yet.
+
+
+### KRT-02 final status — 2026-11-22
+
+KRT-02 is **VERIFIED**. The implementation, tests, local PostgreSQL checks, and real Python/Go/TypeScript SCIP integrations are summarized in
+`docs/development/milestones/2026-11-22-krt-02-code-intelligence.md`.
+
+The older KRT-02 checkpoints in this document are historical records of what was still outstanding at those dates. Their pending-work statements are superseded by the final close-out. Local verification does not imply a live Supabase deployment or production-data validation.
