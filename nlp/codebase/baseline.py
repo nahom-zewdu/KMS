@@ -20,6 +20,7 @@ from github import Github, GithubException
 from supabase import Client
 
 from codebase.relationship_indexer import ImplementationRelationshipIndexer
+from codebase.symbol_indexer import CodeSymbolIndexer
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ class CodebaseBaselineSync:
         self.supabase = supabase
         self.gh = Github(os.getenv("GITHUB_API_TOKEN"))
         self.relationship_indexer = ImplementationRelationshipIndexer(self.supabase, self.gh)
+        self.symbol_indexer = CodeSymbolIndexer(self.supabase)
 
     def _set_sync_state(self, repo_full_name: str, company_id: str, **fields) -> None:
         """Persist baseline lifecycle state for the company-owned repository."""
@@ -207,6 +209,16 @@ class CodebaseBaselineSync:
 
             contents = repo.get_contents("", ref=source_revision)
             files_processed = 0
+            symbol_metrics = {
+                "files_seen": 0,
+                "files_indexed": 0,
+                "files_with_syntax_errors": 0,
+                "files_unsupported": 0,
+                "files_oversized": 0,
+                "files_unavailable": 0,
+                "symbols_persisted": 0,
+                "source_bytes_skipped": 0,
+            }
             module_map: Dict[str, int] = {}
             live_paths: list[str] = []
 
@@ -225,7 +237,7 @@ class CodebaseBaselineSync:
                         ) from exc
                     continue
                 if item.type == "file":
-                    self._index_file(
+                    file_symbol_metrics = self._index_file(
                         item,
                         repo_entity_id,
                         physical_repo_id,
@@ -236,6 +248,8 @@ class CodebaseBaselineSync:
                         source_revision=source_revision,
                     )
                     files_processed += 1
+                    for metric, value in file_symbol_metrics.items():
+                        symbol_metrics[metric] += value
                     live_paths.append(item.path)
 
             # Seed the issue history from GitHub so newly connected repositories
@@ -275,6 +289,13 @@ class CodebaseBaselineSync:
                 "Implementation relationship indexing complete: %d relationships",
                 relationship_count,
             )
+
+            ensure_lease()
+            self.supabase.table("repository_snapshots").update({
+                "symbol_count": symbol_metrics["symbols_persisted"],
+                "symbol_validation": symbol_metrics,
+            }).eq("id", snapshot_id).eq("status", "building").execute()
+            logger.info("Code symbol indexing complete: %s", symbol_metrics)
 
             ensure_lease()
             completed_at = datetime.now(timezone.utc).isoformat()
@@ -472,11 +493,21 @@ class CodebaseBaselineSync:
         repo_full_name: str, company_id: str, last_author: str | None = None,
         snapshot_id: str | None = None, source_revision: str | None = None,
     ):
-        """FILE entity, codebase_files, PART_OF, and OWNS when last_author is known."""
+        """Index file metadata, graph ownership, and bounded source declarations."""
         file_path = gh_file.path
         file_name = file_path.split("/")[-1]
         module_path = "/".join(file_path.split("/")[:-1]) if "/" in file_path else ""
         now = datetime.now(timezone.utc).isoformat()
+        symbol_metrics = {
+            "files_seen": 0,
+            "files_indexed": 0,
+            "files_with_syntax_errors": 0,
+            "files_unsupported": 0,
+            "files_oversized": 0,
+            "files_unavailable": 0,
+            "symbols_persisted": 0,
+            "source_bytes_skipped": 0,
+        }
 
         file_entity_id = str(
             uuid.uuid5(uuid.NAMESPACE_URL, f"file:{company_id}:{repo_full_name}:{file_path}")
@@ -521,6 +552,49 @@ class CodebaseBaselineSync:
             on_conflict="repository_id,file_path,snapshot_id",
         ).execute()
 
+        # Parse only explicitly supported source extensions. Unsupported and
+        # oversized files are recorded as coverage gaps, never guessed.
+        from codebase.symbols import CodeSymbolExtractor
+
+        language = CodeSymbolExtractor._language_for_path(file_path)
+        symbol_indexer = getattr(self, "symbol_indexer", None)
+        if language is not None and symbol_indexer is not None:
+            symbol_metrics["files_seen"] = 1
+            source_size = getattr(gh_file, "size", None)
+            if source_size is not None and source_size > self.symbol_indexer.max_source_bytes:
+                symbol_metrics["files_oversized"] = 1
+                symbol_metrics["source_bytes_skipped"] = int(source_size)
+            else:
+                try:
+                    decoded = getattr(gh_file, "decoded_content", None)
+                    if decoded is None:
+                        symbol_metrics["files_unavailable"] = 1
+                    else:
+                        result = symbol_indexer.index_file(
+                            repository_id=physical_repo_id,
+                            snapshot_id=snapshot_id,
+                            company_id=company_id,
+                            file_path=file_path,
+                            source=decoded.decode("utf-8"),
+                            source_revision=source_revision,
+                            language=language,
+                        )
+                        if result["status"] == "indexed":
+                            symbol_metrics["files_indexed"] = 1
+                        elif result["status"] == "syntax_error":
+                            symbol_metrics["files_indexed"] = 1
+                            symbol_metrics["files_with_syntax_errors"] = 1
+                        elif result["status"] == "oversized":
+                            symbol_metrics["files_oversized"] = 1
+                            symbol_metrics["source_bytes_skipped"] = result["source_bytes"]
+                        else:
+                            symbol_metrics["files_unsupported"] = 1
+                        symbol_metrics["symbols_persisted"] = result["symbols_persisted"]
+                except UnicodeDecodeError as exc:
+                    raise RuntimeError(
+                        f"Cannot decode supported source file for symbol indexing: {file_path}"
+                    ) from exc
+
         edge_id = str(
             uuid.uuid5(uuid.NAMESPACE_URL, f"partof:{snapshot_id}:{file_entity_id}:{repo_entity_id}")
         )
@@ -542,6 +616,8 @@ class CodebaseBaselineSync:
             self._upsert_owns(
                 last_author, file_entity_id, company_id, now, snapshot_id=snapshot_id
             )
+
+        return symbol_metrics
 
     def _upsert_owns(
         self, author: str, file_entity_id: str, company_id: str, now: str,
@@ -626,7 +702,7 @@ class CodebaseBaselineSync:
 
     def _detect_language(self, file_path: str) -> str:
         ext = file_path.split(".")[-1].lower() if "." in file_path else ""
-        mapping = {"go": "Go", "py": "Python", "js": "JavaScript", "ts": "TypeScript", "java": "Java",
+        mapping = {"go": "Go", "py": "Python", "js": "JavaScript", "jsx": "JavaScript", "mjs": "JavaScript", "cjs": "JavaScript", "ts": "TypeScript", "tsx": "TSX", "mts": "TypeScript", "cts": "TypeScript", "java": "Java",
                    "cpp": "C++", "c": "C", "rs": "Rust", "rb": "Ruby", "php": "PHP", "swift": "Swift",
                    "kt": "Kotlin", "scala": "Scala", "hs": "Haskell", "lua": "Lua", "pl": "Perl",
                    "sh": "Shell", "bash": "Bash", "html": "HTML", "css": "CSS", "json": "JSON",

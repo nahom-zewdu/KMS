@@ -137,6 +137,12 @@ def test_baseline_repository_update_filters_by_company():
     assert publication["p_snapshot_id"] == "snapshot-id"
     assert publication["p_file_count"] == 0
     assert publication["p_module_count"] == 0
+    snapshot_validation = next(
+        values for table, values in database.updates
+        if table == "repository_snapshots"
+    )
+    assert snapshot_validation["symbol_count"] == 0
+    assert snapshot_validation["symbol_validation"]["files_seen"] == 0
 
 
 
@@ -224,3 +230,66 @@ def test_staged_author_metadata_does_not_mutate_shared_file_entity():
     assert file_row["last_commit_sha"] == "commit-sha"
     assert file_row["metadata"]["blob_sha"] == "blob-sha"
 
+
+
+def test_baseline_passes_revision_pinned_source_to_symbol_indexer():
+    class Query:
+        def __init__(self, database):
+            self.database = database
+
+        def upsert(self, values, **_kwargs):
+            self.database.payloads.append(values)
+            return self
+
+        def execute(self):
+            return SimpleNamespace(data=[])
+
+    class Database:
+        def __init__(self):
+            self.payloads = []
+
+        def table(self, _name):
+            return Query(self)
+
+    class SymbolIndexer:
+        max_source_bytes = 1_000_000
+
+        def __init__(self):
+            self.calls = []
+
+        def index_file(self, **kwargs):
+            self.calls.append(kwargs)
+            return {"status": "indexed", "symbols_persisted": 2, "source_bytes": 30}
+
+    database = Database()
+    sync = CodebaseBaselineSync.__new__(CodebaseBaselineSync)
+    sync.supabase = database
+    sync.symbol_indexer = SymbolIndexer()
+    source = b"class Worker:\n    pass\n"
+
+    metrics = sync._index_file(
+        SimpleNamespace(
+            path="src/worker.py",
+            sha="blob-sha",
+            size=len(source),
+            decoded_content=source,
+        ),
+        "repository-entity",
+        "repository-id",
+        "org/repo",
+        "company-a",
+        snapshot_id="snapshot-id",
+        source_revision="commit-sha",
+    )
+
+    assert sync.symbol_indexer.calls == [{
+        "repository_id": "repository-id",
+        "snapshot_id": "snapshot-id",
+        "company_id": "company-a",
+        "file_path": "src/worker.py",
+        "source": "class Worker:\n    pass\n",
+        "source_revision": "commit-sha",
+        "language": "Python",
+    }]
+    assert metrics["files_indexed"] == 1
+    assert metrics["symbols_persisted"] == 2

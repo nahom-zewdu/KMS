@@ -36,3 +36,44 @@ To run focused auth and Ramp regression tests:
 ```sh
 .venv/bin/python -m pytest -q tests/test_authz.py tests/test_ramp_v2.py
 ```
+
+### Optional real SCIP integration test
+
+The default test suite does not require Node.js or external SCIP binaries. To verify
+real cross-file Python semantic indexing, install the upstream tools in an isolated
+environment with Node.js 16+:
+
+```bash
+npm install --global @sourcegraph/scip-python
+# Install the matching SCIP CLI using the upstream installation instructions:
+# https://github.com/sourcegraph/scip
+```
+
+Then run the opt-in integration test:
+
+```bash
+KMS_SCIP_PYTHON_INTEGRATION=1 uv run pytest tests/test_scip_indexer.py -q
+```
+
+The verified local toolchain was `scip-python 0.6.8` and SCIP CLI `v0.10.0`.
+The test creates a two-file Python fixture, indexes it with `scip-python`, decodes
+the generated index with `scip print --json`, and checks that the call in
+`consumer.py` resolves to the same SCIP symbol as the definition in
+`library.py`.
+
+**Verified locally (2026-11-22):** the full NLP suite passed **245 tests**, with
+3 opt-in SCIP integrations skipped in the default run, 6 dependency deprecation
+warnings, and 4 subtests passed. The real Python, Go, and TypeScript integrations
+were each run separately and passed. The occurrence persistence SQL integration
+test also passed against the local PostgreSQL 16 test database. See
+`docs/development/milestones/2026-11-22-krt-02-code-intelligence.md` for the
+milestone close-out and remaining boundaries.
+
+Compatibility note: `scip-python 0.6.8` omits per-document position encoding.
+The integration configures an explicit UTF-32 code-point offset override for
+this indexer version. The normalizer rejects unspecified encodings by default;
+it does not infer an encoding from a file extension.
+
+Do not run indexers against untrusted repository code outside an isolated
+worker/sandbox. The current subprocess runner applies time/output bounds but is
+not an OS-level security sandbox.

@@ -1,6 +1,6 @@
 # KMS Knowledge Reliability & Trust — Implementation Brief
 
-**Status:** IN_PROGRESS — audit confirmed critical exposure; frontend hardening and DB remediation authored, verification pending
+**Status:** KRT-00 and KRT-01 completed on the prior branch; KRT-02 completed and verified on `feat/krt-02-code-intelligence` (see the 2026-11-22 close-out).
 **Document date:** 2026-11-14
 **Target implementation base:** merged `feat/ramp` at `68ad38f4d2b40f9e9cb535243f1a2dab4ab1ea9b`
 **Implementation branch:** `feat/krt-00-tenant-isolation` (backend and frontend repositories)
@@ -333,3 +333,42 @@ KRT-00 remains **IN_PROGRESS**, not VERIFIED. No live SQL changes have been appl
 - The user-provided terminal excerpt does not show `git branch --show-current` or the backend/frontend commit SHAs. These results are recorded as local verification evidence, but exact branch/commit association still needs confirmation.
 - Still outstanding: execute `schema/tests/tenant_rls.sql` on disposable PostgreSQL; run the dedicated Slack OAuth state tests; review the migration; obtain approval before any live Supabase deployment.
 - No live Supabase migration or policy change is recorded.
+
+
+### KRT-02 implementation and verification checkpoint — 2026-11-22
+
+**Branch:** `feat/krt-02-code-intelligence`  
+**Status:** IN_PROGRESS; the SCIP Python integration slice is VERIFIED, but KRT-02 as a whole is not accepted.
+
+#### Verified implementation
+
+- Tree-sitter symbol extraction exists for Python, Go, JavaScript, TypeScript, and TSX, with representative parser tests and explicit coverage boundaries.
+- Revision/snapshot-scoped code-symbol persistence and retrieval are implemented; the migration and disposable PostgreSQL integration test have passed.
+- SCIP normalization validates project-root identity, canonical source paths, symlink boundaries, source ranges, document encoding, occurrence limits, and source hashes.
+- The SCIP runner executes configured indexers without a shell, with timeouts and bounded output/diagnostics. It is **not** an OS-level sandbox.
+- Real `scip-python 0.6.8` indexing was verified using SCIP CLI `v0.10.0` on a two-file fixture. The cross-file call in `consumer.py` resolves to the same semantic symbol as the definition in `library.py`.
+- `scip-python 0.6.8` omits document position encoding; the integration explicitly configures UTF-32 code-point offsets. Unspecified encodings remain rejected by default.
+
+#### User-reported local verification — 2026-11-22
+
+- `KMS_SCIP_PYTHON_INTEGRATION=1 uv run pytest tests/test_scip_indexer.py -q -rs`: **20 passed**.
+- `uv run pytest -q`: **236 passed, 1 skipped, 6 warnings, 4 subtests passed**. The skipped test is the opt-in real SCIP integration, which passed in the separate focused run.
+- The six warnings are existing deprecations in `pythonjsonlogger` and PyGithub.
+
+#### Remaining KRT-02 work
+
+1. Verify real SCIP indexing with representative Go and TypeScript/JavaScript indexers; do not infer support from the generic runner.
+2. Decide and implement durable persistence for SCIP occurrences, including tenant/repository/snapshot scope and idempotent replacement semantics.
+3. Connect symbol/reference retrieval to source navigation and selected implementation-path evidence.
+4. Add representative repository fixtures and coverage reporting for unsupported languages/constructs.
+5. Run the relevant SQL, parser, indexer, and full NLP checks together before acceptance.
+
+No live Supabase DDL was applied as part of this checkpoint. Do not mark KRT-02 VERIFIED or ACCEPTED yet.
+
+
+### KRT-02 final status — 2026-11-22
+
+KRT-02 is **VERIFIED**. The implementation, tests, local PostgreSQL checks, and real Python/Go/TypeScript SCIP integrations are summarized in
+`docs/development/milestones/2026-11-22-krt-02-code-intelligence.md`.
+
+The older KRT-02 checkpoints in this document are historical records of what was still outstanding at those dates. Their pending-work statements are superseded by the final close-out. Local verification does not imply a live Supabase deployment or production-data validation.
