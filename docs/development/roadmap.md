@@ -72,7 +72,7 @@ An `IMPORTS` edge (`A imports B`) is a structural dependency. It does not, by it
 | Area | Status | Notes |
 |---|---|---|
 | KRT-02 code intelligence | VERIFIED | Tree-sitter declarations and persisted SCIP occurrences; Python, Go, and TypeScript integrations exercised separately. See `docs/development/milestones/2026-11-22-krt-02-code-intelligence.md`. |
-| KRT-03 hybrid retrieval | IN_PROGRESS | Evidence/lexical slice locally verified (29 focused; full suite 274 passed, 3 skipped). Added Recall@k/MRR evaluator and eight explicit lexical benchmark inputs; real indexed-fixture baseline remains pending. See the KRT-03 design note. |
+| KRT-03 hybrid retrieval | IN_PROGRESS | Evidence/lexical slice and evaluator locally verified (36 focused; full suite 281 passed, 3 skipped). Added an indexer→retriever benchmark integration test with an in-memory PostgREST double; execution pending. See the KRT-03 design note. |
 | Reliability Batch 1 | ACCEPTED | Tenant/failure semantics hardened. Unchanged by this branch; not re-verified on 2026-09-21. |
 | Reliability Batch 2 | ACCEPTED | Redis pending-message recovery/ACK semantics hardened. Not re-verified on 2026-09-21. |
 | Reliability Batch 3 | ACCEPTED | Durable codebase-analysis lifecycle and failure propagation. Not re-verified on 2026-09-21. |
