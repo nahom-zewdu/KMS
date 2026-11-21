@@ -422,7 +422,7 @@ def test_real_scip_typescript_indexes_cross_file_definition_and_reference(tmp_pa
         pytest.skip("Node.js, scip-typescript, and scip CLI must all be installed")
 
     (tmp_path / "package.json").write_text(
-        '{"name":"kms-scip-fixture","version":"0.0.0","private":true}\\n',
+        '{"name":"kms-scip-fixture","version":"0.0.0","private":true}\n',
         encoding="utf-8",
     )
     (tmp_path / "tsconfig.json").write_text(
@@ -442,16 +442,16 @@ def test_real_scip_typescript_indexes_cross_file_definition_and_reference(tmp_pa
     source_dir = tmp_path / "src"
     source_dir.mkdir()
     library_source = (
-        "export interface User { name: string }\\n"
-        "export function normalizeName(value: string): string {\\n"
-        "    return value.trim().toLowerCase();\\n"
-        "}\\n"
+        "export interface User { name: string }\n"
+        "export function normalizeName(value: string): string {\n"
+        "    return value.trim().toLowerCase();\n"
+        "}\n"
     )
     consumer_source = (
-        'import { normalizeName, User } from "./library";\\n'
-        "export function displayName(user: User): string {\\n"
-        "    return normalizeName(user.name);\\n"
-        "}\\n"
+        'import { normalizeName, User } from "./library";\n'
+        "export function displayName(user: User): string {\n"
+        "    return normalizeName(user.name);\n"
+        "}\n"
     )
     (source_dir / "library.ts").write_text(library_source, encoding="utf-8")
     (source_dir / "consumer.ts").write_text(consumer_source, encoding="utf-8")
@@ -463,6 +463,8 @@ def test_real_scip_typescript_indexes_cross_file_definition_and_reference(tmp_pa
         timeout_seconds=240,
         max_index_bytes=32 * 1024 * 1024,
         max_json_bytes=64 * 1024 * 1024,
+        # scip-typescript 0.5.2 omits Document.position_encoding; SCIP specifies UTF-16 for TypeScript.
+        position_encoding_override=2,
     )
     result = runner.run(repository_root=tmp_path, source_revision="typescript-fixture-revision")
 
