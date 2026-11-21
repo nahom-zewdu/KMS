@@ -161,8 +161,9 @@ Added:
 
 **Local verification — developer-reported, 2026-11-22:**
 
-- Focused evidence, lexical retriever, and benchmark-fixture tests: **29 passed**.
-- Full NLP suite: **274 passed, 3 skipped, 6 warnings, 4 subtests passed**.
+- Initial evidence/lexical/fixture verification on `feat/ramp`: **29 focused passed**; full NLP suite **274 passed, 3 skipped, 6 warnings, 4 subtests passed**.
+- After adding the lexical evaluator, developer-reported focused KRT-03 suite on `feat/krt-03-hybrid-retrieval`: **36 passed**.
+- Latest developer-reported full NLP suite on the feature branch: **281 passed, 3 skipped, 6 warnings, 4 subtests passed**.
 - No failures. The skipped tests are opt-in SCIP integrations; Python, Go, and TypeScript integrations were exercised separately in the KRT-02 close-out.
 - The warnings are existing dependency deprecations (`pythonjsonlogger` and PyGithub), not failures.
 
