@@ -61,6 +61,11 @@ class FakeSupabase:
     def table(self, name):
         return FakeQuery(self, name)
 
+    def rpc(self, name, params):
+        query = FakeQuery(self, name)
+        query.payload = params
+        return query
+
 
 def _occurrence(identity: str, *, role="reference", revision="revision-a", path="src/a.py"):
     return ScipOccurrence(
@@ -108,7 +113,12 @@ def test_persists_bounded_idempotent_batches_with_scope():
     assert [len(call.payload) for call in client.calls] == [2, 1]
     assert all(call.table_name == "code_symbol_occurrences" for call in client.calls)
     assert all(call.conflict == "snapshot_id,occurrence_id" for call in client.calls)
-    assert all(row["company_id"] == "company-a" for call in client.calls for row in call.payload)
+    assert all(row["company_id"] == "company-a" for call in client.calls[:2] for row in call.payload)
+    assert client.calls[-1].table_name == "refresh_snapshot_occurrence_validation"
+    assert client.calls[-1].payload == {
+        "p_snapshot_id": "snapshot-1",
+        "p_company_id": "company-a",
+    }
     assert result == {
         "occurrences_seen": 3,
         "occurrences_persisted": 3,
