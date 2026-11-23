@@ -78,10 +78,26 @@ class MemoryQuery:
             if operator == "eq":
                 selected = [row for row in selected if row.get(column) == value]
             else:
-                expression = "".join(
-                    ".*" if char == "%" else "." if char == "_" else re.escape(char)
-                    for char in value
-                )
+                # PostgreSQL LIKE/ILIKE treats backslash as the default
+                # escape character. Mirror that behavior so escaped identifier
+                # underscores are literal rather than wildcard characters.
+                expression_parts = []
+                escaped = False
+                for char in value:
+                    if escaped:
+                        expression_parts.append(re.escape(char))
+                        escaped = False
+                    elif char == "\\\\":
+                        escaped = True
+                    elif char == "%":
+                        expression_parts.append(".*")
+                    elif char == "_":
+                        expression_parts.append(".")
+                    else:
+                        expression_parts.append(re.escape(char))
+                if escaped:
+                    expression_parts.append(re.escape("\\\\"))
+                expression = "".join(expression_parts)
                 matcher = re.compile(f"^{expression}$", re.IGNORECASE)
                 selected = [
                     row for row in selected
