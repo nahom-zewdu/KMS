@@ -186,8 +186,8 @@ def test_source_chunk_indexer_and_retriever_against_supabase():
         }).execute()
 
         source_c = (
-            "def calculate_invoice_total_v2(items):\\n"
-            "    return sum(item.final_amount for item in items)\\n"
+            "def reconcile_purchase_ledger(items):\n"
+            "    return sum(item.final_amount for item in items)\n"
         )
         result_c = indexer.index_file(
             repository_id=repo_a,
@@ -207,7 +207,7 @@ def test_source_chunk_indexer_and_retriever_against_supabase():
         active_results = retriever.retrieve(
             company_id=company_a,
             repository_id=repo_a,
-            terms=["calculate_invoice_total_v2"],
+            terms=["reconcile_purchase_ledger"],
         )
         assert active_results
         assert all(item.snapshot_id == snapshot_c for item in active_results)
