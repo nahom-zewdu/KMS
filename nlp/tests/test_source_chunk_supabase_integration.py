@@ -162,6 +162,64 @@ def test_source_chunk_indexer_and_retriever_against_supabase():
         assert all(item.source_revision == revision_a for item in retrieved_a)
         assert all(item.file_path == "src/integration_probe.py" for item in retrieved_a)
 
+        # Add a newer snapshot to the same repository, then switch the active
+        # pointer. Historical chunks remain persisted but must stop being retrievable.
+        snapshot_c = str(uuid.uuid4())
+        revision_c = f"fixture-revision-{suffix}-alpha-next"
+        client.table("repository_snapshots").insert({
+            "id": snapshot_c,
+            "repository_id": repo_a,
+            "company_id": company_a,
+            "source_revision": revision_c,
+            "run_id": str(uuid.uuid4()),
+            "status": "building",
+            "validation": {},
+        }).execute()
+        client.table("codebase_files").insert({
+            "repository_id": repo_a,
+            "file_path": "src/integration_probe.py",
+            "file_name": "integration_probe.py",
+            "company_id": company_a,
+            "snapshot_id": snapshot_c,
+            "language": "python",
+            "last_commit_sha": revision_c,
+        }).execute()
+
+        source_c = (
+            "def calculate_invoice_total_v2(items):\\n"
+            "    return sum(item.final_amount for item in items)\\n"
+        )
+        result_c = indexer.index_file(
+            repository_id=repo_a,
+            snapshot_id=snapshot_c,
+            company_id=company_a,
+            file_path="src/integration_probe.py",
+            source=source_c,
+            source_revision=revision_c,
+        )
+        assert result_c["status"] == "indexed"
+        assert result_c["chunks_persisted"] > 0
+
+        client.table("repositories").update({
+            "active_snapshot_id": snapshot_c,
+        }).eq("id", repo_a).eq("company_id", company_a).execute()
+
+        active_results = retriever.retrieve(
+            company_id=company_a,
+            repository_id=repo_a,
+            terms=["calculate_invoice_total_v2"],
+        )
+        assert active_results
+        assert all(item.snapshot_id == snapshot_c for item in active_results)
+        assert all(item.source_revision == revision_c for item in active_results)
+
+        historical_results = retriever.retrieve(
+            company_id=company_a,
+            repository_id=repo_a,
+            terms=["calculate_invoice_total"],
+        )
+        assert historical_results == []
+
         # The repository/company pair is checked before querying chunks.
         assert retriever.retrieve(
             company_id=company_b,
