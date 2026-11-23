@@ -161,7 +161,7 @@ def test_real_fixture_indexer_retriever_pipeline_has_measurable_lexical_baseline
         "recall_at_5": 1.0,
         "recall_at_10": 1.0,
         "mrr": 1.0,
-    }
+    }, benchmark["query_results"]
 
     # The unrelated repository has no active pointer in this tenant; retrieval
     # must return no candidates rather than borrowing the fixture's snapshot.
