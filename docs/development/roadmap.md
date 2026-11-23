@@ -6,7 +6,7 @@
 > Current Ramp runtime: `docs/architecture/ramp.md`.
 > Scoring spec vs implemented subset: `docs/product/ramp-candidate-scoring.md`.
 
-**Last updated:** 2026-11-22
+**Last updated:** 2026-11-23
 **Current branch:** `feat/krt-03-hybrid-retrieval`
 **Current milestone:** KRT-03 — Hybrid Retrieval
 **Current objective:** Build a scoped, evaluated hybrid retrieval layer that returns relevant, revision-aware evidence for grounded KMS answers.
@@ -72,7 +72,7 @@ An `IMPORTS` edge (`A imports B`) is a structural dependency. It does not, by it
 | Area | Status | Notes |
 |---|---|---|
 | KRT-02 code intelligence | VERIFIED | Tree-sitter declarations and persisted SCIP occurrences; Python, Go, and TypeScript integrations exercised separately. See `docs/development/milestones/2026-11-22-krt-02-code-intelligence.md`. |
-| KRT-03 hybrid retrieval | IN_PROGRESS | Evidence/lexical slice and evaluator locally verified (36 focused; full suite 281 passed, 3 skipped). Added an indexer→retriever benchmark integration test with an in-memory PostgREST double; execution pending. See the KRT-03 design note. |
+| KRT-03 hybrid retrieval | IN_PROGRESS | Lexical fixture integration verified: 1 focused passed; full NLP suite 283 passed, 3 skipped, 6 warnings, 4 subtests. First source-chunk schema/indexer/retriever slice implemented but not yet locally or PostgreSQL verified. Not wired into baseline ingestion. See the KRT-03 design note. |
 | Reliability Batch 1 | ACCEPTED | Tenant/failure semantics hardened. Unchanged by this branch; not re-verified on 2026-09-21. |
 | Reliability Batch 2 | ACCEPTED | Redis pending-message recovery/ACK semantics hardened. Not re-verified on 2026-09-21. |
 | Reliability Batch 3 | ACCEPTED | Durable codebase-analysis lifecycle and failure propagation. Not re-verified on 2026-09-21. |
@@ -726,3 +726,12 @@ Tests added in `nlp/tests/test_scip_indexer.py` cover deterministic normalizatio
 The verification is local and does not claim a live Supabase deployment or production-data validation. The SCIP subprocess runner is bounded but is not an OS-level sandbox; untrusted repositories still require isolated workers with resource and network restrictions. SCIP indexing is not automatically enabled for every repository.
 
 **Next:** KRT-03 Hybrid Retrieval is underway on `feat/krt-03-hybrid-retrieval`. The first evidence/lexical slice is locally verified: 29 focused tests passed; full NLP suite: 274 passed, 3 skipped, 6 warnings, 4 subtests passed. Build a benchmark runner for exact-path and symbol retrieval before adding full-text chunks or code embeddings. Existing raw-event embeddings must not be mistaken for a source-code semantic index.
+
+
+### KRT-03 update — 2026-11-23
+
+- Developer-reported lexical benchmark integration: **1 passed**; full NLP suite: **283 passed, 3 skipped, 6 warnings, 4 subtests passed**.
+- The eight supported synthetic lexical queries scored Recall@1/5/10 = 1.0 and MRR = 1.0. This is a curated fixture result using an in-memory PostgREST double, not a PostgreSQL/RLS integration result or production retrieval-quality claim.
+- Implemented the first durable source-chunk slice: deterministic bounded chunking, snapshot/revision identity, UTF-8 ranges and hashes, batched persistence, active-snapshot lexical retrieval, migration constraints, publication count validation, and tests.
+- The new source-chunk implementation is **not yet verified**. Run focused Python tests, the full NLP suite, then apply the migration and execute `schema/tests/source_code_chunks.sql` against disposable PostgreSQL.
+- Source chunk indexing is not yet connected to baseline ingestion. Do not enable it in production ingestion or add embeddings until the exact-revision source handoff and database integration are verified.
