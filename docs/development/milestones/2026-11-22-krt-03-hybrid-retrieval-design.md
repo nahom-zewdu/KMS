@@ -1,11 +1,11 @@
 # KRT-03 — Hybrid Retrieval Design
 
-**Status:** IN_PROGRESS — first evidence/lexical slice locally verified; lexical metric harness added, integration baseline pending  
+**Status:** IN_PROGRESS — lexical baseline verified; first source-chunk persistence/retrieval slice implemented, local and PostgreSQL verification pending  
 **Date:** 2026-11-22  
 **Working branch:** `feat/krt-03-hybrid-retrieval`  
 **Base branch:** `feat/ramp`  
 **Prerequisite:** KRT-00, KRT-01, and KRT-02 completed  
-**Next:** Build and evaluate retrieval slices before integrating them into the query engine
+**Next:** Verify source-chunk storage/retrieval locally and against disposable PostgreSQL; then extend lexical evaluation
 
 ## Goal
 
@@ -173,3 +173,27 @@ This verifies the current slice's tests, not retrieval quality. The benchmark re
 ### Next bounded implementation
 
 Run the evaluator against an indexed copy of the synthetic repository using the real `CodeLexicalRetriever`. The current tests validate the evaluator with controlled candidates; they do **not** establish a retrieval baseline. The integration run must prove that fixture declarations are indexed under the declared company/repository/snapshot IDs, then record Recall@1/5/10, MRR, and zero scope leakage. If fixture indexing cannot reproduce the declared snapshot identity cleanly, fix the fixture/indexing boundary rather than weakening provenance checks. Do not add source chunks or embeddings until this lexical baseline is measured.
+
+
+### Lexical baseline verification — 2026-11-23
+
+Developer-reported local verification on `feat/krt-03-hybrid-retrieval`:
+
+- `tests/test_lexical_benchmark_integration.py`: **1 passed**.
+- Full NLP suite: **283 passed, 3 skipped, 6 warnings, 4 subtests passed**.
+- The end-to-end fixture indexes four Python files through the real Tree-sitter symbol indexer, retrieves through `CodeLexicalRetriever`, and evaluates eight supported lexical queries. Recall@1/5/10 and MRR are all **1.0** on this curated fixture.
+- This test uses an in-memory PostgREST double. It does not verify PostgreSQL query behavior or RLS.
+
+### Source chunking and lexical retrieval — implementation checkpoint, 2026-11-23
+
+Added on `feat/krt-03-hybrid-retrieval`:
+
+- `nlp/codebase/source_chunker.py`: deterministic line-window chunking with configurable source/chunk/line bounds, overlap, UTF-8 byte offsets, one-based line ranges, source/chunk SHA-256 hashes, and snapshot/revision-scoped stable IDs. Oversized files and individual lines fail closed.
+- `nlp/codebase/source_chunk_indexer.py`: bounded idempotent batched writes to `source_code_chunks`, with explicit per-file coverage results.
+- `nlp/codebase/source_chunk_retriever.py`: literal lexical retrieval filtered in storage by company, repository, and the repository's active snapshot; results become provenance-complete `EvidenceCandidate` objects.
+- `supabase/migrations/20261123010000_add_source_code_chunks.sql`: durable chunk table, composite ownership/file/snapshot foreign keys, revision/building-snapshot trigger, publication count validation, coverage refresh function, indexes, and service-role-only table access.
+- `nlp/tests/test_source_chunking.py`, `nlp/tests/test_source_chunk_retriever.py`, and `schema/tests/source_code_chunks.sql`.
+
+**Not yet verified:** no local test run or migration execution has been reported for this source-chunk slice. The SQL integration script must be run against the disposable PostgreSQL database after applying migrations in order. Do not describe this implementation checkpoint as verified.
+
+**Boundaries:** no embeddings or vector column/function are added. Chunking is line-oriented, and a single line larger than the configured chunk byte limit is rejected rather than split. The new indexer is not yet wired into baseline snapshot ingestion; callers must supply source text already fetched from the exact snapshot revision. This avoids silently reading the mutable repository baseline revision, but ingestion wiring remains future work.
