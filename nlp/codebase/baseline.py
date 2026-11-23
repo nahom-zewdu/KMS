@@ -535,6 +535,10 @@ class CodebaseBaselineSync:
             "files_unavailable": 0,
             "symbols_persisted": 0,
             "source_bytes_skipped": 0,
+            "source_files_seen": 0,
+            "source_files_indexed": 0,
+            "source_files_rejected": 0,
+            "source_chunks_persisted": 0,
         }
 
         file_entity_id = str(
