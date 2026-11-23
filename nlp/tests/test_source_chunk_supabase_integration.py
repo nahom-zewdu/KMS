@@ -58,6 +58,9 @@ def test_source_chunk_indexer_and_retriever_against_supabase():
             "baseline_status": "indexing",
         }).execute()
 
+        fixture = (company_id, repository_id, snapshot_id, revision, full_name)
+        fixtures.append(fixture)
+
         client.table("repository_snapshots").insert({
             "id": snapshot_id,
             "repository_id": repository_id,
@@ -82,8 +85,6 @@ def test_source_chunk_indexer_and_retriever_against_supabase():
             "active_snapshot_id": snapshot_id,
         }).eq("id", repository_id).eq("company_id", company_id).execute()
 
-        fixture = (company_id, repository_id, snapshot_id, revision, full_name)
-        fixtures.append(fixture)
         return fixture
 
     try:
