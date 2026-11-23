@@ -87,7 +87,7 @@ class MemoryQuery:
                     if escaped:
                         expression_parts.append(re.escape(char))
                         escaped = False
-                    elif char == "\\\\":
+                    elif char == "\\":
                         escaped = True
                     elif char == "%":
                         expression_parts.append(".*")
