@@ -27,7 +27,7 @@ class SourceChunkRetriever:
             raise ValueError("a real company_id is required")
         if not repository_id or not repository_id.strip():
             raise ValueError("repository_id is required")
-        normalized = list(dict.fromkeys(term.strip() for term in terms if term and term.strip()))
+        normalized = list(dict.fromkeys(term.strip()[:200] for term in terms if term and term.strip()))
         if not normalized:
             return []
 
@@ -63,19 +63,32 @@ class SourceChunkRetriever:
             for row in response.data or []:
                 rows_by_id.setdefault(str(row["chunk_id"]), row)
 
-        ordered = sorted(
-            rows_by_id.values(),
-            key=lambda row: (row.get("file_path") or "", row.get("start_byte") or 0),
-        )[: self.max_results]
-        return [
-            EvidenceCandidate(
+        def relevance(row: dict[str, Any]) -> tuple[int, int, str, int]:
+            content = str(row.get("content") or "").casefold()
+            matched = [term.casefold() for term in normalized if term.casefold() in content]
+            frequency = sum(content.count(term) for term in matched)
+            return (
+                -len(matched),
+                -frequency,
+                str(row.get("file_path") or ""),
+                int(row.get("start_byte") or 0),
+            )
+
+        ordered = sorted(rows_by_id.values(), key=relevance)[: self.max_results]
+        candidates: list[EvidenceCandidate] = []
+        for row in ordered:
+            content = str(row["content"])
+            matched_terms = [
+                term for term in normalized if term.casefold() in content.casefold()
+            ]
+            candidates.append(EvidenceCandidate(
                 company_id=company_id,
                 evidence_type="code_chunk",
                 source="source-code-chunks",
                 record_id=str(row["chunk_id"]),
-                content=str(row["content"]),
+                content=content,
                 retriever="source-chunk-lexical",
-                rank=index,
+                rank=len(candidates) + 1,
                 repository_id=repository_id,
                 snapshot_id=str(snapshot_id),
                 source_revision=str(row["source_revision"]),
@@ -85,15 +98,12 @@ class SourceChunkRetriever:
                 end_line=int(row["end_line"]),
                 start_byte=int(row["start_byte"]),
                 end_byte=int(row["end_byte"]),
+                raw_score=float(len(matched_terms)),
                 metadata={
                     "chunk_index": row.get("chunk_index"),
                     "chunker_version": row.get("chunker_version"),
                     "source_content_hash": row.get("source_content_hash"),
-                    "match_terms": [
-                        term for term in normalized
-                        if term.casefold() in str(row["content"]).casefold()
-                    ],
+                    "match_terms": matched_terms,
                 },
-            )
-            for index, row in enumerate(ordered, start=1)
-        ]
+            ))
+        return candidates
