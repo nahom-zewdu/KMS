@@ -1,11 +1,11 @@
 # KRT-03 — Hybrid Retrieval Design
 
-**Status:** IN_PROGRESS — lexical baseline verified; first source-chunk persistence/retrieval slice implemented, local and PostgreSQL verification pending  
+**Status:** IN_PROGRESS — symbol lexical baseline and source-chunk persistence/retrieval verified; source-chunk ranking benchmark requires stronger chunk-level ground truth  
 **Date:** 2026-11-22  
 **Working branch:** `feat/krt-03-hybrid-retrieval`  
 **Base branch:** `feat/ramp`  
 **Prerequisite:** KRT-00, KRT-01, and KRT-02 completed  
-**Next:** Verify source-chunk storage/retrieval locally and against disposable PostgreSQL; then extend lexical evaluation
+**Next:** Strengthen chunk-level lexical evaluation; only then evaluate semantic retrieval and rank fusion
 
 ## Goal
 
@@ -194,6 +194,30 @@ Added on `feat/krt-03-hybrid-retrieval`:
 - `supabase/migrations/20261123010000_add_source_code_chunks.sql`: durable chunk table, composite ownership/file/snapshot foreign keys, revision/building-snapshot trigger, publication count validation, coverage refresh function, indexes, and service-role-only table access.
 - `nlp/tests/test_source_chunking.py`, `nlp/tests/test_source_chunk_retriever.py`, and `schema/tests/source_code_chunks.sql`.
 
-**Not yet verified:** no local test run or migration execution has been reported for this source-chunk slice. The SQL integration script must be run against the disposable PostgreSQL database after applying migrations in order. Do not describe this implementation checkpoint as verified.
+**Verification superseding the initial implementation checkpoint — 2026-11-24:**
 
-**Boundaries:** no embeddings or vector column/function are added. Chunking is line-oriented, and a single line larger than the configured chunk byte limit is rejected rather than split. The new indexer is not yet wired into baseline snapshot ingestion; callers must supply source text already fetched from the exact snapshot revision. This avoids silently reading the mutable repository baseline revision, but ingestion wiring remains future work.
+- Focused chunking/indexer/retriever/baseline-ingestion tests: **9 passed**.
+- Full NLP suite at the latest reported revision: **292 passed, 4 skipped, 6 warnings, 4 subtests passed**.
+- Migration applied and verified against disposable local PostgreSQL; `schema/tests/source_code_chunks.sql` passed.
+- Migration applied to the configured development/test Supabase project. The opt-in Supabase API integration test passed and exercised persistence, idempotency, provenance, tenant/repository isolation, and active-snapshot switching.
+- Source chunk indexing is wired into baseline ingestion. It uses content fetched from the exact snapshot revision and validates chunk coverage before snapshot publication.
+- The source-chunk benchmark integration test passed (**1 passed**), but this is only pipeline verification; see the 2026-11-24 benchmark-quality note below.
+
+**Boundaries:** no code embeddings, vector column/function, or rank fusion are implemented. Chunking remains line-oriented, and an individual line larger than the configured chunk byte limit is rejected rather than split. The in-memory benchmark double does not establish PostgreSQL query-planner or RLS behavior; those are covered separately by SQL and opt-in Supabase integration checks.
+
+
+### Source-chunk benchmark checkpoint — 2026-11-24
+
+The initial end-to-end benchmark test `nlp/tests/test_source_chunk_benchmark_integration.py` passed (**1 passed**). It exercises the real chunker, indexer, and retriever over the synthetic four-file repository using an in-memory PostgREST double.
+
+Code review identified a benchmark-design weakness: default chunking produces only four chunks for this fixture, one per file. Ground truth is currently file-path based, so multiple chunks from a relevant file cannot be distinguished. The test's Recall@5/10 assertions consequently do not establish meaningful ranking quality. Treat this as an integration smoke test, not a retrieval-quality baseline.
+
+**Next task — benchmark hardening:**
+
+1. Produce multiple chunks per file and add distractor chunks.
+2. Define exact relevant chunk ranges/IDs in the versioned fixture.
+3. Preserve and inspect per-query candidate rankings; report exact Recall@1/5/10 and MRR.
+4. Compare with symbol lexical retrieval only on a shared, defensible subset of queries and relevance units. Keep unsupported/non-comparable queries visible.
+5. Record the benchmark method, results, and limitations here and in the roadmap.
+
+Do not start semantic embeddings or RRF until this task produces a credible lexical baseline.
