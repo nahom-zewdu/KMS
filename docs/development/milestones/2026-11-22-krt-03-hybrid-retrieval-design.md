@@ -270,4 +270,22 @@ The benchmark uses four identical identifier queries (`register_routes`, `should
 
 **What it cannot establish:** passage-level relevance, call-site retrieval parity, natural-language understanding, broad repository performance, PostgreSQL/RLS behavior, or semantic retrieval quality. It is a deliberately narrow diagnostic. The source-chunk retriever has richer passage-level evidence, but this experiment discards that advantage to create a shared evaluation unit. Results must not be interpreted as a general winner between the retrievers.
 
-**Not yet verified:** the shared fixture and integration test have been committed, but no local execution has been reported. Run the focused test, inspect both per-query rankings, and correct the harness only for demonstrated fixture/test-double defects—not to tune either retriever toward a preferred score. Keep KRT-03 IN_PROGRESS and do not start embeddings/RRF until the test passes and its output is reviewed.
+**Developer-reported local verification — 2026-11-24:**
+
+```text
+uv run pytest tests/test_shared_lexical_retrieval_comparison.py -q -s
+1 passed in 1.12s
+```
+
+| Metric | Symbol lexical | Chunk lexical |
+|---|---:|---:|
+| Recall@1 | 1.00 | 0.75 |
+| Recall@5 | 1.00 | 1.00 |
+| Recall@10 | 1.00 | 1.00 |
+| MRR | 1.00 | 0.875 |
+
+Per-query inspection shows the meaningful difference: for `record_payment`, symbol retrieval ranks the declaration file `src/storage/ledger.py` first. Chunk retrieval ranks `src/payments/service.py` first because it contains a call site, then ranks the declaration file second. This illustrates why symbol and chunk retrieval are complementary evidence sources rather than interchangeable retrievers.
+
+**Interpretation remains narrow:** this is a four-query, synthetic, four-file identifier benchmark, evaluated at unique-file level with an in-memory PostgREST double. It establishes that both systems can retrieve the target declaration file within top five for these four cases, while symbol retrieval ranks it first more consistently. It does not establish general retrieval superiority, passage-level quality, natural-language performance, or real repository effectiveness. The initial empty chunk results were caused by a mismatch in the test double's ILIKE handling; the test double was aligned with the previously verified chunk benchmark. Production retriever behavior was not changed.
+
+**Next:** run the full NLP suite after adding this comparison. Then design a broader evaluation set with separate labels for declaration discovery, call-site/context discovery, and exact passage relevance. Keep those task types separate; do not collapse them into one score. KRT-03 remains **IN_PROGRESS**.
