@@ -764,3 +764,20 @@ Do not add code embeddings, RRF, or a reranker until this benchmark is credible.
 - The fixture validator was developer-reported passing: `tests/test_retrieval_task_benchmark_fixture.py` — 4 passed in 0.02s.
 - The new retrieval integration runner is **IMPLEMENTED, NOT VERIFIED** until it is run locally. Its in-memory PostgREST double does not test PostgreSQL query planning or RLS, and the synthetic explicit-term benchmark does not measure general natural-language understanding.
 - Next: run the focused runner, inspect per-query rankings and label validity, then run the full NLP suite. No embeddings or RRF until this evaluation is understood. KRT-03 remains **IN_PROGRESS**.
+
+
+### KRT-03 real-repository retrieval baseline — 2026-11-25
+
+Developer-reported opt-in run of `nlp/tests/test_kms_nlp_repository_retrieval_benchmark.py` against the actual KMS Python `codebase/` and `query_engine/` source:
+
+- Corpus: 29 files, 232 source chunks, 169 declarations; zero symbol syntax-error files.
+- Passage retrieval (10 questions, 11 expected ranges): MRR 0.803; complete-query Recall@1/5/10 = 0.70/0.90/1.00; range-level Recall@1/5/10 = 0.636/0.909/1.00.
+- One explicit no-evidence query returned no candidates.
+- Exact declaration lookup (5 identifier queries): MRR 1.00 and Recall@1/5 = 1.00.
+- Verification: `KMS_NLP_REPOSITORY_BENCHMARK=1 uv run pytest -q tests/test_kms_nlp_repository_retrieval_benchmark.py -s` — **1 passed**.
+
+The benchmark uses real indexers/retrievers but an in-memory PostgREST double. It supplies explicit lexical terms for manually authored questions, so it does not measure free-form semantic understanding, PostgreSQL/RLS behavior, latency/cost, or generalization beyond this KMS Python corpus. Declaration evaluation has only five queries.
+
+The main observed weakness is the declaration-intent query `repo-04-symbol-lookup`: expected ranges in `codebase/symbol_retriever.py` ranked 9 and 5 because broad lexical terms matched `active_snapshot_id` in unrelated files. Investigate query normalization and explicit routing to `CodeSymbolRetriever`; do not add query-specific score boosts.
+
+**Next:** improve declaration-intent routing and expand independently reviewed real-repository questions. Keep symbol lookup, SCIP exact-symbol navigation, and passage retrieval as distinct candidate sources. Do not add embeddings/RRF until the next evaluation demonstrates a need and defines a fair comparison. KRT-03 remains **IN_PROGRESS**.
