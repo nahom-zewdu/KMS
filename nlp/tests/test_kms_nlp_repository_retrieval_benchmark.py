@@ -195,6 +195,33 @@ _PASSAGE_QUERIES = [
         "expected_ranges": [{"file_path": "codebase/source_chunker.py", "start_line": 100, "end_line": 149}],
     },
 ]
+_DECLARATION_QUERIES = [
+    {
+        "id": "decl-01-source-chunker",
+        "identifier": "SourceChunker",
+        "expected_path": "codebase/source_chunker.py",
+    },
+    {
+        "id": "decl-02-source-chunk-indexer",
+        "identifier": "SourceChunkIndexer",
+        "expected_path": "codebase/source_chunk_indexer.py",
+    },
+    {
+        "id": "decl-03-source-chunk-retriever",
+        "identifier": "SourceChunkRetriever",
+        "expected_path": "codebase/source_chunk_retriever.py",
+    },
+    {
+        "id": "decl-04-symbol-retriever",
+        "identifier": "CodeSymbolRetriever",
+        "expected_path": "codebase/symbol_retriever.py",
+    },
+    {
+        "id": "decl-05-scip-occurrence-retriever",
+        "identifier": "ScipOccurrenceRetriever",
+        "expected_path": "codebase/scip_occurrence_retriever.py",
+    },
+]
 _NO_EVIDENCE_TERMS = ["quasar_telemetry_zygomorphic_94821"]
 
 
@@ -293,6 +320,39 @@ def test_real_kms_python_repository_lexical_retrieval_benchmark():
             } for candidate in candidates[:5]],
         })
 
+    declaration_retriever = CodeLexicalRetriever(database, top_k=100)
+    declaration_results = []
+    declaration_reciprocal_ranks = []
+    for query in _DECLARATION_QUERIES:
+        candidates = declaration_retriever.retrieve(
+            company_id=_COMPANY_ID,
+            repository_id=_REPOSITORY_ID,
+            identifiers=[query["identifier"]],
+        )
+        for candidate in candidates:
+            _scope(candidate)
+        matching_ranks = [
+            candidate.rank
+            for candidate in candidates
+            if candidate.file_path == query["expected_path"]
+            and candidate.metadata.get("name") == query["identifier"]
+        ]
+        first_rank = min(matching_ranks) if matching_ranks else None
+        if first_rank is not None:
+            declaration_reciprocal_ranks.append(1.0 / first_rank)
+        declaration_results.append({
+            "id": query["id"],
+            "identifier": query["identifier"],
+            "expected_path": query["expected_path"],
+            "first_relevant_rank": first_rank,
+            "top_results": [{
+                "rank": candidate.rank,
+                "file_path": candidate.file_path,
+                "name": candidate.metadata.get("name"),
+                "qualified_name": candidate.metadata.get("qualified_name"),
+            } for candidate in candidates[:5]],
+        })
+
     no_evidence = chunk_retriever.retrieve(
         company_id=_COMPANY_ID,
         repository_id=_REPOSITORY_ID,
@@ -312,6 +372,21 @@ def test_real_kms_python_repository_lexical_retrieval_benchmark():
             "chunks_persisted": chunk_metrics["chunks_persisted"],
             "files_with_symbol_syntax_errors": symbol_metrics["files_with_syntax_errors"],
         },
+        "declaration_evaluation": {
+            "queries": len(declaration_results),
+            "queries_with_relevant_results": len(declaration_reciprocal_ranks),
+            "recall_at_1": mean(
+                item["first_relevant_rank"] == 1 for item in declaration_results
+            ),
+            "recall_at_5": mean(
+                item["first_relevant_rank"] is not None
+                and item["first_relevant_rank"] <= 5
+                for item in declaration_results
+            ),
+            "mrr": mean(declaration_reciprocal_ranks)
+            if declaration_reciprocal_ranks else 0.0,
+        },
+        "declaration_query_results": declaration_results,
         "evaluation": {
             "queries": len(query_results),
             "queries_with_relevant_results": len(reciprocal_ranks),
@@ -358,6 +433,7 @@ def test_real_kms_python_repository_lexical_retrieval_benchmark():
                 for item in query_results
             ),
             "mrr": mean(reciprocal_ranks) if reciprocal_ranks else 0.0,
+            "no_evidence_queries": 1,
             "no_evidence_candidates": len(no_evidence),
         },
         "query_results": query_results,
@@ -366,4 +442,7 @@ def test_real_kms_python_repository_lexical_retrieval_benchmark():
 
     assert len(query_results) == 10
     assert report["evaluation"]["queries_with_relevant_results"] >= 8
+    assert len(declaration_results) == 5
+    assert report["declaration_evaluation"]["queries_with_relevant_results"] == 5
+    assert report["evaluation"]["no_evidence_queries"] == 1
     assert report["evaluation"]["no_evidence_candidates"] == 0
