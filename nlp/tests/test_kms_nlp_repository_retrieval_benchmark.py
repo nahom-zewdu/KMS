@@ -455,6 +455,6 @@ def test_real_kms_python_repository_lexical_retrieval_benchmark():
     assert len(query_results) == 10
     assert report["evaluation"]["queries_with_relevant_results"] >= 8
     assert len(declaration_results) == 7
-    assert report["declaration_evaluation"]["queries_with_relevant_results"] == 5
+    assert report["declaration_evaluation"]["queries_with_relevant_results"] == len(declaration_results)
     assert report["evaluation"]["no_evidence_queries"] == 1
     assert report["evaluation"]["no_evidence_candidates"] == 0
