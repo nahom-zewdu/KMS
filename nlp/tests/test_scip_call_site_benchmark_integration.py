@@ -14,7 +14,7 @@ import shutil
 import pytest
 
 from codebase.scip_indexer import ScipIndexRunner
-from query_engine.scip_occurrence_retriever import ScipOccurrenceRetriever
+from codebase.scip_occurrence_retriever import ScipOccurrenceRetriever
 
 
 _FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "retrieval" / "mini_repo_v2"
