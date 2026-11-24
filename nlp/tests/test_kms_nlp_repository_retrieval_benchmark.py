@@ -262,26 +262,28 @@ def test_real_kms_python_repository_lexical_retrieval_benchmark():
         )
         for candidate in candidates:
             _scope(candidate)
-        relevant_ranks = [
-            min(
+        expected_range_ranks = []
+        for expected in query["expected_ranges"]:
+            matching_ranks = [
                 candidate.rank
                 for candidate in candidates
                 if candidate.file_path == expected["file_path"]
                 and candidate.start_line <= expected["end_line"]
                 and candidate.end_line >= expected["start_line"]
+            ]
+            expected_range_ranks.append(
+                min(matching_ranks) if matching_ranks else None
             )
-            for expected in query["expected_ranges"]
-            if any(
-                candidate.file_path == expected["file_path"]
-                and candidate.start_line <= expected["end_line"]
-                and candidate.end_line >= expected["start_line"]
-                for candidate in candidates
-            )
+        relevant_ranks = [
+            rank for rank in expected_range_ranks if rank is not None
         ]
         query_results.append({
             "id": query["id"],
             "question": query["question"],
             "expected_ranges": query["expected_ranges"],
+            "expected_range_ranks": expected_range_ranks,
+            "matched_expected_ranges": len(relevant_ranks),
+            "total_expected_ranges": len(expected_range_ranks),
             "first_relevant_rank": min(relevant_ranks) if relevant_ranks else None,
             "top_results": [{
                 "rank": candidate.rank,
@@ -313,6 +315,35 @@ def test_real_kms_python_repository_lexical_retrieval_benchmark():
         "evaluation": {
             "queries": len(query_results),
             "queries_with_relevant_results": len(reciprocal_ranks),
+            "expected_ranges": sum(item["total_expected_ranges"] for item in query_results),
+            "matched_expected_ranges": sum(item["matched_expected_ranges"] for item in query_results),
+            "range_recall_at_1": sum(
+                rank == 1
+                for item in query_results
+                for rank in item["expected_range_ranks"]
+            ) / sum(item["total_expected_ranges"] for item in query_results),
+            "range_recall_at_5": sum(
+                rank is not None and rank <= 5
+                for item in query_results
+                for rank in item["expected_range_ranks"]
+            ) / sum(item["total_expected_ranges"] for item in query_results),
+            "range_recall_at_10": sum(
+                rank is not None and rank <= 10
+                for item in query_results
+                for rank in item["expected_range_ranks"]
+            ) / sum(item["total_expected_ranges"] for item in query_results),
+            "complete_query_recall_at_1": mean(
+                all(rank == 1 for rank in item["expected_range_ranks"])
+                for item in query_results
+            ),
+            "complete_query_recall_at_5": mean(
+                all(rank is not None and rank <= 5 for rank in item["expected_range_ranks"])
+                for item in query_results
+            ),
+            "complete_query_recall_at_10": mean(
+                all(rank is not None and rank <= 10 for rank in item["expected_range_ranks"])
+                for item in query_results
+            ),
             "recall_at_1": mean(
                 item["first_relevant_rank"] == 1 for item in query_results
             ),
