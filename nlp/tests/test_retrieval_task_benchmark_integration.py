@@ -94,7 +94,14 @@ class MemoryQuery:
                     if needle.casefold() in str(row.get(column) or "").casefold()
                 ]
         for column in reversed(self.orders):
-            selected.sort(key=lambda row: row.get(column) or "")
+            # Preserve native column types (e.g. integer line/byte offsets).
+            # Keep NULL values last.
+            selected.sort(
+                key=lambda row: (
+                    row.get(column) is None,
+                    row.get(column) if row.get(column) is not None else 0,
+                )
+            )
         if self.maximum is not None:
             selected = selected[:self.maximum]
         return SimpleNamespace(data=selected)
