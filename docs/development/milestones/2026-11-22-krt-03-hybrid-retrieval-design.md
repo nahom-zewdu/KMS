@@ -253,4 +253,6 @@ The benchmark emits per-query rankings and matched terms. Every supported query 
 
 The source-chunk and symbol retrievers are not directly comparable on all queries because their evidence units differ (chunks versus symbols/declarations). A comparison should be attempted only if a genuinely shared subset and relevance mapping can be defined without weakening either retriever's evidence semantics.
 
-**Next:** rerun the full NLP suite after this benchmark revision. Then inspect whether a defensible shared-subset comparison is possible. Do not start embeddings, RRF, or reranking based on this smoke benchmark alone. KRT-03 remains **IN_PROGRESS**.
+**Full-suite regression verification — developer-reported, 2026-11-24:** `uv run pytest -q` completed with **293 passed, 4 skipped, 6 warnings, and 4 subtests passed in 20.36s**. This is the first reported full-suite run after the revised chunk-level benchmark landed. The warnings are existing `pythonjsonlogger` and PyGithub deprecations.
+
+**Next:** assess whether a defensible shared-subset comparison with symbol lexical retrieval is possible. Do not start embeddings, RRF, or reranking based on this smoke benchmark alone. KRT-03 remains **IN_PROGRESS**.
