@@ -6,7 +6,7 @@
 > Current Ramp runtime: `docs/architecture/ramp.md`.
 > Scoring spec vs implemented subset: `docs/product/ramp-candidate-scoring.md`.
 
-**Last updated:** 2026-11-23
+**Last updated:** 2026-11-24
 **Current branch:** `feat/krt-03-hybrid-retrieval`
 **Current milestone:** KRT-03 — Hybrid Retrieval
 **Current objective:** Build a scoped, evaluated hybrid retrieval layer that returns relevant, revision-aware evidence for grounded KMS answers.
@@ -72,7 +72,7 @@ An `IMPORTS` edge (`A imports B`) is a structural dependency. It does not, by it
 | Area | Status | Notes |
 |---|---|---|
 | KRT-02 code intelligence | VERIFIED | Tree-sitter declarations and persisted SCIP occurrences; Python, Go, and TypeScript integrations exercised separately. See `docs/development/milestones/2026-11-22-krt-02-code-intelligence.md`. |
-| KRT-03 hybrid retrieval | IN_PROGRESS | Lexical fixture integration verified: 1 focused passed; full NLP suite 283 passed, 3 skipped, 6 warnings, 4 subtests. First source-chunk schema/indexer/retriever slice implemented but not yet locally or PostgreSQL verified. Not wired into baseline ingestion. See the KRT-03 design note. |
+| KRT-03 hybrid retrieval | IN_PROGRESS | Symbol lexical baseline, source chunking/persistence/retrieval, baseline-ingestion wiring, local PostgreSQL checks, remote dev Supabase migration, and opt-in Supabase API integration are verified. Latest full NLP suite: 292 passed, 4 skipped, 6 warnings, 4 subtests; source-chunk benchmark integration: 1 passed. Benchmark quality is not yet credible: it currently produces only four chunks and grades relevance by file path. Strengthen chunk-level ranking evaluation before semantic retrieval or fusion. See the KRT-03 design note. |
 | Reliability Batch 1 | ACCEPTED | Tenant/failure semantics hardened. Unchanged by this branch; not re-verified on 2026-09-21. |
 | Reliability Batch 2 | ACCEPTED | Redis pending-message recovery/ACK semantics hardened. Not re-verified on 2026-09-21. |
 | Reliability Batch 3 | ACCEPTED | Durable codebase-analysis lifecycle and failure propagation. Not re-verified on 2026-09-21. |
@@ -728,10 +728,29 @@ The verification is local and does not claim a live Supabase deployment or produ
 **Next:** KRT-03 Hybrid Retrieval is underway on `feat/krt-03-hybrid-retrieval`. The first evidence/lexical slice is locally verified: 29 focused tests passed; full NLP suite: 274 passed, 3 skipped, 6 warnings, 4 subtests passed. Build a benchmark runner for exact-path and symbol retrieval before adding full-text chunks or code embeddings. Existing raw-event embeddings must not be mistaken for a source-code semantic index.
 
 
-### KRT-03 update — 2026-11-23
+### KRT-03 update — 2026-11-24
 
-- Developer-reported lexical benchmark integration: **1 passed**; full NLP suite: **283 passed, 3 skipped, 6 warnings, 4 subtests passed**.
-- The eight supported synthetic lexical queries scored Recall@1/5/10 = 1.0 and MRR = 1.0. This is a curated fixture result using an in-memory PostgREST double, not a PostgreSQL/RLS integration result or production retrieval-quality claim.
-- Implemented the first durable source-chunk slice: deterministic bounded chunking, snapshot/revision identity, UTF-8 ranges and hashes, batched persistence, active-snapshot lexical retrieval, migration constraints, publication count validation, and tests.
-- The new source-chunk implementation is **not yet verified**. Run focused Python tests, the full NLP suite, then apply the migration and execute `schema/tests/source_code_chunks.sql` against disposable PostgreSQL.
-- Source chunk indexing is not yet connected to baseline ingestion. Do not enable it in production ingestion or add embeddings until the exact-revision source handoff and database integration are verified.
+**Verified implementation state**
+
+- The original symbol-based lexical baseline remains verified: eight supported synthetic queries scored Recall@1/5/10 = 1.0 and MRR = 1.0. This is a curated fixture result using an in-memory PostgREST double, not a production retrieval-quality claim.
+- Durable source chunks are implemented and wired into baseline snapshot ingestion using source text fetched at the immutable snapshot revision. Per-file coverage metrics are recorded, and snapshot validation is refreshed before publication.
+- The `source_code_chunks` migration is applied to the configured development/test Supabase project. The migration and `schema/tests/source_code_chunks.sql` were also exercised against disposable local PostgreSQL.
+- The opt-in `tests/test_source_chunk_supabase_integration.py` run passed against the configured Supabase project. It verifies persistence, idempotency, provenance, tenant/repository isolation, active-snapshot switching, and exclusion of historical chunks after the active pointer changes. Fixtures are cleaned up by the test.
+- Latest developer-reported full NLP suite: **292 passed, 4 skipped, 6 warnings, 4 subtests passed**.
+- Latest developer-reported `tests/test_source_chunk_benchmark_integration.py`: **1 passed**.
+
+**Benchmark limitation — do not overstate results**
+
+The current source-chunk benchmark passes its integration test, but it is not yet a meaningful ranking evaluation. The fixture currently produces only four chunks (one per source file), grades relevance by file path rather than exact chunk/range, and asserts broad metric thresholds rather than preserving a reviewed benchmark report. Recall@5/10 is therefore weak evidence. The test demonstrates pipeline behavior, not retrieval quality.
+
+**Next bounded task**
+
+Strengthen the source-chunk benchmark before embeddings:
+
+1. Configure the fixture to produce multiple chunks per file and include non-relevant distractor chunks.
+2. Define relevance at the chunk/range level, with explicit ground truth in the versioned fixture.
+3. Record deterministic per-query rankings and exact Recall@1/5/10 and MRR.
+4. Compare source-chunk and symbol lexical retrievers only on queries for which their evidence units and relevance labels are genuinely comparable; report non-comparable/unsupported queries separately.
+5. Update this roadmap and the KRT-03 design note with measured results and limitations.
+
+Do not add code embeddings, RRF, or a reranker until this benchmark is credible. KRT-03 remains **IN_PROGRESS**.
