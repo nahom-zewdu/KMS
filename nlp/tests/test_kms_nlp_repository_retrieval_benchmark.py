@@ -221,6 +221,18 @@ _DECLARATION_QUERIES = [
         "identifier": "ScipOccurrenceRetriever",
         "expected_path": "codebase/scip_occurrence_retriever.py",
     },
+    # These two cases isolate the declaration-intent query that performed
+    # poorly in passage search. They deliberately use the symbol retriever.
+    {
+        "id": "decl-06-qualified-name-lookup",
+        "identifier": "find_qualified_name",
+        "expected_path": "codebase/symbol_retriever.py",
+    },
+    {
+        "id": "decl-07-identifier-search",
+        "identifier": "search_names",
+        "expected_path": "codebase/symbol_retriever.py",
+    },
 ]
 _NO_EVIDENCE_TERMS = ["quasar_telemetry_zygomorphic_94821"]
 
@@ -442,7 +454,7 @@ def test_real_kms_python_repository_lexical_retrieval_benchmark():
 
     assert len(query_results) == 10
     assert report["evaluation"]["queries_with_relevant_results"] >= 8
-    assert len(declaration_results) == 5
+    assert len(declaration_results) == 7
     assert report["declaration_evaluation"]["queries_with_relevant_results"] == 5
     assert report["evaluation"]["no_evidence_queries"] == 1
     assert report["evaluation"]["no_evidence_candidates"] == 0
