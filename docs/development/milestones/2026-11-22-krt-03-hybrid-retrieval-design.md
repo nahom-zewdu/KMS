@@ -5,7 +5,7 @@
 **Working branch:** `feat/krt-03-hybrid-retrieval`  
 **Base branch:** `feat/ramp`  
 **Prerequisite:** KRT-00, KRT-01, and KRT-02 completed  
-**Next:** validate the 33-query benchmark fixture, then implement task-separated evaluation runners and inspect per-query results before considering semantic retrieval or rank fusion
+**Next:** run the new task-separated retrieval integration benchmark, inspect its per-query failures and rankings, then refine the labels/runners before considering semantic retrieval or rank fusion
 
 ## Goal
 
@@ -313,3 +313,21 @@ Added `nlp/tests/test_retrieval_task_benchmark_fixture.py` to validate task bala
 **Not yet verified:** the new fixture and validation tests have been committed but have not been run locally. They do not yet constitute a retrieval benchmark runner or measured retrieval-quality results. The current 33 labels are hand-authored synthetic ground truth and need inspection against actual indexer chunk boundaries. No semantic retrieval, embeddings, or RRF should begin based on the fixture alone.
 
 **Next:** run the focused fixture validation tests, fix only incorrect labels/schema defects, then implement independent declaration, call-site, and passage evaluation runners using the real indexers/retrievers. Add a small number of multi-file and ambiguous-identifier cases only after this initial suite is verified.
+
+
+### Task-separated retrieval runners — implementation pending local verification, 2026-11-24
+
+Added `nlp/tests/test_retrieval_task_benchmark_integration.py`. It uses the real `CodeSymbolIndexer`, `SourceChunkIndexer`, `CodeLexicalRetriever`, and `SourceChunkRetriever` over the nine-file `mini_repo_v2` fixture with an in-memory PostgREST double.
+
+The runner evaluates three tasks independently:
+
+- **Declaration discovery:** symbol identity and ranked declaration candidates.
+- **Call-site/context discovery:** source-chunk range overlap against labeled call/use ranges.
+- **Passage retrieval:** source-chunk range overlap against answer-bearing ranges.
+- **No evidence:** all three negative queries must return no symbol or chunk candidates.
+
+The report includes per-query candidate rankings, relevant ranks, Recall@1/5/10, MRR, index coverage counts, and no-evidence candidate counts. Tenant/repository/snapshot/revision provenance is asserted for every returned candidate.
+
+**Not yet verified:** the integration runner has been committed but has not been executed locally. The fixture's static label validator passed (developer-reported: 4 passed in 0.02s); that does not establish that actual retrieval finds the labels. The in-memory PostgREST double is not PostgreSQL/RLS verification. The lexical query terms are explicit benchmark signals and should not be interpreted as natural-language query understanding.
+
+**Next:** run the focused integration test, inspect every task's per-query rankings, correct only demonstrably wrong benchmark labels or runner defects, then run the full NLP suite. Do not add embeddings or RRF until the runner is verified and its failure modes are understood. KRT-03 remains **IN_PROGRESS**.
