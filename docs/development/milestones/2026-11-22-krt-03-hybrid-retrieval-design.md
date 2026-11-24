@@ -256,3 +256,18 @@ The source-chunk and symbol retrievers are not directly comparable on all querie
 **Full-suite regression verification — developer-reported, 2026-11-24:** `uv run pytest -q` completed with **293 passed, 4 skipped, 6 warnings, and 4 subtests passed in 20.36s**. This is the first reported full-suite run after the revised chunk-level benchmark landed. The warnings are existing `pythonjsonlogger` and PyGithub deprecations.
 
 **Next:** assess whether a defensible shared-subset comparison with symbol lexical retrieval is possible. Do not start embeddings, RRF, or reranking based on this smoke benchmark alone. KRT-03 remains **IN_PROGRESS**.
+
+### Shared symbol/chunk comparison — implementation pending local verification, 2026-11-24
+
+A narrow common evaluation has been added in:
+
+- `nlp/tests/fixtures/retrieval/shared_definition_file_benchmark.json`
+- `nlp/tests/test_shared_lexical_retrieval_comparison.py`
+
+The benchmark uses four identical identifier queries (`register_routes`, `should_retry`, `record_payment`, and `_insert`) against the same indexed four-file fixture, same company/repository/active snapshot/source revision, and the same file-level ground truth. Symbol declarations and source chunks are both projected to unique file paths; chunk hits from the same file are deduplicated before ranking. Both retrievers therefore receive the same query signal and are scored against the same target unit.
+
+**What this comparison can establish:** whether each lexical retriever can discover the file containing a named declaration, and how high that file ranks after projecting results to unique files.
+
+**What it cannot establish:** passage-level relevance, call-site retrieval parity, natural-language understanding, broad repository performance, PostgreSQL/RLS behavior, or semantic retrieval quality. It is a deliberately narrow diagnostic. The source-chunk retriever has richer passage-level evidence, but this experiment discards that advantage to create a shared evaluation unit. Results must not be interpreted as a general winner between the retrievers.
+
+**Not yet verified:** the shared fixture and integration test have been committed, but no local execution has been reported. Run the focused test, inspect both per-query rankings, and correct the harness only for demonstrated fixture/test-double defects—not to tune either retriever toward a preferred score. Keep KRT-03 IN_PROGRESS and do not start embeddings/RRF until the test passes and its output is reviewed.
