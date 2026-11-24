@@ -1,7 +1,7 @@
 {
   "version": 1,
   "name": "krt03-retrieval-task-benchmark",
-  "description": "Thirty manually labeled queries over a synthetic multi-module Python repository. Task types are evaluated separately: declaration discovery, call-site/context discovery, and exact passage retrieval. Labels are evidence paths and one-based source line ranges. Identifier terms are lexical query inputs; natural-language wording is retained for later semantic evaluation.",
+  "description": "Thirty task-labeled positive queries (10 each for declaration discovery, call-site/context discovery, and passage retrieval) plus three explicit no-evidence queries over a synthetic multi-module Python repository.",
   "corpus": {
     "root": "mini_repo_v2",
     "language": "python",
@@ -470,6 +470,42 @@
           "end_line": 5
         }
       ]
+    },
+    {
+      "id": "none-01",
+      "task_type": "no_evidence",
+      "question": "Where is the Kubernetes deployment reconciler implemented?",
+      "terms": [
+        "KubernetesDeployment",
+        "reconcile_cluster"
+      ],
+      "expected_symbols": [],
+      "expected_paths": [],
+      "expected_ranges": []
+    },
+    {
+      "id": "none-02",
+      "task_type": "no_evidence",
+      "question": "Where is the invoice chargeback dispute workflow implemented?",
+      "terms": [
+        "chargeback_dispute",
+        "open_dispute"
+      ],
+      "expected_symbols": [],
+      "expected_paths": [],
+      "expected_ranges": []
+    },
+    {
+      "id": "none-03",
+      "task_type": "no_evidence",
+      "question": "Where is the password reset email token expiry policy implemented?",
+      "terms": [
+        "password_reset_expiry",
+        "reset_token_ttl"
+      ],
+      "expected_symbols": [],
+      "expected_paths": [],
+      "expected_ranges": []
     }
   ]
 }
