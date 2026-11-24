@@ -1,11 +1,11 @@
 # KRT-03 — Hybrid Retrieval Design
 
-**Status:** IN_PROGRESS — lexical retrieval, source-chunk persistence, and small benchmark comparisons verified; a 33-query task-separated evaluation fixture is implemented and awaiting local validation  
+**Status:** IN_PROGRESS — lexical retrieval, source-chunk persistence, synthetic task-separated evaluation, and an opt-in real-repository Python benchmark verified  
 **Date:** 2026-11-22  
 **Working branch:** `feat/krt-03-hybrid-retrieval`  
 **Base branch:** `feat/ramp`  
 **Prerequisite:** KRT-00, KRT-01, and KRT-02 completed  
-**Next:** run the new task-separated retrieval integration benchmark, inspect its per-query failures and rankings, then refine the labels/runners before considering semantic retrieval or rank fusion
+**Next:** investigate lexical query-term normalization and identifier-aware declaration lookup against the real-repository failures; expand the reviewed query set before semantic retrieval or rank fusion
 
 ## Goal
 
@@ -382,3 +382,55 @@ The warnings are the existing `pythonjsonlogger` and PyGithub deprecations. The 
 **Decision:** retain the hybrid *candidate-source* architecture as complementary deterministic components: symbol lexical retrieval for declarations, SCIP for resolvable exact-symbol references, and source-chunk lexical retrieval for passage/context fallback. Keep structured answers separate. Do not add embeddings, RRF, or a reranker yet; first test this routing against a realistic repository and naturally phrased queries, and inspect SCIP's extra occurrences and lexical call-site rank-2 cases.
 
 KRT-03 remains **IN_PROGRESS**. The acceptance criteria requiring independently evaluated semantic retrieval and measured fusion are not met.
+
+
+### Real-repository Python retrieval evaluation — verified 2026-11-25
+
+Added and executed the opt-in benchmark `nlp/tests/test_kms_nlp_repository_retrieval_benchmark.py` against the actual `nlp/codebase` and `nlp/query_engine` Python source files (tests and fixtures excluded). The benchmark uses the real symbol/chunk indexers and lexical retrievers with an in-memory PostgREST double. It is enabled with `KMS_NLP_REPOSITORY_BENCHMARK=1` and does not run in the default test suite.
+
+**Indexed corpus:**
+
+| Measure | Result |
+|---|---:|
+| Python source files | 29 |
+| Source chunks persisted | 232 |
+| Declarations persisted | 169 |
+| Files with symbol syntax errors | 0 |
+
+**Passage retrieval — 10 manually labeled questions, 11 expected source ranges:**
+
+| Metric | Result |
+|---|---:|
+| MRR | 0.803 |
+| At least one relevant range at rank 1 | 7/10 (70%) |
+| At least one relevant range at rank 5 | 10/10 (100%) |
+| At least one relevant range at rank 10 | 10/10 (100%) |
+| Complete-query recall at 1 | 7/10 (70%) |
+| Complete-query recall at 5 | 9/10 (90%) |
+| Complete-query recall at 10 | 10/10 (100%) |
+| Range-level recall at 1 | 7/11 (63.6%) |
+| Range-level recall at 5 | 10/11 (90.9%) |
+| Range-level recall at 10 | 11/11 (100%) |
+
+One explicit no-evidence query returned no candidates.
+
+**Declaration lookup — five exact-identifier queries:**
+
+- MRR: **1.00**
+- Recall@1: **1.00**
+- Recall@5: **1.00**
+
+All five expected declarations ranked first. This is a narrow exact-identifier result, not evidence of natural-language symbol understanding.
+
+**Observed failure:** `repo-04-symbol-lookup` asks where declarations are searched by qualified name and identifier. Its two expected ranges in `codebase/symbol_retriever.py` ranked 9 and 5. The query's broad terms matched `active_snapshot_id` in unrelated retrieval implementations, pushing the relevant symbol-retriever chunks down. This is a concrete lexical query-term/identifier-discovery weakness. Do not address it with a benchmark-specific boost; inspect normalization and consider routing declaration-intent queries through `CodeSymbolRetriever` rather than generic source-chunk search.
+
+**Verification — developer-reported, 2026-11-25:**
+
+```text
+KMS_NLP_REPOSITORY_BENCHMARK=1 uv run pytest -q tests/test_kms_nlp_repository_retrieval_benchmark.py -s
+1 passed
+```
+
+The benchmark's natural-language questions are manually authored, but the runner supplies explicit lexical terms. It therefore measures lexical retrieval on a real source corpus, not semantic understanding of free-form questions. It uses an in-memory PostgREST double; it does not measure PostgreSQL query planning/RLS, production-repository generalization, latency, or cost. The corpus is KMS's own Python retrieval subsystem, so it is not independent of the implementation being evaluated. The declaration sample is only five queries.
+
+**Decision:** this real-repository run strengthens the lexical baseline but does not justify embeddings or RRF. First address the weak declaration-intent query through explicit retriever routing and improve the benchmark with independently reviewed queries. Keep exact declaration lookup, SCIP exact-symbol references, and lexical passage retrieval as distinct candidate sources. KRT-03 remains **IN_PROGRESS**.
