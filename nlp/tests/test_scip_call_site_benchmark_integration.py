@@ -1,8 +1,8 @@
-"""Opt-in comparison of SCIP semantic references against lexical call-site retrieval.
+"""Opt-in SCIP semantic-reference coverage benchmark for call-site queries.
 
-The benchmark resolves query identifiers to SCIP symbols using definition
-occurrences in the same pinned fixture. This isolates reference-location
-quality; it does not evaluate natural-language query-to-symbol resolution.
+Query identifiers are mapped to SCIP symbols through definitions in the same
+fixture. This isolates semantic reference retrieval; it does not measure
+natural-language query-to-symbol resolution or rank the returned occurrences.
 """
 from __future__ import annotations
 
@@ -17,12 +17,8 @@ from codebase.scip_indexer import ScipIndexRunner
 from query_engine.scip_occurrence_retriever import ScipOccurrenceRetriever
 
 
-_FIXTURE_ROOT = (
-    Path(__file__).parent / "fixtures" / "retrieval" / "mini_repo_v2"
-)
-_BENCHMARK_PATH = (
-    Path(__file__).parent / "fixtures" / "retrieval" / "retrieval_tasks_v1.json"
-)
+_FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "retrieval" / "mini_repo_v2"
+_BENCHMARK_PATH = Path(__file__).parent / "fixtures" / "retrieval" / "retrieval_tasks_v1.json"
 _COMPANY_ID = "scip-benchmark-company"
 _REPOSITORY_ID = "scip-benchmark-repository"
 _SNAPSHOT_ID = "scip-benchmark-snapshot-v1"
@@ -65,7 +61,12 @@ class _Query:
             else:
                 selected = [row for row in selected if row.get(column) in value]
         for column in reversed(self.orders):
-            selected.sort(key=lambda row: (row.get(column) is None, row.get(column) or 0))
+            selected.sort(
+                key=lambda row: (
+                    row.get(column) is None,
+                    row.get(column) if row.get(column) is not None else 0,
+                )
+            )
         if self.maximum is not None:
             selected = selected[: self.maximum]
         return type("Response", (), {"data": selected})()
@@ -88,19 +89,29 @@ class _Database:
         return _Query(self.rows.get(name, []))
 
 
-def _metrics(results):
-    evaluated = [item for item in results if item["relevant_count"]]
-    metrics = {"evaluated_queries": len(evaluated)}
-    for cutoff in (1, 5, 10):
-        metrics[f"recall_at_{cutoff}"] = (
-            sum(item[f"recall_at_{cutoff}"] for item in evaluated) / len(evaluated)
-            if evaluated else 0.0
-        )
-    metrics["mrr"] = (
-        sum(item["reciprocal_rank"] for item in evaluated) / len(evaluated)
-        if evaluated else 0.0
+def _overlaps(candidate, label):
+    return (
+        candidate["file_path"] == label["file_path"]
+        and candidate["start_line"] <= label["end_line"]
+        and candidate["end_line"] >= label["start_line"]
     )
-    return metrics
+
+
+def _metrics(results):
+    evaluated = [item for item in results if item["expected_range_count"]]
+    expected_count = sum(item["expected_range_count"] for item in evaluated)
+    matched_count = sum(item["matched_expected_range_count"] for item in evaluated)
+    retrieved_count = sum(item["retrieved_occurrence_count"] for item in evaluated)
+    relevant_occurrences = sum(item["relevant_occurrence_count"] for item in evaluated)
+    return {
+        "evaluated_queries": len(evaluated),
+        "expected_ranges": expected_count,
+        "matched_expected_ranges": matched_count,
+        "range_coverage_recall": matched_count / expected_count if expected_count else 0.0,
+        "retrieved_occurrences": retrieved_count,
+        "relevant_occurrences": relevant_occurrences,
+        "occurrence_precision": relevant_occurrences / retrieved_count if retrieved_count else 0.0,
+    }
 
 
 @pytest.mark.skipif(
@@ -108,7 +119,7 @@ def _metrics(results):
     reason="set KMS_SCIP_PYTHON_BENCHMARK=1 to run the real SCIP call-site benchmark",
 )
 def test_scip_semantic_references_on_call_site_benchmark():
-    """Measure exact SCIP reference locations for locally resolvable query symbols."""
+    """Measure SCIP reference coverage and precision on the call-site fixture."""
     scip_python = shutil.which("scip-python")
     scip_cli = shutil.which("scip")
     if not scip_python or not scip_cli:
@@ -127,8 +138,8 @@ def test_scip_semantic_references_on_call_site_benchmark():
         timeout_seconds=180,
         max_index_bytes=64 * 1024 * 1024,
         max_json_bytes=128 * 1024 * 1024,
-        # scip-python 0.6.8 omits positionEncoding; its documented Python
-        # convention is UTF-32 code-point offsets.
+        # scip-python 0.6.8 omits positionEncoding; Python offsets are UTF-32
+        # code points, so this compatibility assumption is explicit.
         position_encoding_override=3,
     )
     index = runner.run(
@@ -142,8 +153,7 @@ def test_scip_semantic_references_on_call_site_benchmark():
         "repository_id": _REPOSITORY_ID,
         "snapshot_id": _SNAPSHOT_ID,
     } for occurrence in index.occurrences]
-    database = _Database(persisted)
-    retriever = ScipOccurrenceRetriever(database)
+    retriever = ScipOccurrenceRetriever(_Database(persisted))
     benchmark = json.loads(_BENCHMARK_PATH.read_text(encoding="utf-8"))
     queries = [
         query for query in benchmark["queries"]
@@ -160,26 +170,19 @@ def test_scip_semantic_references_on_call_site_benchmark():
 
     results = []
     for query in queries:
-        target_symbols = sorted({
+        resolved_terms = [
+            term for term in query["terms"] if term in definitions_by_token
+        ]
+        unresolved_terms = [
+            term for term in query["terms"] if term not in definitions_by_token
+        ]
+        symbols = sorted({
             symbol
-            for term in query["terms"]
-            for symbol in definitions_by_token.get(term, set())
+            for term in resolved_terms
+            for symbol in definitions_by_token[term]
         })
-        if not target_symbols:
-            results.append({
-                "query_id": query["id"],
-                "resolved_terms": [],
-                "unresolved_terms": list(query["terms"]),
-                "relevant_count": 0,
-                "retrieved_relevant_ranks": [],
-                "ranking": [],
-                "reciprocal_rank": 0.0,
-                **{f"recall_at_{cutoff}": 0.0 for cutoff in (1, 5, 10)},
-            })
-            continue
-
         occurrences_by_id = {}
-        for symbol in target_symbols:
+        for symbol in symbols:
             for occurrence in retriever.find_references(
                 company_id=_COMPANY_ID,
                 repository_id=_REPOSITORY_ID,
@@ -187,80 +190,68 @@ def test_scip_semantic_references_on_call_site_benchmark():
             ):
                 occurrences_by_id[occurrence["occurrence_id"]] = occurrence
 
-        candidates = sorted(
-            occurrences_by_id.values(),
-            key=lambda item: (
-                item["file_path"],
-                item["start_byte"],
-                item["end_byte"],
-            ),
-        )
+        candidates = list(occurrences_by_id.values())
         expected = query["expected_ranges"]
-        hit_ranks = []
-        ranking = []
-        for rank, candidate in enumerate(candidates, start=1):
-            ranking.append({
-                "rank": rank,
-                "file_path": candidate["file_path"],
-                "start_line": candidate["start_line"],
-                "end_line": candidate["end_line"],
-                "symbol": candidate["symbol"],
-            })
-            if any(
-                candidate["file_path"] == label["file_path"]
-                and candidate["start_line"] <= label["end_line"]
-                and candidate["end_line"] >= label["start_line"]
-                for label in expected
-            ):
-                hit_ranks.append(rank)
-
-        first_rank = min(hit_ranks) if hit_ranks else None
-        result = {
+        matched_ranges = [
+            label for label in expected
+            if any(_overlaps(candidate, label) for candidate in candidates)
+        ]
+        relevant_occurrences = [
+            candidate for candidate in candidates
+            if any(_overlaps(candidate, label) for label in expected)
+        ]
+        results.append({
             "query_id": query["id"],
-            "resolved_terms": [
-                term for term in query["terms"] if term in definitions_by_token
+            "resolved_terms": resolved_terms,
+            "unresolved_terms": unresolved_terms,
+            "expected_range_count": len(expected),
+            "matched_expected_range_count": len(matched_ranges),
+            "retrieved_occurrence_count": len(candidates),
+            "relevant_occurrence_count": len(relevant_occurrences),
+            "relevant_occurrences": [
+                {
+                    "file_path": item["file_path"],
+                    "start_line": item["start_line"],
+                    "end_line": item["end_line"],
+                    "symbol": item["symbol"],
+                }
+                for item in relevant_occurrences
             ],
-            "unresolved_terms": [
-                term for term in query["terms"] if term not in definitions_by_token
+            "retrieved_occurrences": [
+                {
+                    "file_path": item["file_path"],
+                    "start_line": item["start_line"],
+                    "end_line": item["end_line"],
+                    "symbol": item["symbol"],
+                }
+                for item in candidates
             ],
-            "relevant_count": len(expected),
-            "retrieved_relevant_ranks": sorted(hit_ranks),
-            "ranking": ranking,
-            "reciprocal_rank": 1.0 / first_rank if first_rank else 0.0,
-        }
-        for cutoff in (1, 5, 10):
-            result[f"recall_at_{cutoff}"] = (
-                sum(rank <= cutoff for rank in hit_ranks) / len(expected)
-                if expected else 0.0
-            )
-        results.append(result)
+        })
 
-    covered = [item for item in results if item["relevant_count"]]
+    resolved = [item for item in results if item["resolved_terms"]]
     report = {
         "indexer": index.indexer_name,
         "indexer_version": index.indexer_version,
         "occurrences_indexed": len(index.occurrences),
-        "definitions_indexed": sum(
-            occurrence.role == "definition" for occurrence in index.occurrences
-        ),
+        "definitions_indexed": sum(item.role == "definition" for item in index.occurrences),
         "references_indexed": sum(
-            occurrence.role in {"reference", "occurrence"}
-            for occurrence in index.occurrences
+            item.role in {"reference", "occurrence"} for item in index.occurrences
         ),
         "query_count": len(queries),
-        "symbol_resolution_coverage": len(covered),
-        "symbol_resolution_coverage_rate": len(covered) / len(queries) if queries else 0.0,
-        "metrics_on_resolved_queries_only": _metrics(covered),
+        "symbol_resolution_coverage": len(resolved),
+        "symbol_resolution_coverage_rate": len(resolved) / len(queries) if queries else 0.0,
+        "metrics_on_resolved_queries_only": _metrics(resolved),
         "unresolved_queries": [
-            {
-                "query_id": item["query_id"],
-                "unresolved_terms": item["unresolved_terms"],
-            }
-            for item in results if not item["relevant_count"]
+            {"query_id": item["query_id"], "unresolved_terms": item["unresolved_terms"]}
+            for item in results if not item["resolved_terms"]
         ],
         "query_results": results,
+        "method_note": (
+            "Coverage and precision only. SCIP occurrences are not assigned a "
+            "relevance ranking; source-order sorting is deliberately not scored."
+        ),
     }
     print(json.dumps(report, indent=2, sort_keys=True))
 
     assert len(queries) == 10
-    assert len(covered) >= 8, report["unresolved_queries"]
+    assert len(resolved) >= 8, report["unresolved_queries"]
