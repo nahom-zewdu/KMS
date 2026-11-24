@@ -142,6 +142,16 @@ def _evaluate(retriever, benchmark):
             "query_id": query["id"],
             "relevant_count": len(expected),
             "retrieved_relevant_ranks": ranks,
+            "ranking": [
+                {
+                    "rank": candidate.rank,
+                    "file_path": candidate.file_path,
+                    "start_line": candidate.start_line,
+                    "end_line": candidate.end_line,
+                    "matched_terms": candidate.metadata["match_terms"],
+                }
+                for candidate in candidates
+            ],
             "reciprocal_rank": 1.0 / min(ranks) if ranks else 0.0,
         }
         for cutoff in (1, 5, 10):
@@ -205,6 +215,7 @@ def test_real_fixture_chunk_indexer_retriever_has_chunk_level_lexical_baseline()
 
     retriever = SourceChunkRetriever(database, max_results=50)
     benchmark_result = _evaluate(retriever, benchmark)
+    print(json.dumps(benchmark_result, indent=2, sort_keys=True))
 
     assert benchmark_result["evaluated_queries"] == 5
     assert benchmark_result["no_evidence_queries"] == 1
