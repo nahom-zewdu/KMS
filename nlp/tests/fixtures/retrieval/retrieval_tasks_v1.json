@@ -1,0 +1,475 @@
+{
+  "version": 1,
+  "name": "krt03-retrieval-task-benchmark",
+  "description": "Thirty manually labeled queries over a synthetic multi-module Python repository. Task types are evaluated separately: declaration discovery, call-site/context discovery, and exact passage retrieval. Labels are evidence paths and one-based source line ranges. Identifier terms are lexical query inputs; natural-language wording is retained for later semantic evaluation.",
+  "corpus": {
+    "root": "mini_repo_v2",
+    "language": "python",
+    "file_count": 9,
+    "company_id": "benchmark-company",
+    "repository_id": "benchmark-repository",
+    "snapshot_id": "benchmark-snapshot-v1",
+    "source_revision": "benchmark-revision-v1"
+  },
+  "label_schema": {
+    "declaration_discovery": "expected_symbols lists declaration names; expected_paths lists files containing those declarations. Score symbol retrieval by symbol identity where available and file-level retrieval separately.",
+    "call_site_context": "expected_ranges lists exact source ranges containing the call/use/context, not the callee declaration. Score chunk retrieval by range overlap and report file-level discovery separately.",
+    "passage_retrieval": "expected_ranges lists exact answer-bearing source ranges. Score exact/overlap relevance at chunk level; multiple ranges may be relevant.",
+    "range_convention": "One-based inclusive line ranges. A retrieved chunk is relevant when its range overlaps a labeled range in the same file. Preserve exact-match rate as a diagnostic; do not silently treat all chunks in a relevant file as relevant."
+  },
+  "queries": [
+    {
+      "id": "decl-01",
+      "task_type": "declaration_discovery",
+      "question": "Where is product availability checked?",
+      "terms": [
+        "find_available"
+      ],
+      "expected_symbols": [
+        "find_available"
+      ],
+      "expected_paths": [
+        "catalog/products.py"
+      ]
+    },
+    {
+      "id": "decl-02",
+      "task_type": "declaration_discovery",
+      "question": "Where is the product reservation operation defined?",
+      "terms": [
+        "reserve"
+      ],
+      "expected_symbols": [
+        "reserve"
+      ],
+      "expected_paths": [
+        "catalog/products.py"
+      ]
+    },
+    {
+      "id": "decl-03",
+      "task_type": "declaration_discovery",
+      "question": "Where is SKU normalization implemented?",
+      "terms": [
+        "normalize_sku"
+      ],
+      "expected_symbols": [
+        "normalize_sku"
+      ],
+      "expected_paths": [
+        "catalog/search.py"
+      ]
+    },
+    {
+      "id": "decl-04",
+      "task_type": "declaration_discovery",
+      "question": "Where is the invoice subtotal calculated?",
+      "terms": [
+        "calculate_subtotal"
+      ],
+      "expected_symbols": [
+        "calculate_subtotal"
+      ],
+      "expected_paths": [
+        "billing/invoice.py"
+      ]
+    },
+    {
+      "id": "decl-05",
+      "task_type": "declaration_discovery",
+      "question": "Where is invoice tax calculated?",
+      "terms": [
+        "calculate_tax"
+      ],
+      "expected_symbols": [
+        "calculate_tax"
+      ],
+      "expected_paths": [
+        "billing/invoice.py"
+      ]
+    },
+    {
+      "id": "decl-06",
+      "task_type": "declaration_discovery",
+      "question": "Where is payment authorization implemented?",
+      "terms": [
+        "authorize_payment"
+      ],
+      "expected_symbols": [
+        "authorize_payment"
+      ],
+      "expected_paths": [
+        "billing/payment.py"
+      ]
+    },
+    {
+      "id": "decl-07",
+      "task_type": "declaration_discovery",
+      "question": "Where is receipt email content rendered?",
+      "terms": [
+        "render_receipt"
+      ],
+      "expected_symbols": [
+        "render_receipt"
+      ],
+      "expected_paths": [
+        "notifications/email.py"
+      ]
+    },
+    {
+      "id": "decl-08",
+      "task_type": "declaration_discovery",
+      "question": "Where are orders persisted?",
+      "terms": [
+        "save_order"
+      ],
+      "expected_symbols": [
+        "save_order"
+      ],
+      "expected_paths": [
+        "storage/order_store.py"
+      ]
+    },
+    {
+      "id": "decl-09",
+      "task_type": "declaration_discovery",
+      "question": "Where is the order API read handler defined?",
+      "terms": [
+        "get_order_route"
+      ],
+      "expected_symbols": [
+        "get_order_route"
+      ],
+      "expected_paths": [
+        "api/orders.py"
+      ]
+    },
+    {
+      "id": "decl-10",
+      "task_type": "declaration_discovery",
+      "question": "Where is access-token validation defined?",
+      "terms": [
+        "validate_access_token"
+      ],
+      "expected_symbols": [
+        "validate_access_token"
+      ],
+      "expected_paths": [
+        "auth/tokens.py"
+      ]
+    },
+    {
+      "id": "call-01",
+      "task_type": "call_site_context",
+      "question": "Which code checks availability before reserving a product?",
+      "terms": [
+        "find_available"
+      ],
+      "expected_ranges": [
+        {
+          "file_path": "catalog/products.py",
+          "start_line": 12,
+          "end_line": 13
+        }
+      ]
+    },
+    {
+      "id": "call-02",
+      "task_type": "call_site_context",
+      "question": "Where does catalog search normalize an SKU before checking availability?",
+      "terms": [
+        "normalize_sku",
+        "find_available"
+      ],
+      "expected_ranges": [
+        {
+          "file_path": "catalog/search.py",
+          "start_line": 9,
+          "end_line": 10
+        }
+      ]
+    },
+    {
+      "id": "call-03",
+      "task_type": "call_site_context",
+      "question": "Where are alternative product recommendations normalized?",
+      "terms": [
+        "normalize_sku",
+        "find_alternatives"
+      ],
+      "expected_ranges": [
+        {
+          "file_path": "catalog/search.py",
+          "start_line": 14,
+          "end_line": 15
+        }
+      ]
+    },
+    {
+      "id": "call-04",
+      "task_type": "call_site_context",
+      "question": "Where does invoice construction call the subtotal calculator?",
+      "terms": [
+        "calculate_subtotal"
+      ],
+      "expected_ranges": [
+        {
+          "file_path": "billing/invoice.py",
+          "start_line": 14,
+          "end_line": 14
+        }
+      ]
+    },
+    {
+      "id": "call-05",
+      "task_type": "call_site_context",
+      "question": "Where does invoice construction calculate tax from the subtotal?",
+      "terms": [
+        "calculate_tax"
+      ],
+      "expected_ranges": [
+        {
+          "file_path": "billing/invoice.py",
+          "start_line": 15,
+          "end_line": 15
+        }
+      ]
+    },
+    {
+      "id": "call-06",
+      "task_type": "call_site_context",
+      "question": "Where is an authorization checked before a payment is captured?",
+      "terms": [
+        "startswith",
+        "authorized"
+      ],
+      "expected_ranges": [
+        {
+          "file_path": "billing/payment.py",
+          "start_line": 11,
+          "end_line": 11
+        }
+      ]
+    },
+    {
+      "id": "call-07",
+      "task_type": "call_site_context",
+      "question": "Where is receipt content rendered before sending?",
+      "terms": [
+        "render_receipt"
+      ],
+      "expected_ranges": [
+        {
+          "file_path": "notifications/email.py",
+          "start_line": 9,
+          "end_line": 10
+        }
+      ]
+    },
+    {
+      "id": "call-08",
+      "task_type": "call_site_context",
+      "question": "Where does notification dispatch delegate receipt delivery?",
+      "terms": [
+        "send_receipt"
+      ],
+      "expected_ranges": [
+        {
+          "file_path": "notifications/dispatcher.py",
+          "start_line": 7,
+          "end_line": 7
+        }
+      ]
+    },
+    {
+      "id": "call-09",
+      "task_type": "call_site_context",
+      "question": "Where does the order API delegate persistence to the store?",
+      "terms": [
+        "save_order"
+      ],
+      "expected_ranges": [
+        {
+          "file_path": "api/orders.py",
+          "start_line": 9,
+          "end_line": 9
+        }
+      ]
+    },
+    {
+      "id": "call-10",
+      "task_type": "call_site_context",
+      "question": "Where does refund routing cancel an order in the store?",
+      "terms": [
+        "cancel_order"
+      ],
+      "expected_ranges": [
+        {
+          "file_path": "api/orders.py",
+          "start_line": 13,
+          "end_line": 13
+        }
+      ]
+    },
+    {
+      "id": "passage-01",
+      "task_type": "passage_retrieval",
+      "question": "What happens when a product is unavailable for reservation?",
+      "terms": [
+        "find_available",
+        "return False"
+      ],
+      "expected_ranges": [
+        {
+          "file_path": "catalog/products.py",
+          "start_line": 12,
+          "end_line": 13
+        }
+      ]
+    },
+    {
+      "id": "passage-02",
+      "task_type": "passage_retrieval",
+      "question": "How is an SKU normalized?",
+      "terms": [
+        "strip",
+        "upper"
+      ],
+      "expected_ranges": [
+        {
+          "file_path": "catalog/search.py",
+          "start_line": 3,
+          "end_line": 5
+        }
+      ]
+    },
+    {
+      "id": "passage-03",
+      "task_type": "passage_retrieval",
+      "question": "How is the invoice subtotal computed?",
+      "terms": [
+        "price",
+        "quantity"
+      ],
+      "expected_ranges": [
+        {
+          "file_path": "billing/invoice.py",
+          "start_line": 3,
+          "end_line": 5
+        }
+      ]
+    },
+    {
+      "id": "passage-04",
+      "task_type": "passage_retrieval",
+      "question": "How is tax rounded for an invoice?",
+      "terms": [
+        "tax_amount",
+        "round"
+      ],
+      "expected_ranges": [
+        {
+          "file_path": "billing/invoice.py",
+          "start_line": 7,
+          "end_line": 10
+        }
+      ]
+    },
+    {
+      "id": "passage-05",
+      "task_type": "passage_retrieval",
+      "question": "What condition makes a payment authorization invalid?",
+      "terms": [
+        "amount",
+        "invalid_amount"
+      ],
+      "expected_ranges": [
+        {
+          "file_path": "billing/payment.py",
+          "start_line": 3,
+          "end_line": 7
+        }
+      ]
+    },
+    {
+      "id": "passage-06",
+      "task_type": "passage_retrieval",
+      "question": "How does refund validation reject an invalid amount?",
+      "terms": [
+        "amount",
+        "return False"
+      ],
+      "expected_ranges": [
+        {
+          "file_path": "billing/payment.py",
+          "start_line": 13,
+          "end_line": 17
+        }
+      ]
+    },
+    {
+      "id": "passage-07",
+      "task_type": "passage_retrieval",
+      "question": "How is a purchase receipt message formatted?",
+      "terms": [
+        "Order",
+        "total"
+      ],
+      "expected_ranges": [
+        {
+          "file_path": "notifications/email.py",
+          "start_line": 3,
+          "end_line": 5
+        }
+      ]
+    },
+    {
+      "id": "passage-08",
+      "task_type": "passage_retrieval",
+      "question": "How does the order store mark an order as paid?",
+      "terms": [
+        "status",
+        "paid"
+      ],
+      "expected_ranges": [
+        {
+          "file_path": "storage/order_store.py",
+          "start_line": 14,
+          "end_line": 16
+        }
+      ]
+    },
+    {
+      "id": "passage-09",
+      "task_type": "passage_retrieval",
+      "question": "How is an access token added to the revocation set?",
+      "terms": [
+        "revoked",
+        "add"
+      ],
+      "expected_ranges": [
+        {
+          "file_path": "auth/tokens.py",
+          "start_line": 11,
+          "end_line": 13
+        }
+      ]
+    },
+    {
+      "id": "passage-10",
+      "task_type": "passage_retrieval",
+      "question": "What data does the order API return when reading an order?",
+      "terms": [
+        "get_order",
+        "return"
+      ],
+      "expected_ranges": [
+        {
+          "file_path": "api/orders.py",
+          "start_line": 3,
+          "end_line": 5
+        }
+      ]
+    }
+  ]
+}
