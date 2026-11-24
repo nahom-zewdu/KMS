@@ -291,8 +291,8 @@
       "expected_ranges": [
         {
           "file_path": "api/orders.py",
-          "start_line": 9,
-          "end_line": 9
+          "start_line": 11,
+          "end_line": 11
         }
       ]
     },
@@ -306,8 +306,8 @@
       "expected_ranges": [
         {
           "file_path": "api/orders.py",
-          "start_line": 13,
-          "end_line": 13
+          "start_line": 15,
+          "end_line": 15
         }
       ]
     },
