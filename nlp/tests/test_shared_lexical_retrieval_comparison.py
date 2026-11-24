@@ -98,27 +98,15 @@ class MemoryQuery:
                 selected = [row for row in selected if row.get(column) == value]
                 continue
 
-            expression_parts = []
-            escaped = False
-            for char in value:
-                if escaped:
-                    expression_parts.append(re.escape(char))
-                    escaped = False
-                elif char == "\\":
-                    escaped = True
-                elif char == "%":
-                    expression_parts.append(".*")
-                elif char == "_":
-                    expression_parts.append(".")
-                else:
-                    expression_parts.append(re.escape(char))
-            if escaped:
-                expression_parts.append(re.escape("\\"))
-            expression = "".join(expression_parts)
-            matcher = re.compile(f"^{expression}$", re.IGNORECASE)
+            # Mirror the already-verified chunk benchmark's narrow PostgREST
+            # double: fixture terms are literal identifiers, not SQL wildcard
+            # expressions. Undo the retriever's escaping, then use substring
+            # matching. This is intentionally not a general SQL LIKE emulator.
+            needle = value[1:-1].replace("\\\\", "\\")
+            needle = needle.replace("\\%", "%").replace("\\_", "_")
             selected = [
                 row for row in selected
-                if matcher.match(str(row.get(column) or ""))
+                if needle.casefold() in str(row.get(column) or "").casefold()
             ]
 
         for column in reversed(self.orders):
