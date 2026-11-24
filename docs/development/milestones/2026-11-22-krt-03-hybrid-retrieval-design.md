@@ -1,11 +1,11 @@
 # KRT-03 — Hybrid Retrieval Design
 
-**Status:** IN_PROGRESS — symbol lexical baseline and source-chunk persistence/retrieval verified; source-chunk ranking benchmark requires stronger chunk-level ground truth  
+**Status:** IN_PROGRESS — symbol lexical baseline, source-chunk persistence/retrieval, and revised chunk-level lexical smoke benchmark verified; full-suite rerun and broader evaluation remain outstanding  
 **Date:** 2026-11-22  
 **Working branch:** `feat/krt-03-hybrid-retrieval`  
 **Base branch:** `feat/ramp`  
 **Prerequisite:** KRT-00, KRT-01, and KRT-02 completed  
-**Next:** Strengthen chunk-level lexical evaluation; only then evaluate semantic retrieval and rank fusion
+**Next:** Rerun the full NLP suite, then assess whether a defensible shared-subset comparison with symbol lexical retrieval is possible before considering semantic retrieval or rank fusion
 
 ## Goal
 
@@ -147,8 +147,7 @@ KRT-03 is accepted only when lexical and semantic retrieval are independently te
 
 Added:
 
-- `nlp/query_engine/evidence.py`: immutable `EvidenceCandidate` contract for code chunks, symbols, SCIP occurrences, events, and graph evidence.
-- Code candidate validation requires company, repository, active snapshot, source revision, path, content hash, and source ranges.
+- `nlp/query_engine/evidence.py`: immutable `EvidenceCandidate` contract for code chunks, symbols, SCIP occurrences, events, and graph evidence.- Code candidate validation requires company, repository, active snapshot, source revision, path, content hash, and source ranges.
 - Stable evidence IDs are based on tenant and source identity, not retriever rank or score. Code identity includes the exact snapshot, revision, path, range, and content hash; event/graph identity includes company, source, and record ID.
 - `nlp/tests/test_query_engine_evidence.py`: validation, identity stability, tenant separation, and serialization tests.
 - `nlp/tests/fixtures/retrieval/`: a small synthetic four-file repository, historical event records, and a 20-query benchmark covering paths, identifiers, definitions/references, natural-language code questions, multi-file questions, historical events, no-evidence queries, and scope boundaries.
@@ -232,6 +231,26 @@ The initial four-chunk/file-level benchmark has been replaced with a versioned c
 - The integration test emits deterministic per-query candidate rankings, matched terms, relevant ranks, Recall@1/5/10, and MRR.
 - The test continues to validate company/repository/active-snapshot/source-revision provenance and no-evidence/tenant/repository isolation.
 
-**Not yet verified:** the revised benchmark code and fixture have been committed to the feature branch, but no local run has been reported. Its measured ranking metrics must be reviewed before writing a dated benchmark-results artifact or comparing retrievers. The source-chunk and symbol retrievers are not directly comparable on all queries because their evidence units differ (chunks versus symbols/declarations); only a carefully defined shared subset may be compared.
+**Developer-reported local verification — 2026-11-24:**
 
-Next command: run the focused test with output capture disabled, inspect the per-query rankings and exact metrics, then adjust ground truth only if the source ranges are demonstrably wrong. Do not tune retrieval behavior merely to improve this synthetic score.
+```text
+uv run pytest tests/test_source_chunk_benchmark_integration.py -q -s
+1 passed in 1.10s
+```
+
+Measured results from the five supported queries (the no-evidence query is reported separately):
+
+| Metric | Result |
+|---|---:|
+| Recall@1 | 0.70 |
+| Recall@5 | 1.00 |
+| Recall@10 | 1.00 |
+| MRR | 1.00 |
+
+The benchmark emits per-query rankings and matched terms. Every supported query has at least one relevant chunk at rank 1. Recall@1 is lower than 1.0 because three queries have multiple relevant chunks and top-1 can return only one of them.
+
+**Interpretation and limitations:** this verifies deterministic behavior of the real chunker, indexer, and retriever on a controlled synthetic four-file fixture. It is not evidence of real-world retrieval quality: there are only five supported queries, the lexical terms are explicit identifiers, relevance is manually specified at exact line-range level, and the test uses an in-memory PostgREST double. It does not measure PostgreSQL query planning/RLS or natural-language retrieval quality. The separate SQL and opt-in Supabase API tests cover persistence and scope behavior, not this benchmark's ranking quality.
+
+The source-chunk and symbol retrievers are not directly comparable on all queries because their evidence units differ (chunks versus symbols/declarations). A comparison should be attempted only if a genuinely shared subset and relevance mapping can be defined without weakening either retriever's evidence semantics.
+
+**Next:** rerun the full NLP suite after this benchmark revision. Then inspect whether a defensible shared-subset comparison is possible. Do not start embeddings, RRF, or reranking based on this smoke benchmark alone. KRT-03 remains **IN_PROGRESS**.
