@@ -135,61 +135,64 @@ _PASSAGE_QUERIES = [
         "id": "repo-01-chunk-bounds",
         "question": "Where are source size and chunk size limits enforced?",
         "terms": ["SourceChunkingError", "max_chunk_bytes"],
-        "expected_paths": ["codebase/source_chunker.py"],
+        "expected_ranges": [{"file_path": "codebase/source_chunker.py", "start_line": 86, "end_line": 98}],
     },
     {
         "id": "repo-02-chunk-persistence",
         "question": "How are source chunks persisted idempotently for a snapshot?",
         "terms": ["on_conflict", "chunk_id", "source_code_chunks"],
-        "expected_paths": ["codebase/source_chunk_indexer.py"],
+        "expected_ranges": [{"file_path": "codebase/source_chunk_indexer.py", "start_line": 53, "end_line": 77}],
     },
     {
         "id": "repo-03-active-chunk-retrieval",
         "question": "How does passage retrieval restrict results to the active snapshot?",
         "terms": ["rows_by_id", "matched_terms", "source_code_chunks"],
-        "expected_paths": ["codebase/source_chunk_retriever.py"],
+        "expected_ranges": [{"file_path": "codebase/source_chunk_retriever.py", "start_line": 34, "end_line": 64}],
     },
     {
         "id": "repo-04-symbol-lookup",
         "question": "Where are declarations searched by qualified name and identifier?",
         "terms": ["find_qualified_name", "search_names", "active_snapshot_id"],
-        "expected_paths": ["codebase/symbol_retriever.py"],
+        "expected_ranges": [
+            {"file_path": "codebase/symbol_retriever.py", "start_line": 17, "end_line": 38},
+            {"file_path": "codebase/symbol_retriever.py", "start_line": 63, "end_line": 87},
+        ],
     },
     {
         "id": "repo-05-lexical-evidence",
         "question": "How are declaration matches converted into provenance-aware candidates?",
         "terms": ["match_modes", "EvidenceCandidate", "qualified_name"],
-        "expected_paths": ["query_engine/code_lexical.py"],
+        "expected_ranges": [{"file_path": "query_engine/code_lexical.py", "start_line": 121, "end_line": 161}],
     },
     {
         "id": "repo-06-evidence-identity",
         "question": "How is stable identity calculated for source evidence?",
         "terms": ["evidence_id", "content_hash", "start_byte"],
-        "expected_paths": ["query_engine/evidence.py"],
+        "expected_ranges": [{"file_path": "query_engine/evidence.py", "start_line": 83, "end_line": 105}],
     },
     {
         "id": "repo-07-scip-references",
         "question": "Where can callers retrieve SCIP references for an exact symbol?",
         "terms": ["find_references", "ScipOccurrenceRetriever", "reference"],
-        "expected_paths": ["codebase/scip_occurrence_retriever.py"],
+        "expected_ranges": [{"file_path": "codebase/scip_occurrence_retriever.py", "start_line": 31, "end_line": 60}],
     },
     {
         "id": "repo-08-baseline-indexing",
         "question": "Where does baseline ingestion connect repository indexing to source chunks?",
         "terms": ["SourceChunkIndexer", "source_chunk_indexer"],
-        "expected_paths": ["codebase/baseline.py"],
+        "expected_ranges": [{"file_path": "codebase/baseline.py", "start_line": 587, "end_line": 655}],
     },
     {
         "id": "repo-09-symbol-indexing",
         "question": "How are extracted declarations batch-upserted into code_symbols?",
         "terms": ["CodeSymbolExtractor", "code_symbols", "symbols_persisted"],
-        "expected_paths": ["codebase/symbol_indexer.py"],
+        "expected_ranges": [{"file_path": "codebase/symbol_indexer.py", "start_line": 115, "end_line": 127}],
     },
     {
         "id": "repo-10-chunk-provenance",
         "question": "Where are UTF-8 byte offsets and one-based source line ranges generated?",
         "terms": ["encoded_lines", "start_byte", "end_byte"],
-        "expected_paths": ["codebase/source_chunker.py"],
+        "expected_ranges": [{"file_path": "codebase/source_chunker.py", "start_line": 100, "end_line": 149}],
     },
 ]
 _NO_EVIDENCE_TERMS = ["quasar_telemetry_zygomorphic_94821"]
@@ -260,14 +263,25 @@ def test_real_kms_python_repository_lexical_retrieval_benchmark():
         for candidate in candidates:
             _scope(candidate)
         relevant_ranks = [
-            candidate.rank
-            for candidate in candidates
-            if candidate.file_path in query["expected_paths"]
+            min(
+                candidate.rank
+                for candidate in candidates
+                if candidate.file_path == expected["file_path"]
+                and candidate.start_line <= expected["end_line"]
+                and candidate.end_line >= expected["start_line"]
+            )
+            for expected in query["expected_ranges"]
+            if any(
+                candidate.file_path == expected["file_path"]
+                and candidate.start_line <= expected["end_line"]
+                and candidate.end_line >= expected["start_line"]
+                for candidate in candidates
+            )
         ]
         query_results.append({
             "id": query["id"],
             "question": query["question"],
-            "expected_paths": query["expected_paths"],
+            "expected_ranges": query["expected_ranges"],
             "first_relevant_rank": min(relevant_ranks) if relevant_ranks else None,
             "top_results": [{
                 "rank": candidate.rank,
