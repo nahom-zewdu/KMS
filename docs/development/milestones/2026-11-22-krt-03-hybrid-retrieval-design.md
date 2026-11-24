@@ -331,3 +331,54 @@ The report includes per-query candidate rankings, relevant ranks, Recall@1/5/10,
 **Not yet verified:** the integration runner has been committed but has not been executed locally. The fixture's static label validator passed (developer-reported: 4 passed in 0.02s); that does not establish that actual retrieval finds the labels. The in-memory PostgREST double is not PostgreSQL/RLS verification. The lexical query terms are explicit benchmark signals and should not be interpreted as natural-language query understanding.
 
 **Next:** run the focused integration test, inspect every task's per-query rankings, correct only demonstrably wrong benchmark labels or runner defects, then run the full NLP suite. Do not add embeddings or RRF until the runner is verified and its failure modes are understood. KRT-03 remains **IN_PROGRESS**.
+
+
+### Task-separated lexical and SCIP evaluation — verified 2026-11-25
+
+The 33-query task-separated fixture and its integration runner have now been executed locally against the real symbol/chunk indexers and lexical retrievers using an in-memory PostgREST double.
+
+**Lexical task metrics (developer-reported):**
+
+| Task | Queries | MRR | Recall@1 | Recall@5 | Recall@10 |
+|---|---:|---:|---:|---:|---:|
+| Declaration discovery | 10 | 1.00 | 1.00 | 1.00 | 1.00 |
+| Call-site/context discovery | 10 | 0.75 | 0.50 | 1.00 | 1.00 |
+| Passage retrieval | 10 | 0.95 | 0.90 | 1.00 | 1.00 |
+
+All three explicit no-evidence queries returned zero symbol and chunk candidates. The fixture indexed 29 symbols and 36 chunks across nine source files.
+
+Call-site lexical retrieval has a clear limitation: five of ten relevant ranges rank second rather than first, commonly because a definition chunk and a reference chunk share the same identifier and lexical scoring/tie-breaking does not distinguish their semantic roles. Do not add arbitrary ranking boosts. Use SCIP exact-symbol references when symbol resolution and index coverage are available; retain lexical chunks as fallback and for passage retrieval.
+
+**SCIP call-site benchmark (separate metric family):**
+
+- Real `scip-python` 0.6.8 indexing produced 99 definitions, 152 references, and 251 total occurrences.
+- Symbol resolution: 9/10 queries (90%); `call-06` remains unresolved for built-in/general terms `startswith` and `authorized`.
+- On the nine resolved queries, expected-range coverage: 9/9 (100%).
+- Occurrence precision: 9/13 (69.2%).
+- The two typed cross-file calls in `api/orders.py` are correctly resolved after annotating the fixture's `OrderStore` dependency and correcting expected source lines.
+
+SCIP reports coverage and precision, not ranked Recall@k/MRR. These metrics must not be compared numerically with lexical ranking metrics. The 69.2% precision also means additional occurrences are returned beyond the query-specific expected ranges; inspect this behavior in future realistic evaluations rather than applying arbitrary filtering.
+
+**Verification — developer-reported, 2026-11-25:**
+
+```text
+KMS_SCIP_PYTHON_BENCHMARK=1 uv run pytest -q tests/test_scip_call_site_benchmark_integration.py -s
+1 passed in 2.13s
+
+uv run pytest -q tests/test_retrieval_task_benchmark_integration.py -s
+1 passed
+
+uv run pytest -q tests/test_retrieval_task_benchmark_fixture.py
+4 passed in 0.04s
+
+uv run pytest -q
+299 passed, 5 skipped, 6 warnings, 4 subtests passed in 16.45s
+```
+
+The warnings are the existing `pythonjsonlogger` and PyGithub deprecations. The five skipped tests include opt-in integrations; this full-suite run does not replace separately executed SCIP or Supabase integration checks.
+
+**Interpretation and limitations:** this is a useful task-separated deterministic lexical baseline, not production-quality evidence. It uses a nine-file synthetic Python corpus, explicit lexical query terms, hand-authored relevance labels, and an in-memory PostgREST double. It does not measure natural-language semantic retrieval, production-repository generalization, PostgreSQL query planning/RLS, or latency/cost. The separate SCIP run uses real index generation but an in-memory occurrence persistence/retrieval double.
+
+**Decision:** retain the hybrid *candidate-source* architecture as complementary deterministic components: symbol lexical retrieval for declarations, SCIP for resolvable exact-symbol references, and source-chunk lexical retrieval for passage/context fallback. Keep structured answers separate. Do not add embeddings, RRF, or a reranker yet; first test this routing against a realistic repository and naturally phrased queries, and inspect SCIP's extra occurrences and lexical call-site rank-2 cases.
+
+KRT-03 remains **IN_PROGRESS**. The acceptance criteria requiring independently evaluated semantic retrieval and measured fusion are not met.
