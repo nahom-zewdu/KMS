@@ -1,0 +1,136 @@
+{
+  "version": 1,
+  "description": "Curated lexical source-chunk benchmark over the synthetic mini repository. Terms are explicit retrieval signals; this does not evaluate natural-language query understanding.",
+  "default_scope": {
+    "company_id": "company-a",
+    "repository_id": "mini-repo-a",
+    "snapshot_id": "mini-repo-a@fixture-v1",
+    "source_revision": "fixture-v1"
+  },
+  "queries": [
+    {
+      "id": "chunk-identifier-01",
+      "terms": [
+        "PaymentService"
+      ],
+      "expected_paths": [
+        "src/payments/service.py"
+      ]
+    },
+    {
+      "id": "chunk-identifier-02",
+      "terms": [
+        "should_retry"
+      ],
+      "expected_paths": [
+        "src/payments/retry.py",
+        "src/payments/service.py"
+      ]
+    },
+    {
+      "id": "chunk-identifier-03",
+      "terms": [
+        "record_payment"
+      ],
+      "expected_paths": [
+        "src/storage/ledger.py",
+        "src/payments/service.py"
+      ]
+    },
+    {
+      "id": "chunk-symbol-01",
+      "terms": [
+        "PaymentService",
+        "charge"
+      ],
+      "expected_paths": [
+        "src/payments/service.py"
+      ]
+    },
+    {
+      "id": "chunk-symbol-02",
+      "terms": [
+        "Ledger",
+        "record_payment"
+      ],
+      "expected_paths": [
+        "src/storage/ledger.py",
+        "src/payments/service.py"
+      ]
+    },
+    {
+      "id": "chunk-code-01",
+      "terms": [
+        "temporary_error",
+        "should_retry"
+      ],
+      "expected_paths": [
+        "src/payments/service.py",
+        "src/payments/retry.py"
+      ]
+    },
+    {
+      "id": "chunk-code-02",
+      "terms": [
+        "success",
+        "record_payment"
+      ],
+      "expected_paths": [
+        "src/payments/service.py",
+        "src/storage/ledger.py"
+      ]
+    },
+    {
+      "id": "chunk-code-03",
+      "terms": [
+        "register_routes"
+      ],
+      "expected_paths": [
+        "src/api/routes.py"
+      ]
+    },
+    {
+      "id": "chunk-code-04",
+      "terms": [
+        "RetryPolicy",
+        "attempt"
+      ],
+      "expected_paths": [
+        "src/payments/retry.py",
+        "src/payments/service.py"
+      ]
+    },
+    {
+      "id": "chunk-code-05",
+      "terms": [
+        "successful",
+        "payment",
+        "entry"
+      ],
+      "expected_paths": [
+        "src/storage/ledger.py",
+        "src/payments/service.py"
+      ]
+    },
+    {
+      "id": "chunk-multi-01",
+      "terms": [
+        "retry_policy",
+        "ledger"
+      ],
+      "expected_paths": [
+        "src/payments/service.py"
+      ]
+    },
+    {
+      "id": "chunk-multi-02",
+      "terms": [
+        "register_routes",
+        "/payments"
+      ],
+      "expected_paths": [
+        "src/api/routes.py"
+      ]
+    }
+  ]
+}
