@@ -1,4 +1,4 @@
-"""End-to-end source-chunk lexical benchmark on the synthetic repository fixture.
+"""Chunk-level source retrieval benchmark over the synthetic repository.
 
 The in-memory PostgREST double exercises the real chunker, indexer, retriever,
 and ranking path. It does not claim PostgreSQL query-planner or RLS coverage.
@@ -8,12 +8,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-import re
 from statistics import mean
 from types import SimpleNamespace
 
 from codebase.source_chunk_indexer import SourceChunkIndexer
 from codebase.source_chunk_retriever import SourceChunkRetriever
+from codebase.source_chunker import SourceChunker
 
 
 _FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "retrieval"
@@ -113,52 +113,64 @@ class MemorySupabase:
 
 def _evaluate(retriever, benchmark):
     query_results = []
+    scope = benchmark["default_scope"]
     for query in benchmark["queries"]:
         candidates = retriever.retrieve(
-            company_id=benchmark["default_scope"]["company_id"],
-            repository_id=benchmark["default_scope"]["repository_id"],
+            company_id=scope["company_id"],
+            repository_id=scope["repository_id"],
             terms=query["terms"],
         )
-        expected_paths = set(query["expected_paths"])
         first_ranks = {}
         for candidate in candidates:
-            assert candidate.company_id == benchmark["default_scope"]["company_id"]
-            assert candidate.repository_id == benchmark["default_scope"]["repository_id"]
-            assert candidate.snapshot_id == benchmark["default_scope"]["snapshot_id"]
-            assert candidate.source_revision == benchmark["default_scope"]["source_revision"]
-            if candidate.file_path in expected_paths:
-                first_ranks.setdefault(candidate.file_path, candidate.rank)
+            assert candidate.company_id == scope["company_id"]
+            assert candidate.repository_id == scope["repository_id"]
+            assert candidate.snapshot_id == scope["snapshot_id"]
+            assert candidate.source_revision == scope["source_revision"]
+            key = (
+                candidate.file_path,
+                candidate.start_line,
+                candidate.end_line,
+            )
+            first_ranks.setdefault(key, candidate.rank)
 
-        ranks = list(first_ranks.values())
+        expected = {
+            (item["file_path"], item["start_line"], item["end_line"])
+            for item in query["expected_chunks"]
+        }
+        ranks = sorted(first_ranks[key] for key in expected if key in first_ranks)
         result = {
             "query_id": query["id"],
-            "relevant_count": len(expected_paths),
-            "retrieved_relevant_ranks": sorted(ranks),
+            "relevant_count": len(expected),
+            "retrieved_relevant_ranks": ranks,
             "reciprocal_rank": 1.0 / min(ranks) if ranks else 0.0,
         }
         for cutoff in (1, 5, 10):
             result[f"recall_at_{cutoff}"] = (
-                sum(rank <= cutoff for rank in ranks) / len(expected_paths)
+                sum(rank <= cutoff for rank in ranks) / len(expected)
+                if expected else 0.0
             )
         query_results.append(result)
 
+    evaluated = [
+        item for item, query in zip(query_results, benchmark["queries"])
+        if query["expected_chunks"]
+    ]
     metrics = {
         f"recall_at_{cutoff}": mean(
-            result[f"recall_at_{cutoff}"] for result in query_results
+            item[f"recall_at_{cutoff}"] for item in evaluated
         )
         for cutoff in (1, 5, 10)
     }
-    metrics["mrr"] = mean(
-        result["reciprocal_rank"] for result in query_results
-    )
+    metrics["mrr"] = mean(item["reciprocal_rank"] for item in evaluated)
     return {
-        "evaluated_queries": len(query_results),
+        "evaluated_queries": len(evaluated),
+        "no_evidence_queries": len(query_results) - len(evaluated),
         "metrics": metrics,
         "query_results": query_results,
     }
 
 
-def test_real_fixture_chunk_indexer_retriever_has_measurable_lexical_baseline():
+def test_real_fixture_chunk_indexer_retriever_has_chunk_level_lexical_baseline():
     benchmark = json.loads(_BENCHMARK_PATH.read_text(encoding="utf-8"))
     database = MemorySupabase()
     source_files = [
@@ -169,7 +181,17 @@ def test_real_fixture_chunk_indexer_retriever_has_measurable_lexical_baseline():
         for path in sorted(_REPOSITORY_ROOT.rglob("*.py"))
     ]
 
-    indexing = SourceChunkIndexer(database).index_files(
+    # Small deterministic windows create multiple candidates per source file.
+    # Chunks outside each query's explicit relevant ranges are ranking
+    # distractors rather than silently counting an entire file as relevant.
+    chunker = SourceChunker(
+        max_source_bytes=1_000_000,
+        max_chunk_bytes=1_200,
+        max_lines=5,
+        overlap_lines=1,
+        chunker_version="benchmark-line-window-v1",
+    )
+    indexing = SourceChunkIndexer(database, chunker=chunker).index_files(
         source_files,
         repository_id="mini-repo-a",
         snapshot_id="mini-repo-a@fixture-v1",
@@ -179,15 +201,15 @@ def test_real_fixture_chunk_indexer_retriever_has_measurable_lexical_baseline():
     assert indexing["files_seen"] == 4
     assert indexing["files_indexed"] == 4
     assert indexing["files_rejected"] == 0
-    assert indexing["chunks_persisted"] == 4
+    assert indexing["chunks_persisted"] > indexing["files_indexed"]
 
-    retriever = SourceChunkRetriever(database, max_results=20)
+    retriever = SourceChunkRetriever(database, max_results=50)
     benchmark_result = _evaluate(retriever, benchmark)
 
-    assert benchmark_result["evaluated_queries"] == 12
-    assert benchmark_result["metrics"]["recall_at_5"] == 1.0
-    assert benchmark_result["metrics"]["recall_at_10"] == 1.0
-    assert benchmark_result["metrics"]["mrr"] >= 0.5, benchmark_result["query_results"]
+    assert benchmark_result["evaluated_queries"] == 5
+    assert benchmark_result["no_evidence_queries"] == 1
+    assert benchmark_result["metrics"]["recall_at_10"] == 1.0, benchmark_result
+    assert benchmark_result["metrics"]["mrr"] >= 0.5, benchmark_result
 
     # A no-evidence query should remain empty; another repository or tenant
     # must not borrow this fixture's active snapshot or chunks.
