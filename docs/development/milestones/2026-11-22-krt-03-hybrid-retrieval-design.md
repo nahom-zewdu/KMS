@@ -1,11 +1,11 @@
 # KRT-03 — Hybrid Retrieval Design
 
-**Status:** IN_PROGRESS — symbol lexical baseline, source-chunk persistence/retrieval, and revised chunk-level lexical smoke benchmark verified; full-suite rerun and broader evaluation remain outstanding  
+**Status:** IN_PROGRESS — lexical retrieval, source-chunk persistence, and small benchmark comparisons verified; a 33-query task-separated evaluation fixture is implemented and awaiting local validation  
 **Date:** 2026-11-22  
 **Working branch:** `feat/krt-03-hybrid-retrieval`  
 **Base branch:** `feat/ramp`  
 **Prerequisite:** KRT-00, KRT-01, and KRT-02 completed  
-**Next:** Rerun the full NLP suite, then assess whether a defensible shared-subset comparison with symbol lexical retrieval is possible before considering semantic retrieval or rank fusion
+**Next:** validate the 33-query benchmark fixture, then implement task-separated evaluation runners and inspect per-query results before considering semantic retrieval or rank fusion
 
 ## Goal
 
@@ -291,3 +291,25 @@ Per-query inspection shows the meaningful difference: for `record_payment`, symb
 **Full-suite regression verification — developer-reported, 2026-11-24:** `uv run pytest -q` completed with **294 passed, 4 skipped, 6 warnings, and 4 subtests passed in 20.92s** after the shared comparison was added. The warnings remain the existing `pythonjsonlogger` and PyGithub deprecations.
 
 **Next:** design a broader evaluation set with separate labels for declaration discovery, call-site/context discovery, and exact passage relevance. Keep those task types separate; do not collapse them into one score. KRT-03 remains **IN_PROGRESS**.
+
+
+### Task-separated retrieval evaluation fixture — implementation pending local verification, 2026-11-24
+
+Added a larger synthetic multi-module Python corpus under `nlp/tests/fixtures/retrieval/mini_repo_v2/` with nine files spanning catalog, billing, notifications, storage, API, and token operations.
+
+Added `nlp/tests/fixtures/retrieval/retrieval_tasks_v1.json` with **33 labeled queries**:
+
+| Task | Queries | Ground truth |
+|---|---:|---|
+| Declaration discovery | 10 | Declared symbol names and containing file paths |
+| Call-site/context discovery | 10 | Exact one-based inclusive source line ranges for usage/context |
+| Passage retrieval | 10 | Exact one-based inclusive answer-bearing source ranges |
+| No evidence | 3 | Explicitly empty labels; query terms must be absent from the corpus |
+
+The fixture keeps natural-language questions separate from explicit lexical terms. It defines range-overlap relevance for chunk-level evaluation and asks that exact-range match rate remain a separate diagnostic. Task metrics must be reported separately; declaration/file discovery must not be conflated with call-site or passage relevance.
+
+Added `nlp/tests/test_retrieval_task_benchmark_fixture.py` to validate task balance, unique query IDs, Python declaration labels using AST, range bounds and term presence, and negative-query absence.
+
+**Not yet verified:** the new fixture and validation tests have been committed but have not been run locally. They do not yet constitute a retrieval benchmark runner or measured retrieval-quality results. The current 33 labels are hand-authored synthetic ground truth and need inspection against actual indexer chunk boundaries. No semantic retrieval, embeddings, or RRF should begin based on the fixture alone.
+
+**Next:** run the focused fixture validation tests, fix only incorrect labels/schema defects, then implement independent declaration, call-site, and passage evaluation runners using the real indexers/retrievers. Add a small number of multi-file and ambiguous-identifier cases only after this initial suite is verified.
