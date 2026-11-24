@@ -221,3 +221,17 @@ Code review identified a benchmark-design weakness: default chunking produces on
 5. Record the benchmark method, results, and limitations here and in the roadmap.
 
 Do not start semantic embeddings or RRF until this task produces a credible lexical baseline.
+
+### Chunk-level benchmark revision — implementation pending local verification, 2026-11-24
+
+The initial four-chunk/file-level benchmark has been replaced with a versioned chunk-level fixture:
+
+- Five-line windows with one-line overlap create multiple candidates per source file; non-relevant chunks act as ranking distractors.
+- Ground truth identifies exact `(file_path, start_line, end_line)` ranges rather than treating every chunk in a relevant file as relevant.
+- Five supported lexical queries and one explicit no-evidence query are included.
+- The integration test emits deterministic per-query candidate rankings, matched terms, relevant ranks, Recall@1/5/10, and MRR.
+- The test continues to validate company/repository/active-snapshot/source-revision provenance and no-evidence/tenant/repository isolation.
+
+**Not yet verified:** the revised benchmark code and fixture have been committed to the feature branch, but no local run has been reported. Its measured ranking metrics must be reviewed before writing a dated benchmark-results artifact or comparing retrievers. The source-chunk and symbol retrievers are not directly comparable on all queries because their evidence units differ (chunks versus symbols/declarations); only a carefully defined shared subset may be compared.
+
+Next command: run the focused test with output capture disabled, inspect the per-query rankings and exact metrics, then adjust ground truth only if the source ranges are demonstrably wrong. Do not tune retrieval behavior merely to improve this synthetic score.
