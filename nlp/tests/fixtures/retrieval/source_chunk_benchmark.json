@@ -41,7 +41,7 @@
         {
           "file_path": "src/payments/retry.py",
           "start_line": 5,
-          "end_line": 8
+          "end_line": 9
         }
       ]
     },
@@ -90,7 +90,7 @@
         {
           "file_path": "src/storage/ledger.py",
           "start_line": 9,
-          "end_line": 12
+          "end_line": 13
         }
       ]
     },
