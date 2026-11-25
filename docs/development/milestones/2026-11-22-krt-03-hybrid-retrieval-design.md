@@ -459,3 +459,33 @@ A tracked empty `worker/__init__.py` exposed a valid zero-position edge case. SC
 **Interpretation and limitations:** this validates real SCIP generation and exact-symbol occurrence coverage on one real Python subsystem. Query-to-symbol resolution is exact-token based, not natural-language understanding. The benchmark checks coverage, not ranking; only three manually reviewed targets are included. Occurrence persistence/retrieval uses an in-memory PostgREST double, not PostgreSQL/RLS. The large occurrence count is a corpus/index size measure, not a quality metric.
 
 **Decision:** accept this as a real-repository SCIP smoke/coverage baseline, not as proof of general call-site retrieval quality. Keep SCIP as a complementary exact-symbol structural source. Next, expand reviewed real-repository targets and inspect occurrence precision/over-retrieval before designing routing or fusion. Do not introduce arbitrary occurrence filters, embeddings, or RRF based on this three-query result.
+
+
+
+### KRT-03 task-aware routing — implementation checkpoint, 2026-11-25
+
+Added `nlp/query_engine/retrieval_router.py` with an explicit `RetrievalTask` contract and `TaskAwareRetrievalRouter`. This is deterministic orchestration, not natural-language intent classification.
+
+| Explicit task | Selected backend | Behavior |
+|---|---|---|
+| Declaration discovery | `CodeLexicalRetriever` | Exact qualified names, file paths, or identifiers |
+| Call-site navigation | `ScipOccurrenceRetriever.find_references` | Requires an exact SCIP symbol supplied by an upstream resolver |
+| Call-site fallback | `SourceChunkRetriever` | Used when no exact SCIP symbol is supplied or the active snapshot has no references for it |
+| Passage retrieval | `SourceChunkRetriever` | Existing lexical passage ranking |
+
+The router preserves each backend's candidate order and provenance. It does not blend raw scores, deduplicate across retrievers, infer SCIP symbols from natural-language terms, or promote definitions into references. SCIP occurrence rows are adapted into `EvidenceCandidate` with the persisted source range, revision, snapshot, content hash, indexer metadata, and stable occurrence record ID.
+
+The existing retrievers remain responsible for resolving and filtering the active snapshot with both company and repository IDs. The router validates that trusted scope is present and rejects the placeholder tenant `default`.
+
+**Important limitation:** an empty SCIP reference result triggers lexical fallback; it does not prove that SCIP indexing is complete for the repository or language. The caller must not interpret fallback as semantic coverage. Exact SCIP symbol resolution is an upstream responsibility and remains out of scope for KRT-03 routing.
+
+**Initial implementation status:** code and contract tests have been added, but are not yet locally verified. Tests cover explicit routing, no cross-backend calls, exact SCIP symbol handling, provenance adaptation, fallback reasons, and request scope validation. Active-snapshot and tenant isolation continue to rely on the existing retriever tests/integration checks; router-level integration coverage remains to be added.
+
+**Next verification gate:**
+1. Run `uv run pytest -q tests/test_retrieval_router.py`.
+2. Run the task-separated benchmark and real-repository retrieval/SCIP benchmarks.
+3. Run the full NLP test suite.
+4. Add an integration test that switches the active snapshot between calls and proves the router cannot return historical candidates.
+5. Review whether the exact-symbol resolver belongs in a later query-planning milestone; do not smuggle heuristic resolution into this router.
+
+KRT-03 remains **IN_PROGRESS**. No embeddings, RRF, or reranking are introduced.
