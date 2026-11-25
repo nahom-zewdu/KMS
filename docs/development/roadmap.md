@@ -798,7 +798,7 @@ The earlier router checkpoint is superseded by this verified result.
 
 **Decision:** do not add embeddings, RRF, or reranking as a completion ritual. The measured lexical baselines and SCIP coverage justify retaining these complementary evidence sources, but evaluation remains narrow: small hand-labeled query sets, explicit lexical terms, one KMS Python subsystem, and in-memory PostgREST doubles for benchmarks. SCIP coverage is not a ranked relevance metric. The Supabase integration verifies real persistence and tenant/snapshot behavior, not broad retrieval quality.
 
-**Remaining KRT-03 closeout work:** reconcile the milestone's original acceptance criteria with the actual deterministic scope, update the design note so it no longer describes verified work as pending, and state precisely which natural-language query-planning responsibilities move to KRT-04. Do not start KRT-04 implementation until that boundary is recorded. KRT-03 remains **IN_PROGRESS** pending this acceptance review.
+**Acceptance review completed:** the deterministic retrieval foundation is accepted within the amended scope. Semantic source-code embeddings and RRF are explicitly deferred; the design note records the unmet original criteria and the rationale. KRT-04 owns typed query interpretation, conservative symbol resolution, bounded evidence planning, and grounded synthesis. No KRT-04 implementation belongs on this branch.
 
 
 ### KRT-04 specification checkpoint — 2026-11-25
@@ -826,3 +826,12 @@ Create a pure, dependency-light typed contract (dataclasses/enums or equivalent)
 #### Branch and execution gate
 
 Do not implement KRT-04 on the current KRT-03 branch. Merge and review the KRT-03 documentation/implementation branch first, then create a fresh KRT-04 branch from the accepted integration base. Before broad customer exposure, the separate RLS/security reconciliation remains a release gate; KRT-04 must not weaken or bypass it.
+
+
+### KRT-03 acceptance decision — 2026-11-25
+
+**Accepted with an explicit scope amendment.** The delivered KRT-03 scope is the deterministic retrieval foundation: evidence provenance, snapshot-scoped lexical source chunks, exact symbol discovery, SCIP occurrence navigation, task-aware routing, and tested tenant/active-snapshot behavior. The original semantic source-code embedding and RRF requirements were not implemented; they are explicitly deferred and must not be represented as completed hybrid retrieval.
+
+The benchmarks establish a useful baseline, not broad natural-language relevance, production performance, or generalization across repositories. A future semantic retrieval proposal must include a reviewed natural-language benchmark, multiple repositories/languages, no-evidence cases, independent lexical/semantic baselines, fusion comparison, and latency/cost measurement before implementation.
+
+KRT-04 consumes the existing retrievers and owns typed intent planning, conservative query-to-symbol resolution, bounded evidence gathering, provenance-preserving plans, claim-level citations, and abstention. It does not own embeddings or rank fusion. KRT-04 is specified but implementation has not started. See the KRT-03 design note for the acceptance matrix and detailed boundary.
