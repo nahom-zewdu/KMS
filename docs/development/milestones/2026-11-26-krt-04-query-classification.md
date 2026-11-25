@@ -1,6 +1,6 @@
 # KRT-04.2 — Deterministic Query Classification
 
-**Status:** IMPLEMENTED — NOT VERIFIED  
+**Status:** VERIFIED — submitted for review  
 **Date:** 2026-11-26  
 **Branch:** `feat/krt-04-query-classification`  
 **Base:** KRT-04.1 merge commit `54a0acaf7c69fecc6fc610dbc25effb750501ae3`
@@ -31,4 +31,11 @@ The lexical rules are an intentionally small baseline, not a claim of broad natu
 
 ## Verification
 
-Not yet verified. Run focused tests and the full NLP suite locally after pulling this branch. Update this section and the roadmap only with observed results.
+Developer-reported local verification on 2026-11-26:
+
+- Focused contract + planner tests: `uv run pytest -q tests/test_query_plan.py tests/test_query_planner.py` — **49 passed in 1.23s**.
+- Full NLP suite: `uv run pytest -q` — **359 passed, 8 skipped, 6 warnings, 4 subtests passed in 18.70s**.
+- The six warnings are existing deprecations from python-json-logger and PyGithub's `login_or_token` argument.
+- A duplicate parameterized fixture was removed after the full-suite run; this was a test-only cleanup and did not change implementation behavior.
+
+The focused and full suites pass. These results verify the current deterministic classifier contract and regression suite; they do not establish broad natural-language classification quality. Representative real-world query evaluation is still required before connecting this planner to production QueryEngine routing.
