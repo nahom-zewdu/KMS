@@ -382,7 +382,7 @@ Do not start KRT implementation on this branch. After the requested merge:
 | KRT-01 | Durable source snapshots and provenance | P1 | PLANNED | Source is retrievable by exact commit/path/hash and stale deletions reconcile |
 | KRT-02 | Code intelligence (symbols and semantic references) | P1 | VERIFIED | Source-backed symbol/reference evidence is available for supported languages |
 | KRT-03 | Bounded deterministic retrieval foundation (SQL, lexical, path, SCIP/graph evidence) | P1 | VERIFIED — bounded scope | Snapshot-scoped lexical retrieval, exact declaration lookup, SCIP reference navigation, deterministic task routing, and tenant/snapshot integration verified. Semantic code vectors and rank fusion deferred; see KRT-03 acceptance review. |
-| KRT-04 | Typed query planning and grounded synthesis | P1 | PLANNED | Classify query intent into typed retrieval tasks, resolve exact symbols where evidence permits, create bounded evidence plans, preserve provenance, cite claims, and abstain when evidence is insufficient. It consumes KRT-03 retrieval interfaces; it does not own embedding generation or rank fusion. |
+| KRT-04 | Typed query planning and grounded synthesis | P1 | SPECIFIED | Validated typed query plan; safe task routing; bounded evidence gathering; claim-level citations validated against retrieved evidence; reliable abstention; follow-up scope tests. First slice: introduce a pure typed query-plan contract and validation tests without changing production routing or synthesis. |
 | KRT-05 | Evaluation and observability | P1 | PLANNED | Versioned benchmark and end-to-end traces gate query changes |
 
 **Why KRT-00 comes first:** the live Supabase audit reported RLS/grant/RPC configurations that may permit cross-tenant access. This must be re-verified against the active project and corrected before adding more retrieval surfaces or exposing real customer data.
@@ -799,3 +799,30 @@ The earlier router checkpoint is superseded by this verified result.
 **Decision:** do not add embeddings, RRF, or reranking as a completion ritual. The measured lexical baselines and SCIP coverage justify retaining these complementary evidence sources, but evaluation remains narrow: small hand-labeled query sets, explicit lexical terms, one KMS Python subsystem, and in-memory PostgREST doubles for benchmarks. SCIP coverage is not a ranked relevance metric. The Supabase integration verifies real persistence and tenant/snapshot behavior, not broad retrieval quality.
 
 **Remaining KRT-03 closeout work:** reconcile the milestone's original acceptance criteria with the actual deterministic scope, update the design note so it no longer describes verified work as pending, and state precisely which natural-language query-planning responsibilities move to KRT-04. Do not start KRT-04 implementation until that boundary is recorded. KRT-03 remains **IN_PROGRESS** pending this acceptance review.
+
+
+### KRT-04 specification checkpoint — 2026-11-25
+
+**Status: SPECIFIED; implementation not started.** KRT-04 consumes the bounded deterministic retrieval interfaces accepted in KRT-03. It must not silently reintroduce semantic indexing or rank fusion.
+
+#### Responsibility boundary
+
+- Interpret the user's current turn and bounded conversation context into a typed intent.
+- Preserve trusted company scope from the authenticated job context; repository/revision/time constraints must be validated against available company-scoped inventory and must never be trusted from query text alone.
+- Route supported structured questions to existing deterministic SQL handlers; declaration, call-site, and passage tasks to the KRT-03 router; ownership/dependency questions to existing scoped graph/history paths only where evidence is available.
+- Resolve a SCIP symbol only from unambiguous repository-scoped evidence. Ambiguous or missing resolution remains explicit and must not be guessed from natural-language terms.
+- Bound evidence gathering and preserve candidate IDs, provenance, strategy, and fallback reasons.
+- Synthesize only from retrieved evidence, validate citations against the exact retrieved records/ranges, and abstain on unsupported or conflicting claims.
+- Treat courtesy turns and ambiguous follow-ups as conversation-control cases; do not run unrelated retrieval. Resolve pronouns/references only from explicit, recent conversation state.
+
+#### First implementation slice — KRT-04.1 query-plan contract
+
+Create a pure, dependency-light typed contract (dataclasses/enums or equivalent) for intent, trusted tenant/repository scope, optional revision/time constraints, extracted paths/identifiers/qualified names, optional resolved SCIP symbol with resolution provenance, bounded conversation references, and explicit abstention/ambiguity state. Validate required scope, enum values, field bounds, and consistency. This slice must not call an LLM, Supabase, Redis, or any retriever; it must not change `QueryEngine.handle_query` behavior.
+
+**Acceptance tests:** valid plans for each supported intent; reject missing/placeholder company scope; reject malformed repository/revision/time constraints; enforce bounded term/path/reference counts and string lengths; preserve ambiguity instead of inventing a symbol; distinguish courtesy/ambiguous follow-up from answerable intents; deterministic serialization/round-trip if serialization is part of the contract.
+
+**Out of scope for this slice:** intent classifier, query-to-symbol resolver, retrieval execution, prompt changes, citation generation/validation, schema migrations, embedding/vector work, RRF, and UI changes.
+
+#### Branch and execution gate
+
+Do not implement KRT-04 on the current KRT-03 branch. Merge and review the KRT-03 documentation/implementation branch first, then create a fresh KRT-04 branch from the accepted integration base. Before broad customer exposure, the separate RLS/security reconciliation remains a release gate; KRT-04 must not weaken or bypass it.
