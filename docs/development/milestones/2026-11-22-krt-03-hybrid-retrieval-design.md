@@ -462,51 +462,48 @@ A tracked empty `worker/__init__.py` exposed a valid zero-position edge case. SC
 
 
 
-### KRT-03 task-aware routing — implementation checkpoint, 2026-11-25
+### KRT-03 routing and integration verification — 2026-11-25
 
-Added `nlp/query_engine/retrieval_router.py` with an explicit `RetrievalTask` contract and `TaskAwareRetrievalRouter`. This is deterministic orchestration, not natural-language intent classification.
+The earlier router implementation checkpoint and pending-integration section are superseded by this verified result.
 
-| Explicit task | Selected backend | Behavior |
+**Implemented contract**
+
+| Explicit task | Backend | Contract |
 |---|---|---|
-| Declaration discovery | `CodeLexicalRetriever` | Exact qualified names, file paths, or identifiers |
+| Declaration discovery | `CodeLexicalRetriever` | Exact qualified-name, path, and identifier discovery |
 | Call-site navigation | `ScipOccurrenceRetriever.find_references` | Requires an exact SCIP symbol supplied by an upstream resolver |
-| Call-site fallback | `SourceChunkRetriever` | Used when no exact SCIP symbol is supplied or the active snapshot has no references for it |
-| Passage retrieval | `SourceChunkRetriever` | Existing lexical passage ranking |
+| Call-site fallback | `SourceChunkRetriever` | Used when no exact symbol is supplied or no active-snapshot references are found; fallback reason is explicit |
+| Passage retrieval | `SourceChunkRetriever` | Lexical passage retrieval with source-range provenance |
 
-The router preserves each backend's candidate order and provenance. It does not blend raw scores, deduplicate across retrievers, infer SCIP symbols from natural-language terms, or promote definitions into references. SCIP occurrence rows are adapted into `EvidenceCandidate` with the persisted source range, revision, snapshot, content hash, indexer metadata, and stable occurrence record ID.
+The router preserves backend ordering and provenance. It does not blend scores, classify natural-language intent, resolve SCIP symbols from natural-language text, or promote definitions into references. An empty SCIP result is not proof of complete SCIP coverage.
 
-The existing retrievers remain responsible for resolving and filtering the active snapshot with both company and repository IDs. The router validates that trusted scope is present and rejects the placeholder tenant `default`.
+**Verification — developer-reported, 2026-11-25**
 
-**Important limitation:** an empty SCIP reference result triggers lexical fallback; it does not prove that SCIP indexing is complete for the repository or language. The caller must not interpret fallback as semantic coverage. Exact SCIP symbol resolution is an upstream responsibility and remains out of scope for KRT-03 routing.
+```text
+uv run pytest -q tests/test_retrieval_router.py
+9 passed
 
-**Initial implementation status:** code and contract tests have been added, but are not yet locally verified. Tests cover explicit routing, no cross-backend calls, exact SCIP symbol handling, provenance adaptation, fallback reasons, and request scope validation. Active-snapshot and tenant isolation continue to rely on the existing retriever tests/integration checks; router-level integration coverage remains to be added.
-
-**Next verification gate:**
-1. Run `uv run pytest -q tests/test_retrieval_router.py`.
-2. Run the task-separated benchmark and real-repository retrieval/SCIP benchmarks.
-3. Run the full NLP test suite.
-4. Add an integration test that switches the active snapshot between calls and proves the router cannot return historical candidates.
-5. Review whether the exact-symbol resolver belongs in a later query-planning milestone; do not smuggle heuristic resolution into this router.
-
-KRT-03 remains **IN_PROGRESS**. No embeddings, RRF, or reranking are introduced.
-
-
-### Router integration coverage — added, pending developer execution, 2026-11-25
-
-Added opt-in `nlp/tests/test_retrieval_router_supabase_integration.py` to exercise the actual router, SCIP occurrence indexer/retriever, and source-chunk indexer/retriever against the configured Supabase development/test project.
-
-The test creates one generated tenant/repository with two building snapshots and verifies:
-- SCIP exact-symbol reference routing returns the persisted call-site occurrence with snapshot, revision, file, role, and tenant provenance.
-- Passage routing returns source chunks from the active snapshot.
-- A mismatched tenant/repository pair returns no candidates.
-- After switching the active snapshot, the previous SCIP symbol has no active references and routes through the documented lexical fallback; because the new snapshot contains no matching passage, the result is empty.
-- Historical source chunks are no longer returned after the active pointer changes.
-
-Run only against the configured development/test project:
-
-```bash
 KMS_RETRIEVAL_ROUTER_SUPABASE_INTEGRATION=1 \
 uv run pytest -q tests/test_retrieval_router_supabase_integration.py -s
+1 passed, 2 warnings in 24.74s
+
+uv run pytest -q
+310 passed, 8 skipped, 6 warnings, 4 subtests passed in 24.13s
 ```
 
-Requires `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. The test deletes only the uniquely generated repository it creates. It has been added to the branch but has **not** yet been executed locally; no integration success is claimed. The test uses a normalized SCIP fixture rather than invoking a language SCIP compiler, isolating persistence and routing behavior from toolchain installation.
+The Supabase integration used the configured development/test project and generated fixtures. It verified persisted SCIP reference routing with provenance, active-snapshot passage retrieval, mismatched tenant/repository isolation, snapshot pointer switching, exclusion of historical SCIP/chunk evidence, and lexical fallback. It uses a normalized SCIP fixture; language-indexer execution is covered separately by opt-in SCIP benchmarks.
+
+The full-suite warnings are non-failing deprecations: `pythonjsonlogger.jsonlogger` import path and PyGithub `login_or_token`. The router integration additionally reports deprecated Supabase client `timeout` and `verify` arguments.
+
+**Evaluation boundary**
+
+- Synthetic task-separated lexical benchmark (33 queries): declaration MRR/Recall@1/5/10 **1.00**; call-site/context MRR **0.75**, Recall@1 **0.50**, Recall@5/10 **1.00**; passage MRR **0.95**, Recall@1 **0.90**, Recall@5/10 **1.00**. Three no-evidence queries returned no candidates.
+- Real KMS NLP lexical benchmark: 29 Python files, 169 declarations, 232 chunks. Seven exact-identifier declaration queries achieved MRR and Recall@1/5 **1.00**. Ten passage questions achieved MRR **0.803**, query Recall@1/5/10 **0.70/1.00/1.00**, and range Recall@1/5/10 **0.636/0.909/1.00**.
+- Real-repository SCIP benchmark: nine exact-symbol queries resolved and all nine expected ranges were covered; 32,566 occurrences (6,743 definitions, 25,823 references/occurrences). This is coverage, not ranked retrieval quality.
+- Benchmarks use small manually reviewed query sets, explicit lexical terms, and in-memory PostgREST doubles. They do not establish free-form natural-language retrieval, broad repository generalization, production PostgreSQL performance/RLS, or latency/cost.
+
+**Decision and remaining acceptance review**
+
+Retain the deterministic candidate-source architecture: symbol lexical retrieval for declarations, SCIP for exact-symbol references, and source-chunk lexical retrieval for passages and fallback. Keep structured deterministic answers separate. Do not add embeddings, RRF, or reranking without a separate evaluation that demonstrates a concrete gap and provides a fair comparison.
+
+KRT-03 implementation and integration are verified. The milestone remains **IN_PROGRESS** until its original acceptance criteria are reconciled with this deliberately bounded scope. The closeout must explicitly assign natural-language task classification and query-to-symbol resolution to KRT-04 (if required there), rather than implying KRT-03 already provides them. No KRT-04 implementation should begin before that scope boundary is recorded.
