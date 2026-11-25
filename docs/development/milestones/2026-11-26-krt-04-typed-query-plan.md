@@ -1,6 +1,6 @@
 # KRT-04.1 — Typed Query-Plan Contract
 
-**Status:** IMPLEMENTED — local runtime verification pending  
+**Status:** VERIFIED — user-reported focused and full NLP test suites passed  
 **Date:** 2026-11-26  
 **Branch:** `feat/krt-04-query-planning`  
 **Base:** KRT-03 merge commit `1872ef7c92fbf5cbbe6862801220abd65e25c1a4`
@@ -30,4 +30,4 @@ The contract deliberately keeps clarification and abstention as explicit disposi
 
 ## Verification
 
-Implementation and focused tests are committed. Runtime test results are pending execution in the developer's local checkout; do not mark this slice VERIFIED until the focused test and full NLP suite have been run and reported.
+User-reported verification on 2026-11-26: `uv run pytest -q tests/test_query_plan.py` — **26 passed**; `uv run pytest -q` — **336 passed, 8 skipped, 6 warnings, 4 subtests passed in 17.83s**. The warnings are existing dependency deprecations in python-json-logger and PyGithub.
