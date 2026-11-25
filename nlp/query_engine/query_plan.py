@@ -24,6 +24,41 @@ MAX_CONVERSATION_REFS = 10
 MAX_CONVERSATION_REF_LENGTH = 128
 
 
+
+def _required_text(value: object, field: str, maximum: int) -> None:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field} must be a non-empty string")
+    if len(value) > maximum:
+        raise ValueError(f"{field} exceeds {maximum} characters")
+
+
+def _optional_text(value: object, field: str, maximum: int) -> None:
+    if value is not None:
+        _required_text(value, field, maximum)
+
+
+def _required_identifier(value: object, field: str, maximum: int) -> None:
+    _required_text(value, field, maximum)
+    if str(value).strip().lower() in {"default", "null", "none", "unknown"}:
+        raise ValueError(f"{field} cannot use a placeholder value")
+
+
+def _optional_identifier(value: object, field: str, maximum: int) -> None:
+    if value is not None:
+        _required_identifier(value, field, maximum)
+
+
+def _bounded_values(
+    values: tuple[str, ...], field: str, max_count: int, max_length: int
+) -> None:
+    if not isinstance(values, tuple):
+        raise ValueError(f"{field} must be a tuple")
+    if len(values) > max_count:
+        raise ValueError(f"{field} exceeds {max_count} values")
+    for value in values:
+        _required_text(value, field, max_length)
+
+
 class QueryIntent(StrEnum):
     """The operation a planner may request downstream."""
 
@@ -178,36 +213,3 @@ class QueryPlan:
         if self.resolved_symbol and self.intent is not QueryIntent.CALL_SITE_NAVIGATION:
             raise ValueError("resolved SCIP symbols are only valid for call-site navigation")
 
-
-def _required_text(value: object, field: str, maximum: int) -> None:
-    if not isinstance(value, str) or not value.strip():
-        raise ValueError(f"{field} must be a non-empty string")
-    if len(value) > maximum:
-        raise ValueError(f"{field} exceeds {maximum} characters")
-
-
-def _optional_text(value: object, field: str, maximum: int) -> None:
-    if value is not None:
-        _required_text(value, field, maximum)
-
-
-def _required_identifier(value: object, field: str, maximum: int) -> None:
-    _required_text(value, field, maximum)
-    if str(value).strip().lower() in {"default", "null", "none", "unknown"}:
-        raise ValueError(f"{field} cannot use a placeholder value")
-
-
-def _optional_identifier(value: object, field: str, maximum: int) -> None:
-    if value is not None:
-        _required_identifier(value, field, maximum)
-
-
-def _bounded_values(
-    values: tuple[str, ...], field: str, max_count: int, max_length: int
-) -> None:
-    if not isinstance(values, tuple):
-        raise ValueError(f"{field} must be a tuple")
-    if len(values) > max_count:
-        raise ValueError(f"{field} exceeds {max_count} values")
-    for value in values:
-        _required_text(value, field, max_length)
