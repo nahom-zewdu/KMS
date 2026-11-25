@@ -18,8 +18,7 @@ _COURTESY = {"thanks", "thank you", "thx", "hello", "hi", "hey",
 _ACKNOWLEDGEMENTS = {"yes", "yeah", "yea", "yep", "sure", "go on", "tell me more"}
 _BARE_CLARIFICATIONS = {"what", "huh", "which one", "what do you mean"}
 _FOLLOW_UP_START = re.compile(
-    r"^(?:and|also|what about|how about|why|how|can you explain|"
-    r"could you explain|show me more|tell me more)\b", re.IGNORECASE)
+    r"^(?:and|also|what about|how about|show me more|tell me more)\b", re.IGNORECASE)
 _FOLLOW_UP_REFERENCE = re.compile(
     r"\b(?:it|that|this|they|them|those|the same one|the previous one)\b", re.IGNORECASE)
 _CALL_SITE = re.compile(
