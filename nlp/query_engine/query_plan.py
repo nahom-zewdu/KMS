@@ -9,7 +9,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import TypeAlias
 
 
 MAX_QUERY_LENGTH = 4_000
@@ -212,6 +211,3 @@ def _bounded_values(
         raise ValueError(f"{field} exceeds {max_count} values")
     for value in values:
         _required_text(value, field, max_length)
-
-
-QueryPlanValue: TypeAlias = QueryPlan
