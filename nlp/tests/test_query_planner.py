@@ -25,7 +25,6 @@ def test_courtesy_does_not_trigger_retrieval(query):
         ("How many files are in this repository?", QueryIntent.STRUCTURED_FACT),
         ("Who owns the billing service?", QueryIntent.STRUCTURED_FACT),
         ("Explain the billing handler implementation", QueryIntent.PASSAGE_RETRIEVAL),
-        ("How many files are in this repository?", QueryIntent.STRUCTURED_FACT),
         ("How does the API handler work?", QueryIntent.PASSAGE_RETRIEVAL),
         ("Show me code in billing/invoice.py", QueryIntent.PASSAGE_RETRIEVAL),
     ],
