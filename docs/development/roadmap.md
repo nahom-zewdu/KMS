@@ -7,9 +7,9 @@
 > Scoring spec vs implemented subset: `docs/product/ramp-candidate-scoring.md`.
 
 **Last updated:** 2026-11-26
-**Current branch:** `feat/krt-04-query-planning`
+**Current branch:** `feat/krt-04-query-classification`
 **Current milestone:** KRT-04 — Typed Query Planning and Grounded Synthesis
-**Current objective:** Establish a validated typed query-plan contract before introducing query classification, symbol resolution, evidence orchestration, or grounded synthesis.
+**Current objective:** Implement and evaluate conservative deterministic query classification against the KRT-04.1 typed query-plan contract, without changing production QueryEngine routing.
 
 ---
 
@@ -839,10 +839,22 @@ KRT-04 consumes the existing retrievers and owns typed intent planning, conserva
 
 ### KRT-04.1 implementation checkpoint — 2026-11-26
 
-**Status:** VERIFIED — PR submitted for review  
+**Status:** ACCEPTED — merged in PR #26  
 **Branch:** `feat/krt-04-query-planning`  
-**Base:** merged KRT-03 commit `1872ef7c92fbf5cbbe6862801220abd65e25c1a4`
+**Base:** merged KRT-03 commit `1872ef7c92fbf5cbbe6862801220abd65e25c1a4`  
+**PR:** [#26](https://github.com/nahom-zewdu/KMS/pull/26), merged at `54a0acaf7c69fecc6fc610dbc25effb750501ae3`
 
 Added `nlp/query_engine/query_plan.py` with immutable typed intents, trusted scope, optional revision/time constraints, bounded extracted terms/paths/identifiers/qualified names/conversation references, explicit SCIP symbol-resolution provenance, and consistent clarification/abstention states. Added focused contract tests in `nlp/tests/test_query_plan.py`.
 
 This slice is contract-only. It does not classify queries, resolve symbols, execute retrieval, call external services, alter QueryEngine behavior, synthesize answers, or implement citations. User-reported verification: focused contract tests **26 passed**; full NLP suite **336 passed, 8 skipped, 6 warnings, 4 subtests passed in 17.83s**. Warnings are existing python-json-logger and PyGithub deprecations. Detailed scope: `docs/development/milestones/2026-11-26-krt-04-typed-query-plan.md`.
+
+
+### KRT-04.2 deterministic query classification — 2026-11-26
+
+**Status: IMPLEMENTED — NOT VERIFIED**  
+**Branch:** `feat/krt-04-query-classification`  
+**Base:** KRT-04.1 merge commit `54a0acaf7c69fecc6fc610dbc25effb750501ae3`
+
+Added `nlp/query_engine/query_planner.py` and focused tests in `nlp/tests/test_query_planner.py`. The classifier uses ordered lexical rules to produce the existing typed query-plan contract, extracts bounded paths/identifiers/terms, preserves caller-supplied trusted scope, and requires explicit conversation references before accepting a follow-up. It never resolves SCIP symbols or executes retrieval.
+
+This is a deliberately small deterministic baseline, not broad natural-language understanding. It does not change QueryEngine behavior or call external services. Verification is pending local focused and full NLP test runs. See `docs/development/milestones/2026-11-26-krt-04-query-classification.md`.
