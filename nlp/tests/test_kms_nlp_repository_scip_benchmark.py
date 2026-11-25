@@ -109,7 +109,7 @@ _CALL_SITE_QUERIES = [
         "id": "scip-03-chunker-dependency",
         "question": "Which chunking implementation does the source chunk indexer depend on?",
         "token": "SourceChunker",
-        "expected": [{"file_path": "codebase/source_chunk_indexer.py", "start_line": 6, "end_line": 6}],
+        "expected": [{"file_path": "codebase/source_chunk_indexer.py", "start_line": 7, "end_line": 7}],
     },
 ]
 
