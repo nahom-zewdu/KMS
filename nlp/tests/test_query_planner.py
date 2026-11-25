@@ -105,3 +105,10 @@ def test_symbol_resolution_is_never_guessed_by_classifier():
     plan = classify_query("Where is calculate_tax called?", scope=SCOPE)
     assert plan.intent is QueryIntent.CALL_SITE_NAVIGATION
     assert plan.resolved_symbol is None
+
+
+def test_conversation_reference_input_must_be_a_sequence_of_strings():
+    with pytest.raises(ValueError, match="sequence of strings"):
+        classify_query("yes", scope=SCOPE, conversation_refs="not-a-reference-list")
+    with pytest.raises(ValueError, match="only strings"):
+        classify_query("yes", scope=SCOPE, conversation_refs=("valid", 42))
