@@ -434,3 +434,28 @@ KMS_NLP_REPOSITORY_BENCHMARK=1 uv run pytest -q tests/test_kms_nlp_repository_re
 The benchmark's natural-language questions are manually authored, but the runner supplies explicit lexical terms. It therefore measures lexical retrieval on a real source corpus, not semantic understanding of free-form questions. It uses an in-memory PostgREST double; it does not measure PostgreSQL query planning/RLS, production-repository generalization, latency, or cost. The corpus is KMS's own Python retrieval subsystem, so it is not independent of the implementation being evaluated. The declaration sample is only seven queries.
 
 **Decision:** this real-repository run strengthens the lexical baseline but does not justify embeddings or RRF. Expand the independently reviewed query set and inspect passage-ranking failures first. Keep exact declaration lookup, SCIP exact-symbol references, and lexical passage retrieval as distinct candidate sources. KRT-03 remains **IN_PROGRESS**.
+
+
+### Real-repository SCIP occurrence coverage — verified 2026-11-25
+
+Added `nlp/tests/test_kms_nlp_repository_scip_benchmark.py`, an opt-in benchmark over the checked-out NLP Python source tree. It runs real `scip-python` 0.6.8 indexing, normalizes the resulting index, and exercises `ScipOccurrenceRetriever` against an in-memory PostgREST double.
+
+**Measured corpus and results:**
+
+| Measure | Result |
+|---|---:|
+| Indexed occurrences | 32,551 |
+| Definitions | 6,741 |
+| References and occurrences | 25,810 |
+| Exact-symbol queries | 3 |
+| Queries with at least one resolved symbol | 3/3 |
+| Expected source ranges matched | 3/3 (100%) |
+| No-evidence query candidates | 0 |
+
+The three reviewed targets cover construction of `SourceChunkIndexer` and `CodeSymbolIndexer` in `codebase/baseline.py`, plus the `SourceChunker` dependency import in `codebase/source_chunk_indexer.py`. The initial third label used line 6; source review corrected it to line 7. This was a benchmark-label correction, not a retriever change.
+
+A tracked empty `worker/__init__.py` exposed a valid zero-position edge case. SCIP's `(line=0, character=0)` position in an empty document now maps to byte offset 0; nonzero positions in an empty document remain rejected. Focused verification: `tests/test_scip_indexer.py` — **22 passed, 3 skipped**. Real-repository SCIP benchmark: **1 passed in 20.75s**.
+
+**Interpretation and limitations:** this validates real SCIP generation and exact-symbol occurrence coverage on one real Python subsystem. Query-to-symbol resolution is exact-token based, not natural-language understanding. The benchmark checks coverage, not ranking; only three manually reviewed targets are included. Occurrence persistence/retrieval uses an in-memory PostgREST double, not PostgreSQL/RLS. The large occurrence count is a corpus/index size measure, not a quality metric.
+
+**Decision:** accept this as a real-repository SCIP smoke/coverage baseline, not as proof of general call-site retrieval quality. Keep SCIP as a complementary exact-symbol structural source. Next, expand reviewed real-repository targets and inspect occurrence precision/over-retrieval before designing routing or fusion. Do not introduce arbitrary occurrence filters, embeddings, or RRF based on this three-query result.
