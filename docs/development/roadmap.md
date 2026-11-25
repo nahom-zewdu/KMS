@@ -839,10 +839,10 @@ KRT-04 consumes the existing retrievers and owns typed intent planning, conserva
 
 ### KRT-04.1 implementation checkpoint — 2026-11-26
 
-**Status:** IMPLEMENTED — runtime verification pending  
+**Status:** VERIFIED — PR submitted for review  
 **Branch:** `feat/krt-04-query-planning`  
 **Base:** merged KRT-03 commit `1872ef7c92fbf5cbbe6862801220abd65e25c1a4`
 
 Added `nlp/query_engine/query_plan.py` with immutable typed intents, trusted scope, optional revision/time constraints, bounded extracted terms/paths/identifiers/qualified names/conversation references, explicit SCIP symbol-resolution provenance, and consistent clarification/abstention states. Added focused contract tests in `nlp/tests/test_query_plan.py`.
 
-This slice is contract-only. It does not classify queries, resolve symbols, execute retrieval, call external services, alter QueryEngine behavior, synthesize answers, or implement citations. Focused and full-suite execution remains pending; do not mark VERIFIED until the developer reports those runs. Detailed scope: `docs/development/milestones/2026-11-26-krt-04-typed-query-plan.md`.
+This slice is contract-only. It does not classify queries, resolve symbols, execute retrieval, call external services, alter QueryEngine behavior, synthesize answers, or implement citations. User-reported verification: focused contract tests **26 passed**; full NLP suite **336 passed, 8 skipped, 6 warnings, 4 subtests passed in 17.83s**. Warnings are existing python-json-logger and PyGithub deprecations. Detailed scope: `docs/development/milestones/2026-11-26-krt-04-typed-query-plan.md`.
