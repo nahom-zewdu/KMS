@@ -6,10 +6,10 @@
 > Current Ramp runtime: `docs/architecture/ramp.md`.
 > Scoring spec vs implemented subset: `docs/product/ramp-candidate-scoring.md`.
 
-**Last updated:** 2026-11-25
-**Current branch:** `feat/krt-03-hybrid-retrieval`
-**Current milestone:** KRT-03 — Hybrid Retrieval
-**Current objective:** Build a scoped, evaluated hybrid retrieval layer that returns relevant, revision-aware evidence for grounded KMS answers.
+**Last updated:** 2026-11-26
+**Current branch:** `feat/krt-04-query-planning`
+**Current milestone:** KRT-04 — Typed Query Planning and Grounded Synthesis
+**Current objective:** Establish a validated typed query-plan contract before introducing query classification, symbol resolution, evidence orchestration, or grounded synthesis.
 
 ---
 
@@ -835,3 +835,14 @@ Do not implement KRT-04 on the current KRT-03 branch. Merge and review the KRT-0
 The benchmarks establish a useful baseline, not broad natural-language relevance, production performance, or generalization across repositories. A future semantic retrieval proposal must include a reviewed natural-language benchmark, multiple repositories/languages, no-evidence cases, independent lexical/semantic baselines, fusion comparison, and latency/cost measurement before implementation.
 
 KRT-04 consumes the existing retrievers and owns typed intent planning, conservative query-to-symbol resolution, bounded evidence gathering, provenance-preserving plans, claim-level citations, and abstention. It does not own embeddings or rank fusion. KRT-04 is specified but implementation has not started. See the KRT-03 design note for the acceptance matrix and detailed boundary.
+
+
+### KRT-04.1 implementation checkpoint — 2026-11-26
+
+**Status:** IMPLEMENTED — runtime verification pending  
+**Branch:** `feat/krt-04-query-planning`  
+**Base:** merged KRT-03 commit `1872ef7c92fbf5cbbe6862801220abd65e25c1a4`
+
+Added `nlp/query_engine/query_plan.py` with immutable typed intents, trusted scope, optional revision/time constraints, bounded extracted terms/paths/identifiers/qualified names/conversation references, explicit SCIP symbol-resolution provenance, and consistent clarification/abstention states. Added focused contract tests in `nlp/tests/test_query_plan.py`.
+
+This slice is contract-only. It does not classify queries, resolve symbols, execute retrieval, call external services, alter QueryEngine behavior, synthesize answers, or implement citations. Focused and full-suite execution remains pending; do not mark VERIFIED until the developer reports those runs. Detailed scope: `docs/development/milestones/2026-11-26-krt-04-typed-query-plan.md`.
