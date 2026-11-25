@@ -133,8 +133,9 @@ def classify_query(
         intent, disposition = QueryIntent.COURTESY, PlanDisposition.READY
     elif normalized in _BARE_CLARIFICATIONS:
         intent, disposition = QueryIntent.CLARIFICATION, PlanDisposition.NEEDS_CLARIFICATION
-    elif normalized in _ACKNOWLEDGEMENTS or (
-        _FOLLOW_UP_REFERENCE.search(query) or _FOLLOW_UP_START.search(query)
+    elif normalized in _ACKNOWLEDGEMENTS or _FOLLOW_UP_START.search(query) or (
+        _FOLLOW_UP_REFERENCE.search(query)
+        and not (_ENGINEERING_CONTEXT.search(query) or paths or identifiers)
     ):
         if history_exists and refs:
             intent, disposition = QueryIntent.FOLLOW_UP, PlanDisposition.READY
