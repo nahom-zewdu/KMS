@@ -111,6 +111,42 @@ _CALL_SITE_QUERIES = [
         "token": "SourceChunker",
         "expected": [{"file_path": "codebase/source_chunk_indexer.py", "start_line": 7, "end_line": 7}],
     },
+    {
+        "id": "scip-04-relationship-indexer",
+        "question": "Which relationship indexer does the baseline sync component use?",
+        "token": "ImplementationRelationshipIndexer",
+        "expected": [{"file_path": "codebase/baseline.py", "start_line": 22, "end_line": 22}],
+    },
+    {
+        "id": "scip-05-relationship-extractor",
+        "question": "Which extractor does the implementation relationship indexer delegate to?",
+        "token": "ImplementationRelationshipExtractor",
+        "expected": [{"file_path": "codebase/relationship_indexer.py", "start_line": 11, "end_line": 11}],
+    },
+    {
+        "id": "scip-06-behavioral-evidence-producer",
+        "question": "Which behavioral evidence producer is used by the relationship indexer?",
+        "token": "GoBehavioralEvidenceProducer",
+        "expected": [{"file_path": "codebase/relationship_indexer.py", "start_line": 12, "end_line": 12}],
+    },
+    {
+        "id": "scip-07-symbol-extractor",
+        "question": "Which extractor powers code symbol indexing?",
+        "token": "CodeSymbolExtractor",
+        "expected": [{"file_path": "codebase/symbol_indexer.py", "start_line": 13, "end_line": 13}],
+    },
+    {
+        "id": "scip-08-scip-index-model",
+        "question": "Which normalized index model does the occurrence indexer consume?",
+        "token": "ScipIndex",
+        "expected": [{"file_path": "codebase/scip_occurrence_indexer.py", "start_line": 11, "end_line": 11}],
+    },
+    {
+        "id": "scip-09-symbol-retriever",
+        "question": "Which symbol retriever does lexical code retrieval wrap?",
+        "token": "CodeSymbolRetriever",
+        "expected": [{"file_path": "query_engine/code_lexical.py", "start_line": 9, "end_line": 9}],
+    },
 ]
 
 
@@ -201,6 +237,19 @@ def test_real_kms_python_repository_scip_references():
                 for item in candidates
                 if any(_overlaps(item, label) for label in query["expected"])
             ],
+            "occurrence_preview": [
+                {
+                    "file_path": item["file_path"],
+                    "start_line": item["start_line"],
+                    "end_line": item["end_line"],
+                    "role": item["role"],
+                    "symbol": item["symbol"],
+                }
+                for item in sorted(
+                    candidates,
+                    key=lambda item: (item["file_path"], item["start_line"], item["end_line"]),
+                )[:8]
+            ],
         })
 
     absent = retriever.find_references(
@@ -235,7 +284,7 @@ def test_real_kms_python_repository_scip_references():
     print(json.dumps(report, indent=2, sort_keys=True))
 
     assert len(index.occurrences) > 0
-    assert len(results) == 3
-    assert report["queries_with_resolved_symbols"] == 3
-    assert report["matched_expected_ranges"] >= 2, report["query_results"]
+    assert len(results) == 9
+    assert report["queries_with_resolved_symbols"] == len(results)
+    assert report["expected_ranges"] == 9, report["query_results"]
     assert report["no_evidence_candidates"] == 0
