@@ -1,11 +1,11 @@
 # KRT-03 — Hybrid Retrieval Design
 
-**Status:** IN_PROGRESS — lexical retrieval, source-chunk persistence, synthetic task-separated evaluation, and an opt-in real-repository Python benchmark verified  
+**Status:** VERIFIED — bounded deterministic retrieval foundation accepted; semantic code retrieval and rank fusion explicitly deferred  
 **Date:** 2026-11-22  
 **Working branch:** `feat/krt-03-hybrid-retrieval`  
 **Base branch:** `feat/ramp`  
 **Prerequisite:** KRT-00, KRT-01, and KRT-02 completed  
-**Next:** investigate lexical query-term normalization and identifier-aware declaration lookup against the real-repository failures; expand the reviewed query set before semantic retrieval or rank fusion
+**Next:** KRT-04 typed query planning and grounded synthesis. Semantic code retrieval and rank fusion remain a separate deferred work item, not part of KRT-04.
 
 ## Goal
 
@@ -507,3 +507,46 @@ The full-suite warnings are non-failing deprecations: `pythonjsonlogger.jsonlogg
 Retain the deterministic candidate-source architecture: symbol lexical retrieval for declarations, SCIP for exact-symbol references, and source-chunk lexical retrieval for passages and fallback. Keep structured deterministic answers separate. Do not add embeddings, RRF, or reranking without a separate evaluation that demonstrates a concrete gap and provides a fair comparison.
 
 KRT-03 implementation and integration are verified. The milestone remains **IN_PROGRESS** until its original acceptance criteria are reconciled with this deliberately bounded scope. The closeout must explicitly assign natural-language task classification and query-to-symbol resolution to KRT-04 (if required there), rather than implying KRT-03 already provides them. No KRT-04 implementation should begin before that scope boundary is recorded.
+
+
+### KRT-03 acceptance review and scope decision — 2026-11-25
+
+**Decision: accept the verified deterministic retrieval foundation as the bounded KRT-03 deliverable; explicitly defer the unimplemented semantic-retrieval and rank-fusion portion of the original design.** This is a scope amendment, not a claim that every original design criterion was met.
+
+#### Acceptance matrix
+
+| Original design requirement | Outcome | Evidence / disposition |
+|---|---|---|
+| Shared evidence candidate with stable identity and source provenance | VERIFIED | `EvidenceCandidate` preserves tenant/repository, snapshot/revision, source range, content hash, retriever identity, and evidence identity. |
+| Exact lexical path/name/qualified-name/identifier retrieval | VERIFIED | `CodeLexicalRetriever` and declaration benchmark. |
+| Durable snapshot-scoped source chunks and lexical passage retrieval | VERIFIED | Persistence migration, baseline ingestion, source chunk retriever, local PostgreSQL checks, and Supabase integration. |
+| SCIP definitions/references as a distinct structural evidence source | VERIFIED | Real Python/Go/TypeScript indexing work and occurrence persistence/retrieval; exact-symbol reference path is integrated in the router. |
+| Company/repository/active-snapshot isolation | VERIFIED for exercised paths | Source-chunk and router Supabase integrations; tenant mismatch and active-snapshot switch checks. This does not replace the separate legacy-table RLS audit. |
+| Task-aware routing among declaration, call-site, and passage retrieval | VERIFIED | Explicit deterministic router; 9 focused tests and Supabase router integration passed. No natural-language classifier is included. |
+| Semantic code-chunk embeddings and vector retrieval | DEFERRED | Not implemented. Existing event embeddings are not source-code semantic retrieval. No quality claim is made. |
+| RRF across independently ranked lexical, semantic, and structural lists | DEFERRED | Not implemented. No raw-score blending or rank fusion is claimed. |
+| Benchmark proves retrieval quality | PARTIALLY VERIFIED | Synthetic task-separated and real KMS Python baselines exist, but query sets are small, lexical terms are explicit, and benchmark persistence uses in-memory PostgREST doubles. SCIP metrics are coverage/precision, not ranked relevance. |
+| Production latency, cost, and broad repository generalization | NOT EVALUATED | Outside the evidence collected in this milestone. |
+
+#### Why semantic retrieval and RRF are deferred
+
+The current measurements establish a useful deterministic baseline and expose concrete limitations, but they do not provide a fair lexical-versus-semantic comparison or demonstrate that RRF improves relevance. Implementing embeddings and fusion now would add operational and evaluation complexity without a defensible acceptance signal. This is a deferral, not a claim that semantic retrieval is unnecessary forever.
+
+A future semantic-retrieval work item must first define a reviewed natural-language benchmark, include multiple repositories/languages and no-evidence cases, measure indexing/query latency and cost, compare lexical and semantic retrieval independently, and evaluate fusion against both baselines. It must preserve company/repository/active-snapshot scope and exact source provenance. Do not attach this work to KRT-04 by default.
+
+#### KRT-04 boundary
+
+KRT-04 owns query interpretation and evidence planning, not retrieval-index implementation:
+
+1. Convert a user question into a validated typed intent/task (declaration discovery, call-site navigation, passage retrieval, or supported structured query).
+2. Extract exact paths, identifiers, qualified names, and symbol hints conservatively. A symbol is resolved only when repository-scoped evidence supports an unambiguous match; otherwise retain ambiguity or abstain.
+3. Build a bounded retrieval plan using the KRT-03 router and existing structured-answer path. Plans must carry trusted company/repository scope and must not accept tenant scope from untrusted query text.
+4. Gather candidates through the existing retrievers without changing their ranking contracts or blending incomparable scores.
+5. Produce claim-level citations tied to exact evidence ranges and source revisions; reject unsupported claims and abstain when evidence is insufficient or conflicting.
+6. Trace the chosen task, plan, retrievers, candidate IDs, fallback reasons, citations, and abstention reason for evaluation.
+
+KRT-04 does **not** implement embeddings, vector indexing, RRF, reranking, generic call-graph inference, or automatic claims that SCIP coverage is complete. Those remain separate deferred work or explicit non-goals.
+
+#### KRT-03 exit decision
+
+The deterministic retrieval foundation is accepted within the amended scope. The original design's semantic-vector and RRF criteria remain unfulfilled and are recorded as deferred rather than silently waived. Before merging this branch, retain this distinction in release notes/PR description and keep the separate RLS/security reconciliation gate visible before broad customer exposure.
