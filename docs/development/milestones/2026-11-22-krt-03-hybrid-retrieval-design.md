@@ -412,17 +412,17 @@ Added and executed the opt-in benchmark `nlp/tests/test_kms_nlp_repository_retri
 | Range-level recall at 5 | 10/11 (90.9%) |
 | Range-level recall at 10 | 11/11 (100%) |
 
-One explicit no-evidence query returned no candidates.
+One explicit no-evidence query returned zero candidates.
 
-**Declaration lookup — five exact-identifier queries:**
+**Declaration lookup — seven exact-identifier queries:**
 
 - MRR: **1.00**
 - Recall@1: **1.00**
 - Recall@5: **1.00**
 
-All five expected declarations ranked first. This is a narrow exact-identifier result, not evidence of natural-language symbol understanding.
+All seven expected declarations ranked first. The initial run exposed a stale test assertion expecting five queries; the assertion was corrected to match the seven-query dataset, and the rerun passed. No retrieval change was required. This is a narrow exact-identifier result, not evidence of natural-language symbol understanding.
 
-**Observed failure:** `repo-04-symbol-lookup` asks where declarations are searched by qualified name and identifier. Its two expected ranges in `codebase/symbol_retriever.py` ranked 9 and 5. The query's broad terms matched `active_snapshot_id` in unrelated retrieval implementations, pushing the relevant symbol-retriever chunks down. This is a concrete lexical query-term/identifier-discovery weakness. Do not address it with a benchmark-specific boost; inspect normalization and consider routing declaration-intent queries through `CodeSymbolRetriever` rather than generic source-chunk search.
+**Observed passage-ranking weakness:** `repo-04-symbol-lookup` asks where declarations are searched by qualified name and identifier. Its two expected source ranges in `codebase/symbol_retriever.py` ranked 9 and 5 in passage retrieval. This is distinct from exact declaration lookup, which ranked all seven expected declarations first. Inspect the passage query's term formulation and candidate evidence before changing ranking; do not add a benchmark-specific boost.
 
 **Verification — developer-reported, 2026-11-25:**
 
@@ -431,6 +431,6 @@ KMS_NLP_REPOSITORY_BENCHMARK=1 uv run pytest -q tests/test_kms_nlp_repository_re
 1 passed
 ```
 
-The benchmark's natural-language questions are manually authored, but the runner supplies explicit lexical terms. It therefore measures lexical retrieval on a real source corpus, not semantic understanding of free-form questions. It uses an in-memory PostgREST double; it does not measure PostgreSQL query planning/RLS, production-repository generalization, latency, or cost. The corpus is KMS's own Python retrieval subsystem, so it is not independent of the implementation being evaluated. The declaration sample is only five queries.
+The benchmark's natural-language questions are manually authored, but the runner supplies explicit lexical terms. It therefore measures lexical retrieval on a real source corpus, not semantic understanding of free-form questions. It uses an in-memory PostgREST double; it does not measure PostgreSQL query planning/RLS, production-repository generalization, latency, or cost. The corpus is KMS's own Python retrieval subsystem, so it is not independent of the implementation being evaluated. The declaration sample is only seven queries.
 
-**Decision:** this real-repository run strengthens the lexical baseline but does not justify embeddings or RRF. First address the weak declaration-intent query through explicit retriever routing and improve the benchmark with independently reviewed queries. Keep exact declaration lookup, SCIP exact-symbol references, and lexical passage retrieval as distinct candidate sources. KRT-03 remains **IN_PROGRESS**.
+**Decision:** this real-repository run strengthens the lexical baseline but does not justify embeddings or RRF. Expand the independently reviewed query set and inspect passage-ranking failures first. Keep exact declaration lookup, SCIP exact-symbol references, and lexical passage retrieval as distinct candidate sources. KRT-03 remains **IN_PROGRESS**.
