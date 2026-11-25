@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Iterable
 
 from codebase.scip_occurrence_retriever import ScipOccurrenceRetriever
 from codebase.source_chunk_retriever import SourceChunkRetriever
