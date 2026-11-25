@@ -489,3 +489,24 @@ The existing retrievers remain responsible for resolving and filtering the activ
 5. Review whether the exact-symbol resolver belongs in a later query-planning milestone; do not smuggle heuristic resolution into this router.
 
 KRT-03 remains **IN_PROGRESS**. No embeddings, RRF, or reranking are introduced.
+
+
+### Router integration coverage — added, pending developer execution, 2026-11-25
+
+Added opt-in `nlp/tests/test_retrieval_router_supabase_integration.py` to exercise the actual router, SCIP occurrence indexer/retriever, and source-chunk indexer/retriever against the configured Supabase development/test project.
+
+The test creates one generated tenant/repository with two building snapshots and verifies:
+- SCIP exact-symbol reference routing returns the persisted call-site occurrence with snapshot, revision, file, role, and tenant provenance.
+- Passage routing returns source chunks from the active snapshot.
+- A mismatched tenant/repository pair returns no candidates.
+- After switching the active snapshot, the previous SCIP symbol has no active references and routes through the documented lexical fallback; because the new snapshot contains no matching passage, the result is empty.
+- Historical source chunks are no longer returned after the active pointer changes.
+
+Run only against the configured development/test project:
+
+```bash
+KMS_RETRIEVAL_ROUTER_SUPABASE_INTEGRATION=1 \
+uv run pytest -q tests/test_retrieval_router_supabase_integration.py -s
+```
+
+Requires `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. The test deletes only the uniquely generated repository it creates. It has been added to the branch but has **not** yet been executed locally; no integration success is claimed. The test uses a normalized SCIP fixture rather than invoking a language SCIP compiler, isolating persistence and routing behavior from toolchain installation.
