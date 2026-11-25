@@ -76,7 +76,9 @@ def _unique_bounded(values: Iterable[str], limit: int) -> tuple[str, ...]:
     return tuple(result)
 
 
-def _extract(query: str):
+def _extract(
+    query: str,
+) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
     paths = _unique_bounded(_PATH.findall(query), MAX_PATH_COUNT)
     qualified = _unique_bounded(_QUALIFIED.findall(query), MAX_IDENTIFIER_COUNT)
     explicit = [match.group(1).strip() for match in _BACKTICK.finditer(query)]
@@ -91,13 +93,13 @@ def _extract(query: str):
 
 
 def _history_available(history: Sequence[Mapping[str, object]] | None) -> bool:
-    if not history:
+    if not isinstance(history, Sequence) or isinstance(history, (str, bytes)):
         return False
     return any(
         item.get("role") in {"user", "assistant"}
         and isinstance(item.get("content"), str)
         and bool(str(item.get("content")).strip())
-        for item in history if isinstance(item, Mapping)
+        for item in history[-8:] if isinstance(item, Mapping)
     )
 
 
@@ -117,6 +119,10 @@ def classify_query(
         raise ValueError("query must be a non-empty string")
     if not isinstance(scope, QueryScope):
         raise ValueError("scope must be a trusted QueryScope")
+    if not isinstance(conversation_refs, Sequence) or isinstance(conversation_refs, (str, bytes)):
+        raise ValueError("conversation_refs must be a sequence of strings")
+    if any(not isinstance(ref, str) for ref in conversation_refs):
+        raise ValueError("conversation_refs must contain only strings")
 
     normalized = _normalized(query)
     history_exists = _history_available(conversation_history)
