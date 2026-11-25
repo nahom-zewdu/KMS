@@ -783,3 +783,14 @@ The benchmark uses real indexers/retrievers but an in-memory PostgREST double an
 The main observed weakness is passage query `repo-04-symbol-lookup`: both expected ranges in `codebase/symbol_retriever.py` are retrieved, but at ranks 5 and 9. Exact declaration lookup is a separate evaluation and ranked all seven expected declarations first. Inspect the passage query's terms and evidence before changing ranking; do not add query-specific boosts.
 
 **Next:** expand independently reviewed real-repository questions, especially multi-file and call-site cases, and inspect passage-ranking failures. Keep passage retrieval, exact declaration lookup, and SCIP exact-symbol navigation distinct. Do not add embeddings/RRF until the expanded evaluation demonstrates a need and supports a fair comparison. KRT-03 remains **IN_PROGRESS**.
+
+
+### KRT-03 task-aware routing — 2026-11-25
+
+- Added `nlp/query_engine/retrieval_router.py`: explicit declaration, call-site, and passage task routing. No natural-language task classification or score fusion.
+- Declaration discovery routes to `CodeLexicalRetriever`; passage retrieval routes to `SourceChunkRetriever`; call-site navigation uses exact-symbol SCIP references when supplied, otherwise falls back to source-chunk lexical retrieval with a recorded reason.
+- SCIP evidence is adapted without losing occurrence identity, source range, snapshot/revision, content hash, or indexer metadata. Existing retrievers enforce active-snapshot and tenant predicates.
+- Added `nlp/tests/test_retrieval_router.py` for routing, non-selected backend isolation, SCIP provenance, fallback behavior, and request-scope validation.
+- **Status: IMPLEMENTED, NOT VERIFIED.** The focused router tests, active-snapshot router integration, benchmark reruns, and full NLP suite are still required.
+- An empty SCIP result is not proof of complete semantic coverage. Exact SCIP symbol resolution remains an upstream responsibility; the router does not guess symbols from query text.
+- No embeddings, RRF, or reranking added. KRT-03 remains **IN_PROGRESS**.
