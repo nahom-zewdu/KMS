@@ -21,6 +21,7 @@ from supabase import Client
 
 from codebase.relationship_indexer import ImplementationRelationshipIndexer
 from codebase.symbol_indexer import CodeSymbolIndexer
+from codebase.source_chunk_indexer import SourceChunkIndexer
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,7 @@ class CodebaseBaselineSync:
         self.gh = Github(os.getenv("GITHUB_API_TOKEN"))
         self.relationship_indexer = ImplementationRelationshipIndexer(self.supabase, self.gh)
         self.symbol_indexer = CodeSymbolIndexer(self.supabase)
+        self.source_chunk_indexer = SourceChunkIndexer(self.supabase)
 
     def _set_sync_state(self, repo_full_name: str, company_id: str, **fields) -> None:
         """Persist baseline lifecycle state for the company-owned repository."""
@@ -218,6 +220,10 @@ class CodebaseBaselineSync:
                 "files_unavailable": 0,
                 "symbols_persisted": 0,
                 "source_bytes_skipped": 0,
+                "source_files_seen": 0,
+                "source_files_indexed": 0,
+                "source_files_rejected": 0,
+                "source_chunks_persisted": 0,
             }
             module_map: Dict[str, int] = {}
             live_paths: list[str] = []
@@ -296,6 +302,28 @@ class CodebaseBaselineSync:
                 "symbol_validation": symbol_metrics,
             }).eq("id", snapshot_id).eq("status", "building").execute()
             logger.info("Code symbol indexing complete: %s", symbol_metrics)
+
+            # Refresh the authoritative persisted chunk count before publication.
+            # The database publication trigger rejects a mismatch.
+            ensure_lease()
+            chunk_count_response = self.supabase.rpc(
+                "refresh_snapshot_source_chunk_validation",
+                {"p_snapshot_id": snapshot_id, "p_company_id": company_id},
+            ).execute()
+            persisted_chunk_count = chunk_count_response.data
+            if isinstance(persisted_chunk_count, list) and persisted_chunk_count:
+                persisted_chunk_count = persisted_chunk_count[0]
+            if isinstance(persisted_chunk_count, dict):
+                persisted_chunk_count = persisted_chunk_count.get(
+                    "refresh_snapshot_source_chunk_validation"
+                )
+            if not isinstance(persisted_chunk_count, int):
+                raise RuntimeError("snapshot source chunk validation returned no count")
+            symbol_metrics["source_chunks_persisted"] = persisted_chunk_count
+            self.supabase.table("repository_snapshots").update({
+                "source_chunk_validation": symbol_metrics,
+            }).eq("id", snapshot_id).eq("status", "building").execute()
+            logger.info("Source chunk indexing complete: %s", symbol_metrics)
 
             ensure_lease()
             completed_at = datetime.now(timezone.utc).isoformat()
@@ -507,6 +535,10 @@ class CodebaseBaselineSync:
             "files_unavailable": 0,
             "symbols_persisted": 0,
             "source_bytes_skipped": 0,
+            "source_files_seen": 0,
+            "source_files_indexed": 0,
+            "source_files_rejected": 0,
+            "source_chunks_persisted": 0,
         }
 
         file_entity_id = str(
@@ -552,30 +584,51 @@ class CodebaseBaselineSync:
             on_conflict="repository_id,file_path,snapshot_id",
         ).execute()
 
-        # Parse only explicitly supported source extensions. Unsupported and
-        # oversized files are recorded as coverage gaps, never guessed.
+        # Parse and persist only explicitly supported source extensions. Decode
+        # once so symbol extraction and durable chunking consume identical bytes.
         from codebase.symbols import CodeSymbolExtractor
 
         language = CodeSymbolExtractor._language_for_path(file_path)
         symbol_indexer = getattr(self, "symbol_indexer", None)
-        if language is not None and symbol_indexer is not None:
+        source_chunk_indexer = getattr(self, "source_chunk_indexer", None)
+        if language is not None and (symbol_indexer is not None or source_chunk_indexer is not None):
             symbol_metrics["files_seen"] = 1
             source_size = getattr(gh_file, "size", None)
-            if source_size is not None and source_size > self.symbol_indexer.max_source_bytes:
-                symbol_metrics["files_oversized"] = 1
-                symbol_metrics["source_bytes_skipped"] = int(source_size)
+            max_source_bytes = 1_000_000
+            if symbol_indexer is not None:
+                max_source_bytes = min(
+                    max_source_bytes, getattr(symbol_indexer, "max_source_bytes", max_source_bytes)
+                )
+            if source_size is not None and source_size > max_source_bytes:
+                if symbol_indexer is not None:
+                    symbol_metrics["files_oversized"] = 1
+                    symbol_metrics["source_bytes_skipped"] = int(source_size)
+                if source_chunk_indexer is not None:
+                    symbol_metrics["source_files_seen"] = 1
+                    symbol_metrics["source_files_rejected"] = 1
             else:
-                try:
-                    decoded = getattr(gh_file, "decoded_content", None)
-                    if decoded is None:
+                decoded = getattr(gh_file, "decoded_content", None)
+                if decoded is None:
+                    if symbol_indexer is not None:
                         symbol_metrics["files_unavailable"] = 1
-                    else:
+                    if source_chunk_indexer is not None:
+                        symbol_metrics["source_files_seen"] = 1
+                        symbol_metrics["source_files_rejected"] = 1
+                else:
+                    try:
+                        source_text = decoded.decode("utf-8")
+                    except UnicodeDecodeError as exc:
+                        raise RuntimeError(
+                            f"Cannot decode supported source file as UTF-8: {file_path}"
+                        ) from exc
+
+                    if symbol_indexer is not None:
                         result = symbol_indexer.index_file(
                             repository_id=physical_repo_id,
                             snapshot_id=snapshot_id,
                             company_id=company_id,
                             file_path=file_path,
-                            source=decoded.decode("utf-8"),
+                            source=source_text,
                             source_revision=source_revision,
                             language=language,
                         )
@@ -590,10 +643,24 @@ class CodebaseBaselineSync:
                         else:
                             symbol_metrics["files_unsupported"] = 1
                         symbol_metrics["symbols_persisted"] = result["symbols_persisted"]
-                except UnicodeDecodeError as exc:
-                    raise RuntimeError(
-                        f"Cannot decode supported source file for symbol indexing: {file_path}"
-                    ) from exc
+
+                    if source_chunk_indexer is not None:
+                        chunk_result = source_chunk_indexer.index_file(
+                            repository_id=physical_repo_id,
+                            snapshot_id=snapshot_id,
+                            company_id=company_id,
+                            file_path=file_path,
+                            source=source_text,
+                            source_revision=source_revision,
+                        )
+                        symbol_metrics["source_files_seen"] = 1
+                        if chunk_result["status"] == "indexed":
+                            symbol_metrics["source_files_indexed"] = 1
+                            symbol_metrics["source_chunks_persisted"] = chunk_result[
+                                "chunks_persisted"
+                            ]
+                        else:
+                            symbol_metrics["source_files_rejected"] = 1
 
         edge_id = str(
             uuid.uuid5(uuid.NAMESPACE_URL, f"partof:{snapshot_id}:{file_entity_id}:{repo_entity_id}")

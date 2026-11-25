@@ -6,8 +6,8 @@
 > Current Ramp runtime: `docs/architecture/ramp.md`.
 > Scoring spec vs implemented subset: `docs/product/ramp-candidate-scoring.md`.
 
-**Last updated:** 2026-11-22
-**Current branch:** `feat/ramp`
+**Last updated:** 2026-11-25
+**Current branch:** `feat/krt-03-hybrid-retrieval`
 **Current milestone:** KRT-03 — Hybrid Retrieval
 **Current objective:** Build a scoped, evaluated hybrid retrieval layer that returns relevant, revision-aware evidence for grounded KMS answers.
 
@@ -72,7 +72,7 @@ An `IMPORTS` edge (`A imports B`) is a structural dependency. It does not, by it
 | Area | Status | Notes |
 |---|---|---|
 | KRT-02 code intelligence | VERIFIED | Tree-sitter declarations and persisted SCIP occurrences; Python, Go, and TypeScript integrations exercised separately. See `docs/development/milestones/2026-11-22-krt-02-code-intelligence.md`. |
-| KRT-03 hybrid retrieval | IN_PROGRESS | Shared evidence contract, 20-query synthetic benchmark, and active-snapshot lexical symbol retriever added; local verification pending. See the KRT-03 design note. |
+| KRT-03 hybrid retrieval | VERIFIED — bounded deterministic retrieval foundation; semantic/fusion scope deferred | Task-aware routing, snapshot-scoped lexical source chunks, symbol lookup, SCIP occurrence retrieval, and Supabase tenant/snapshot integration are verified. Latest full NLP suite: **310 passed, 8 skipped, 6 warnings, 4 subtests passed**; router Supabase integration: **1 passed**. See the acceptance review in the KRT-03 design note. The original semantic-code-retrieval + RRF acceptance criteria were not implemented and are explicitly deferred; this milestone does not claim a complete semantic hybrid retriever. |
 | Reliability Batch 1 | ACCEPTED | Tenant/failure semantics hardened. Unchanged by this branch; not re-verified on 2026-09-21. |
 | Reliability Batch 2 | ACCEPTED | Redis pending-message recovery/ACK semantics hardened. Not re-verified on 2026-09-21. |
 | Reliability Batch 3 | ACCEPTED | Durable codebase-analysis lifecycle and failure propagation. Not re-verified on 2026-09-21. |
@@ -381,8 +381,8 @@ Do not start KRT implementation on this branch. After the requested merge:
 | KRT-00 | Supabase tenant isolation and RPC security | P0 | SPECIFIED | Cross-tenant access is denied and covered by role-aware tests |
 | KRT-01 | Durable source snapshots and provenance | P1 | PLANNED | Source is retrievable by exact commit/path/hash and stale deletions reconcile |
 | KRT-02 | Code intelligence (symbols and semantic references) | P1 | VERIFIED | Source-backed symbol/reference evidence is available for supported languages |
-| KRT-03 | Hybrid retrieval (SQL, FTS, path, vector, graph) | P1 | PLANNED | Retrieval benchmark shows correct scope and relevant evidence |
-| KRT-04 | Typed query planning and grounded synthesis | P1 | PLANNED | Correct tool routing, claim-level citations, and reliable abstention |
+| KRT-03 | Bounded deterministic retrieval foundation (SQL, lexical, path, SCIP/graph evidence) | P1 | VERIFIED — bounded scope | Snapshot-scoped lexical retrieval, exact declaration lookup, SCIP reference navigation, deterministic task routing, and tenant/snapshot integration verified. Semantic code vectors and rank fusion deferred; see KRT-03 acceptance review. |
+| KRT-04 | Typed query planning and grounded synthesis | P1 | SPECIFIED | Validated typed query plan; safe task routing; bounded evidence gathering; claim-level citations validated against retrieved evidence; reliable abstention; follow-up scope tests. First slice: introduce a pure typed query-plan contract and validation tests without changing production routing or synthesis. |
 | KRT-05 | Evaluation and observability | P1 | PLANNED | Versioned benchmark and end-to-end traces gate query changes |
 
 **Why KRT-00 comes first:** the live Supabase audit reported RLS/grant/RPC configurations that may permit cross-tenant access. This must be re-verified against the active project and corrected before adding more retrieval surfaces or exposing real customer data.
@@ -725,4 +725,113 @@ Tests added in `nlp/tests/test_scip_indexer.py` cover deterministic normalizatio
 
 The verification is local and does not claim a live Supabase deployment or production-data validation. The SCIP subprocess runner is bounded but is not an OS-level sandbox; untrusted repositories still require isolated workers with resource and network restrictions. SCIP indexing is not automatically enabled for every repository.
 
-**Next:** KRT-03 Hybrid Retrieval. Inspect existing text/vector stores and retrieval interfaces, then write the retrieval and evaluation design before implementation. Existing raw-event embeddings must not be mistaken for a source-code semantic index.
+**Next:** KRT-03 Hybrid Retrieval is underway on `feat/krt-03-hybrid-retrieval`. The first evidence/lexical slice is locally verified: 29 focused tests passed; full NLP suite: 274 passed, 3 skipped, 6 warnings, 4 subtests passed. Build a benchmark runner for exact-path and symbol retrieval before adding full-text chunks or code embeddings. Existing raw-event embeddings must not be mistaken for a source-code semantic index.
+
+
+### KRT-03 update — 2026-11-24
+
+**Verified implementation state**
+
+- The original symbol-based lexical baseline remains verified: eight supported synthetic queries scored Recall@1/5/10 = 1.0 and MRR = 1.0. This is a curated fixture result using an in-memory PostgREST double, not a production retrieval-quality claim.
+- Durable source chunks are implemented and wired into baseline snapshot ingestion using source text fetched at the immutable snapshot revision. Per-file coverage metrics are recorded, and snapshot validation is refreshed before publication.
+- The `source_code_chunks` migration is applied to the configured development/test Supabase project. The migration and `schema/tests/source_code_chunks.sql` were also exercised against disposable local PostgreSQL.
+- The opt-in `tests/test_source_chunk_supabase_integration.py` run passed against the configured Supabase project. It verifies persistence, idempotency, provenance, tenant/repository isolation, active-snapshot switching, and exclusion of historical chunks after the active pointer changes. Fixtures are cleaned up by the test.
+- Latest developer-reported full NLP suite: **292 passed, 4 skipped, 6 warnings, 4 subtests passed**.
+- Latest developer-reported `tests/test_source_chunk_benchmark_integration.py`: **1 passed**.
+
+**Benchmark limitation — do not overstate results**
+
+The current source-chunk benchmark passes its integration test, but it is not yet a meaningful ranking evaluation. The fixture currently produces only four chunks (one per source file), grades relevance by file path rather than exact chunk/range, and asserts broad metric thresholds rather than preserving a reviewed benchmark report. Recall@5/10 is therefore weak evidence. The test demonstrates pipeline behavior, not retrieval quality.
+
+**Next bounded task**
+
+Strengthen the source-chunk benchmark before embeddings:
+
+1. Configure the fixture to produce multiple chunks per file and include non-relevant distractor chunks.
+2. Define relevance at the chunk/range level, with explicit ground truth in the versioned fixture.
+3. Record deterministic per-query rankings and exact Recall@1/5/10 and MRR.
+4. Compare source-chunk and symbol lexical retrievers only on queries for which their evidence units and relevance labels are genuinely comparable; report non-comparable/unsupported queries separately.
+5. Update this roadmap and the KRT-03 design note with measured results and limitations.
+
+Do not add code embeddings, RRF, or a reranker until this benchmark is credible. KRT-03 remains **IN_PROGRESS**.
+
+
+### KRT-03 task-separated evaluation runner — 2026-11-24
+
+- Added `nlp/tests/test_retrieval_task_benchmark_integration.py` to execute the real symbol and source-chunk indexing/retrieval implementations against the nine-file synthetic fixture.
+- Declaration discovery is scored by expected symbol identity; call-site/context and passage retrieval are scored independently by source-range overlap. Three no-evidence queries assert empty results from both retrievers.
+- The runner prints deterministic per-query rankings and Recall@1/5/10, MRR, indexing counts, and no-evidence outcomes; returned evidence is checked for company/repository/active-snapshot/revision provenance.
+- The fixture validator was developer-reported passing: `tests/test_retrieval_task_benchmark_fixture.py` — 4 passed in 0.02s.
+- The new retrieval integration runner is **IMPLEMENTED, NOT VERIFIED** until it is run locally. Its in-memory PostgREST double does not test PostgreSQL query planning or RLS, and the synthetic explicit-term benchmark does not measure general natural-language understanding.
+- Next: run the focused runner, inspect per-query rankings and label validity, then run the full NLP suite. No embeddings or RRF until this evaluation is understood. KRT-03 remains **IN_PROGRESS**.
+
+
+### KRT-03 real-repository retrieval baseline — 2026-11-25
+
+Developer-reported opt-in run of `nlp/tests/test_kms_nlp_repository_retrieval_benchmark.py` against the actual KMS Python `codebase/` and `query_engine/` source:
+
+- Corpus: 29 files, 232 source chunks, 169 declarations; zero symbol syntax-error files.
+- Passage retrieval (10 questions, 11 expected ranges): MRR 0.803; query-level Recall@1/5/10 = 0.70/1.00/1.00; complete-query Recall@1/5/10 = 0.70/0.90/1.00; range-level Recall@1/5/10 = 0.636/0.909/1.00.
+- One explicit no-evidence query returned zero candidates.
+- Exact declaration lookup (7 identifier queries): MRR 1.00 and Recall@1/5 = 1.00.
+- Verification: `KMS_NLP_REPOSITORY_BENCHMARK=1 uv run pytest -q tests/test_kms_nlp_repository_retrieval_benchmark.py -s` — **1 passed**.
+
+The initial run failed only because an assertion expected five declaration queries; the dataset contains seven. The assertion was corrected, and the rerun passed. No retrieval-ranking change was made.
+
+The benchmark uses real indexers/retrievers but an in-memory PostgREST double and explicit lexical terms for manually authored questions. It does not measure free-form semantic understanding, PostgreSQL/RLS behavior, latency/cost, or generalization beyond this KMS Python corpus. Declaration evaluation is still small (seven queries).
+
+The main observed weakness is passage query `repo-04-symbol-lookup`: both expected ranges in `codebase/symbol_retriever.py` are retrieved, but at ranks 5 and 9. Exact declaration lookup is a separate evaluation and ranked all seven expected declarations first. Inspect the passage query's terms and evidence before changing ranking; do not add query-specific boosts.
+
+**Next:** expand independently reviewed real-repository questions, especially multi-file and call-site cases, and inspect passage-ranking failures. Keep passage retrieval, exact declaration lookup, and SCIP exact-symbol navigation distinct. Do not add embeddings/RRF until the expanded evaluation demonstrates a need and supports a fair comparison. KRT-03 remains **IN_PROGRESS**.
+
+
+### KRT-03 routing and integration verification — 2026-11-25
+
+The earlier router checkpoint is superseded by this verified result.
+
+- Focused router contract tests: **9 passed**.
+- Supabase router integration: **1 passed, 2 warnings in 24.74s**. The opt-in test exercised persisted SCIP references, active-snapshot passage retrieval, tenant/repository mismatch isolation, active-snapshot switching, historical evidence exclusion, and lexical fallback.
+- Latest full NLP suite, developer-reported: **310 passed, 8 skipped, 6 warnings, 4 subtests passed in 24.13s**.
+- Warnings are non-failing deprecations: `pythonjsonlogger.jsonlogger` import path and PyGithub `login_or_token`; the Supabase integration additionally reports deprecated `timeout` and `verify` client arguments.
+
+**Current technical boundary:** routing is explicit and deterministic. Declaration discovery uses symbol lexical retrieval; passage retrieval uses source-chunk lexical retrieval; call-site navigation uses SCIP references only when an exact symbol is supplied, otherwise it falls back to lexical chunks with a recorded reason. The router does not classify natural-language intent, resolve symbols from natural language, blend scores, or claim semantic coverage when SCIP returns no references.
+
+**Decision:** do not add embeddings, RRF, or reranking as a completion ritual. The measured lexical baselines and SCIP coverage justify retaining these complementary evidence sources, but evaluation remains narrow: small hand-labeled query sets, explicit lexical terms, one KMS Python subsystem, and in-memory PostgREST doubles for benchmarks. SCIP coverage is not a ranked relevance metric. The Supabase integration verifies real persistence and tenant/snapshot behavior, not broad retrieval quality.
+
+**Acceptance review completed:** the deterministic retrieval foundation is accepted within the amended scope. Semantic source-code embeddings and RRF are explicitly deferred; the design note records the unmet original criteria and the rationale. KRT-04 owns typed query interpretation, conservative symbol resolution, bounded evidence planning, and grounded synthesis. No KRT-04 implementation belongs on this branch.
+
+
+### KRT-04 specification checkpoint — 2026-11-25
+
+**Status: SPECIFIED; implementation not started.** KRT-04 consumes the bounded deterministic retrieval interfaces accepted in KRT-03. It must not silently reintroduce semantic indexing or rank fusion.
+
+#### Responsibility boundary
+
+- Interpret the user's current turn and bounded conversation context into a typed intent.
+- Preserve trusted company scope from the authenticated job context; repository/revision/time constraints must be validated against available company-scoped inventory and must never be trusted from query text alone.
+- Route supported structured questions to existing deterministic SQL handlers; declaration, call-site, and passage tasks to the KRT-03 router; ownership/dependency questions to existing scoped graph/history paths only where evidence is available.
+- Resolve a SCIP symbol only from unambiguous repository-scoped evidence. Ambiguous or missing resolution remains explicit and must not be guessed from natural-language terms.
+- Bound evidence gathering and preserve candidate IDs, provenance, strategy, and fallback reasons.
+- Synthesize only from retrieved evidence, validate citations against the exact retrieved records/ranges, and abstain on unsupported or conflicting claims.
+- Treat courtesy turns and ambiguous follow-ups as conversation-control cases; do not run unrelated retrieval. Resolve pronouns/references only from explicit, recent conversation state.
+
+#### First implementation slice — KRT-04.1 query-plan contract
+
+Create a pure, dependency-light typed contract (dataclasses/enums or equivalent) for intent, trusted tenant/repository scope, optional revision/time constraints, extracted paths/identifiers/qualified names, optional resolved SCIP symbol with resolution provenance, bounded conversation references, and explicit abstention/ambiguity state. Validate required scope, enum values, field bounds, and consistency. This slice must not call an LLM, Supabase, Redis, or any retriever; it must not change `QueryEngine.handle_query` behavior.
+
+**Acceptance tests:** valid plans for each supported intent; reject missing/placeholder company scope; reject malformed repository/revision/time constraints; enforce bounded term/path/reference counts and string lengths; preserve ambiguity instead of inventing a symbol; distinguish courtesy/ambiguous follow-up from answerable intents; deterministic serialization/round-trip if serialization is part of the contract.
+
+**Out of scope for this slice:** intent classifier, query-to-symbol resolver, retrieval execution, prompt changes, citation generation/validation, schema migrations, embedding/vector work, RRF, and UI changes.
+
+#### Branch and execution gate
+
+Do not implement KRT-04 on the current KRT-03 branch. Merge and review the KRT-03 documentation/implementation branch first, then create a fresh KRT-04 branch from the accepted integration base. Before broad customer exposure, the separate RLS/security reconciliation remains a release gate; KRT-04 must not weaken or bypass it.
+
+
+### KRT-03 acceptance decision — 2026-11-25
+
+**Accepted with an explicit scope amendment.** The delivered KRT-03 scope is the deterministic retrieval foundation: evidence provenance, snapshot-scoped lexical source chunks, exact symbol discovery, SCIP occurrence navigation, task-aware routing, and tested tenant/active-snapshot behavior. The original semantic source-code embedding and RRF requirements were not implemented; they are explicitly deferred and must not be represented as completed hybrid retrieval.
+
+The benchmarks establish a useful baseline, not broad natural-language relevance, production performance, or generalization across repositories. A future semantic retrieval proposal must include a reviewed natural-language benchmark, multiple repositories/languages, no-evidence cases, independent lexical/semantic baselines, fusion comparison, and latency/cost measurement before implementation.
+
+KRT-04 consumes the existing retrievers and owns typed intent planning, conservative query-to-symbol resolution, bounded evidence gathering, provenance-preserving plans, claim-level citations, and abstention. It does not own embeddings or rank fusion. KRT-04 is specified but implementation has not started. See the KRT-03 design note for the acceptance matrix and detailed boundary.

@@ -14,7 +14,12 @@
       "question": "Find src/payments/service.py",
       "expected_paths": [
         "src/payments/service.py"
-      ]
+      ],
+      "lexical_input": {
+        "file_paths": [
+          "src/payments/service.py"
+        ]
+      }
     },
     {
       "id": "path-02",
@@ -30,7 +35,12 @@
       "question": "Find PaymentService",
       "expected_symbols": [
         "PaymentService"
-      ]
+      ],
+      "lexical_input": {
+        "identifiers": [
+          "PaymentService"
+        ]
+      }
     },
     {
       "id": "identifier-02",
@@ -38,7 +48,12 @@
       "question": "Find should_retry",
       "expected_symbols": [
         "RetryPolicy.should_retry"
-      ]
+      ],
+      "lexical_input": {
+        "identifiers": [
+          "should_retry"
+        ]
+      }
     },
     {
       "id": "identifier-03",
@@ -46,7 +61,12 @@
       "question": "Find record_payment",
       "expected_symbols": [
         "Ledger.record_payment"
-      ]
+      ],
+      "lexical_input": {
+        "identifiers": [
+          "record_payment"
+        ]
+      }
     },
     {
       "id": "symbol-01",
@@ -57,7 +77,12 @@
       ],
       "expected_symbols": [
         "PaymentService.charge"
-      ]
+      ],
+      "lexical_input": {
+        "qualified_names": [
+          "PaymentService.charge"
+        ]
+      }
     },
     {
       "id": "symbol-02",
@@ -68,7 +93,12 @@
       ],
       "expected_symbols": [
         "Ledger.record_payment"
-      ]
+      ],
+      "lexical_input": {
+        "qualified_names": [
+          "Ledger.record_payment"
+        ]
+      }
     },
     {
       "id": "reference-01",
@@ -120,7 +150,12 @@
       ],
       "expected_symbols": [
         "register_routes"
-      ]
+      ],
+      "lexical_input": {
+        "identifiers": [
+          "register_routes"
+        ]
+      }
     },
     {
       "id": "code-05",
@@ -131,7 +166,12 @@
       ],
       "expected_symbols": [
         "Ledger.record_payment"
-      ]
+      ],
+      "lexical_input": {
+        "qualified_names": [
+          "Ledger.record_payment"
+        ]
+      }
     },
     {
       "id": "multi-01",

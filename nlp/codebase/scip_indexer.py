@@ -480,6 +480,11 @@ def _occurrence_range(occurrence: dict[str, Any]) -> tuple[int, int, int, int]:
 
 def _position_to_byte(source: bytes, line: int, character: int, encoding: int) -> int:
     """Convert a SCIP line/character position into a UTF-8 byte offset."""
+    if not source:
+        if line == 0 and character == 0:
+            return 0
+        raise ScipJobError("invalid_range", "SCIP position is outside the empty source file")
+
     lines = source.splitlines(keepends=True)
     if line >= len(lines):
         if line == len(lines) and character == 0 and source.endswith(b"\n"):

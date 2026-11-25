@@ -2,8 +2,8 @@
 
 **Status:** Current architecture audit / target direction  
 **Reviewed:** 2026-11-22  
-**Repository baseline:** `feat/ramp`  
-**Implementation status:** KRT-00 through KRT-02 are implemented and locally verified; KRT-03 is in progress with its evidence contract, benchmark fixture, and first lexical symbol retriever added. Production rollout and live Supabase validation are separate.  
+**Repository baseline:** `feat/krt-03-hybrid-retrieval` (branched from `feat/ramp`)  
+**Implementation status:** KRT-00 through KRT-02 are implemented and locally verified. KRT-03's evidence contract, benchmark fixture, and first active-snapshot lexical symbol retriever pass focused and full local NLP tests (29 focused; 274 passed, 3 skipped). A Recall@k/MRR evaluator, eight explicit lexical query inputs, and an indexer-to-retriever fixture integration test are added. The integration uses an in-memory PostgREST double and awaits local execution; PostgreSQL/RLS validation remains separate. Production rollout and live Supabase validation are separate.  
 **Milestone specification:** `docs/development/milestones/2026-11-14-knowledge-reliability.md`
 
 ## 1. Purpose and scope
@@ -51,7 +51,7 @@ Current query handling consists of several partially separate paths:
 - bounded source-file retrieval that heuristically selects indexed paths and fetches source from GitHub;
 - LLM answer synthesis.
 
-There is no single typed query planner routing structured, code, graph, historical, and conversational questions through a coherent retrieval plan. There is no unified lexical + vector + graph candidate fusion or consistently validated claim-level citation pipeline. KRT-03 is underway: its design, shared evidence contract, 20-query synthetic benchmark, and first active-snapshot lexical symbol retriever are added. Durable source chunks, full-text search, code embeddings, and rank fusion remain future implementation work.
+There is no single typed query planner routing structured, code, graph, historical, and conversational questions through a coherent retrieval plan. There is no unified lexical + vector + graph candidate fusion or consistently validated claim-level citation pipeline. KRT-03 is underway: its design, shared evidence contract, 20-query synthetic benchmark, and first active-snapshot lexical symbol retriever are added and locally tested. A Recall@k/MRR evaluation harness and a real Tree-sitter-indexer-to-lexical-retriever fixture test exist. The test uses an in-memory PostgREST double and still requires local execution; it is not PostgreSQL/RLS validation. Durable source chunks, full-text search, code embeddings, and rank fusion remain future implementation work.
 
 Adding RAG alone is insufficient: KMS first needs reliable source data, tenant filters, query intent, and the correct retrieval method for each question.
 

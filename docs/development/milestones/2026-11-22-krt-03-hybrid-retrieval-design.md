@@ -1,10 +1,11 @@
 # KRT-03 — Hybrid Retrieval Design
 
-**Status:** IN_PROGRESS — evidence contract, benchmark fixture, and lexical symbol retrieval added; local verification pending  
+**Status:** VERIFIED — bounded deterministic retrieval foundation accepted; semantic code retrieval and rank fusion explicitly deferred  
 **Date:** 2026-11-22  
+**Working branch:** `feat/krt-03-hybrid-retrieval`  
 **Base branch:** `feat/ramp`  
 **Prerequisite:** KRT-00, KRT-01, and KRT-02 completed  
-**Next:** Build and evaluate retrieval slices before integrating them into the query engine
+**Next:** KRT-04 typed query planning and grounded synthesis. Semantic code retrieval and rank fusion remain a separate deferred work item, not part of KRT-04.
 
 ## Goal
 
@@ -146,17 +147,406 @@ KRT-03 is accepted only when lexical and semantic retrieval are independently te
 
 Added:
 
-- `nlp/query_engine/evidence.py`: immutable `EvidenceCandidate` contract for code chunks, symbols, SCIP occurrences, events, and graph evidence.
-- Code candidate validation requires company, repository, active snapshot, source revision, path, content hash, and source ranges.
+- `nlp/query_engine/evidence.py`: immutable `EvidenceCandidate` contract for code chunks, symbols, SCIP occurrences, events, and graph evidence.- Code candidate validation requires company, repository, active snapshot, source revision, path, content hash, and source ranges.
 - Stable evidence IDs are based on tenant and source identity, not retriever rank or score. Code identity includes the exact snapshot, revision, path, range, and content hash; event/graph identity includes company, source, and record ID.
 - `nlp/tests/test_query_engine_evidence.py`: validation, identity stability, tenant separation, and serialization tests.
 - `nlp/tests/fixtures/retrieval/`: a small synthetic four-file repository, historical event records, and a 20-query benchmark covering paths, identifiers, definitions/references, natural-language code questions, multi-file questions, historical events, no-evidence queries, and scope boundaries.
 - `nlp/tests/test_retrieval_benchmark_fixture.py`: checks that benchmark expectations resolve to fixture files, symbols, and tenant-owned event records.
 - `nlp/query_engine/code_lexical.py`: adds a first lexical adapter over active-snapshot declarations. It prioritizes exact qualified-name matches, then exact file-path declarations, then identifier matches; deduplicates by stable evidence ID and retains the match modes.
 - `nlp/tests/test_code_lexical_retriever.py`: covers scope forwarding, deduplication, ranking, provenance, and invalid tenant rejection.
+- `nlp/query_engine/lexical_benchmark.py`: adds a reusable evaluator for Recall@1/5/10 and MRR, with hard company/repository/snapshot leakage checks.
+- Eight fixture queries now declare explicit lexical inputs. The other twelve remain unsupported by this lexical slice and are not counted as misses.
+- `nlp/tests/test_lexical_benchmark.py`: covers metric calculation, late/missing relevant evidence, invalid cutoffs, and company/repository/snapshot/source-revision leakage.
+- `nlp/tests/test_lexical_benchmark_integration.py`: indexes the four real fixture source files with `CodeSymbolIndexer`, retrieves them through `CodeLexicalRetriever`, and runs the evaluator end to end against an in-memory PostgREST double. It asserts the expected fixture baseline (Recall@1/5/10 and MRR), active-repository isolation, and persisted provenance. This is application-pipeline integration, not PostgreSQL/RLS integration.
 
-**Not yet verified locally.** The new focused tests and full NLP suite must be run before treating this slice as verified. The benchmark is a deterministic synthetic baseline; it does not yet measure retrieval quality or represent a production repository.
+**Local verification — developer-reported, 2026-11-22:**
+
+- Initial evidence/lexical/fixture verification on `feat/ramp`: **29 focused passed**; full NLP suite **274 passed, 3 skipped, 6 warnings, 4 subtests passed**.
+- After adding the lexical evaluator, developer-reported focused KRT-03 suite on `feat/krt-03-hybrid-retrieval`: **36 passed**.
+- Latest developer-reported full NLP suite on the feature branch: **281 passed, 3 skipped, 6 warnings, 4 subtests passed**.
+- No failures. The skipped tests are opt-in SCIP integrations; Python, Go, and TypeScript integrations were exercised separately in the KRT-02 close-out.
+- The warnings are existing dependency deprecations (`pythonjsonlogger` and PyGithub), not failures.
+
+This verifies the current slice's tests, not retrieval quality. The benchmark remains a deterministic synthetic fixture; it does not yet measure end-to-end retrieval quality or represent a production repository.
 
 ### Next bounded implementation
 
-Run the focused evidence/lexical/fixture tests and full NLP suite. Fix failures before adding full-text source chunks. Then add a benchmark runner that measures exact-path and symbol recall using the fixture; do not claim retrieval-quality gains from fixture sanity tests alone.
+Run the evaluator against an indexed copy of the synthetic repository using the real `CodeLexicalRetriever`. The current tests validate the evaluator with controlled candidates; they do **not** establish a retrieval baseline. The integration run must prove that fixture declarations are indexed under the declared company/repository/snapshot IDs, then record Recall@1/5/10, MRR, and zero scope leakage. If fixture indexing cannot reproduce the declared snapshot identity cleanly, fix the fixture/indexing boundary rather than weakening provenance checks. Do not add source chunks or embeddings until this lexical baseline is measured.
+
+
+### Lexical baseline verification — 2026-11-23
+
+Developer-reported local verification on `feat/krt-03-hybrid-retrieval`:
+
+- `tests/test_lexical_benchmark_integration.py`: **1 passed**.
+- Full NLP suite: **283 passed, 3 skipped, 6 warnings, 4 subtests passed**.
+- The end-to-end fixture indexes four Python files through the real Tree-sitter symbol indexer, retrieves through `CodeLexicalRetriever`, and evaluates eight supported lexical queries. Recall@1/5/10 and MRR are all **1.0** on this curated fixture.
+- This test uses an in-memory PostgREST double. It does not verify PostgreSQL query behavior or RLS.
+
+### Source chunking and lexical retrieval — implementation checkpoint, 2026-11-23
+
+Added on `feat/krt-03-hybrid-retrieval`:
+
+- `nlp/codebase/source_chunker.py`: deterministic line-window chunking with configurable source/chunk/line bounds, overlap, UTF-8 byte offsets, one-based line ranges, source/chunk SHA-256 hashes, and snapshot/revision-scoped stable IDs. Oversized files and individual lines fail closed.
+- `nlp/codebase/source_chunk_indexer.py`: bounded idempotent batched writes to `source_code_chunks`, with explicit per-file coverage results.
+- `nlp/codebase/source_chunk_retriever.py`: literal lexical retrieval filtered in storage by company, repository, and the repository's active snapshot; results become provenance-complete `EvidenceCandidate` objects.
+- `supabase/migrations/20261123010000_add_source_code_chunks.sql`: durable chunk table, composite ownership/file/snapshot foreign keys, revision/building-snapshot trigger, publication count validation, coverage refresh function, indexes, and service-role-only table access.
+- `nlp/tests/test_source_chunking.py`, `nlp/tests/test_source_chunk_retriever.py`, and `schema/tests/source_code_chunks.sql`.
+
+**Verification superseding the initial implementation checkpoint — 2026-11-24:**
+
+- Focused chunking/indexer/retriever/baseline-ingestion tests: **9 passed**.
+- Full NLP suite at the latest reported revision: **292 passed, 4 skipped, 6 warnings, 4 subtests passed**.
+- Migration applied and verified against disposable local PostgreSQL; `schema/tests/source_code_chunks.sql` passed.
+- Migration applied to the configured development/test Supabase project. The opt-in Supabase API integration test passed and exercised persistence, idempotency, provenance, tenant/repository isolation, and active-snapshot switching.
+- Source chunk indexing is wired into baseline ingestion. It uses content fetched from the exact snapshot revision and validates chunk coverage before snapshot publication.
+- The source-chunk benchmark integration test passed (**1 passed**), but this is only pipeline verification; see the 2026-11-24 benchmark-quality note below.
+
+**Boundaries:** no code embeddings, vector column/function, or rank fusion are implemented. Chunking remains line-oriented, and an individual line larger than the configured chunk byte limit is rejected rather than split. The in-memory benchmark double does not establish PostgreSQL query-planner or RLS behavior; those are covered separately by SQL and opt-in Supabase integration checks.
+
+
+### Source-chunk benchmark checkpoint — 2026-11-24
+
+The initial end-to-end benchmark test `nlp/tests/test_source_chunk_benchmark_integration.py` passed (**1 passed**). It exercises the real chunker, indexer, and retriever over the synthetic four-file repository using an in-memory PostgREST double.
+
+Code review identified a benchmark-design weakness: default chunking produces only four chunks for this fixture, one per file. Ground truth is currently file-path based, so multiple chunks from a relevant file cannot be distinguished. The test's Recall@5/10 assertions consequently do not establish meaningful ranking quality. Treat this as an integration smoke test, not a retrieval-quality baseline.
+
+**Next task — benchmark hardening:**
+
+1. Produce multiple chunks per file and add distractor chunks.
+2. Define exact relevant chunk ranges/IDs in the versioned fixture.
+3. Preserve and inspect per-query candidate rankings; report exact Recall@1/5/10 and MRR.
+4. Compare with symbol lexical retrieval only on a shared, defensible subset of queries and relevance units. Keep unsupported/non-comparable queries visible.
+5. Record the benchmark method, results, and limitations here and in the roadmap.
+
+Do not start semantic embeddings or RRF until this task produces a credible lexical baseline.
+
+### Chunk-level benchmark revision — implementation pending local verification, 2026-11-24
+
+The initial four-chunk/file-level benchmark has been replaced with a versioned chunk-level fixture:
+
+- Five-line windows with one-line overlap create multiple candidates per source file; non-relevant chunks act as ranking distractors.
+- Ground truth identifies exact `(file_path, start_line, end_line)` ranges rather than treating every chunk in a relevant file as relevant.
+- Five supported lexical queries and one explicit no-evidence query are included.
+- The integration test emits deterministic per-query candidate rankings, matched terms, relevant ranks, Recall@1/5/10, and MRR.
+- The test continues to validate company/repository/active-snapshot/source-revision provenance and no-evidence/tenant/repository isolation.
+
+**Developer-reported local verification — 2026-11-24:**
+
+```text
+uv run pytest tests/test_source_chunk_benchmark_integration.py -q -s
+1 passed in 1.10s
+```
+
+Measured results from the five supported queries (the no-evidence query is reported separately):
+
+| Metric | Result |
+|---|---:|
+| Recall@1 | 0.70 |
+| Recall@5 | 1.00 |
+| Recall@10 | 1.00 |
+| MRR | 1.00 |
+
+The benchmark emits per-query rankings and matched terms. Every supported query has at least one relevant chunk at rank 1. Recall@1 is lower than 1.0 because three queries have multiple relevant chunks and top-1 can return only one of them.
+
+**Interpretation and limitations:** this verifies deterministic behavior of the real chunker, indexer, and retriever on a controlled synthetic four-file fixture. It is not evidence of real-world retrieval quality: there are only five supported queries, the lexical terms are explicit identifiers, relevance is manually specified at exact line-range level, and the test uses an in-memory PostgREST double. It does not measure PostgreSQL query planning/RLS or natural-language retrieval quality. The separate SQL and opt-in Supabase API tests cover persistence and scope behavior, not this benchmark's ranking quality.
+
+The source-chunk and symbol retrievers are not directly comparable on all queries because their evidence units differ (chunks versus symbols/declarations). A comparison should be attempted only if a genuinely shared subset and relevance mapping can be defined without weakening either retriever's evidence semantics.
+
+**Full-suite regression verification — developer-reported, 2026-11-24:** `uv run pytest -q` completed with **293 passed, 4 skipped, 6 warnings, and 4 subtests passed in 20.36s**. This is the first reported full-suite run after the revised chunk-level benchmark landed. The warnings are existing `pythonjsonlogger` and PyGithub deprecations.
+
+**Next:** assess whether a defensible shared-subset comparison with symbol lexical retrieval is possible. Do not start embeddings, RRF, or reranking based on this smoke benchmark alone. KRT-03 remains **IN_PROGRESS**.
+
+### Shared symbol/chunk comparison — implementation pending local verification, 2026-11-24
+
+A narrow common evaluation has been added in:
+
+- `nlp/tests/fixtures/retrieval/shared_definition_file_benchmark.json`
+- `nlp/tests/test_shared_lexical_retrieval_comparison.py`
+
+The benchmark uses four identical identifier queries (`register_routes`, `should_retry`, `record_payment`, and `_insert`) against the same indexed four-file fixture, same company/repository/active snapshot/source revision, and the same file-level ground truth. Symbol declarations and source chunks are both projected to unique file paths; chunk hits from the same file are deduplicated before ranking. Both retrievers therefore receive the same query signal and are scored against the same target unit.
+
+**What this comparison can establish:** whether each lexical retriever can discover the file containing a named declaration, and how high that file ranks after projecting results to unique files.
+
+**What it cannot establish:** passage-level relevance, call-site retrieval parity, natural-language understanding, broad repository performance, PostgreSQL/RLS behavior, or semantic retrieval quality. It is a deliberately narrow diagnostic. The source-chunk retriever has richer passage-level evidence, but this experiment discards that advantage to create a shared evaluation unit. Results must not be interpreted as a general winner between the retrievers.
+
+**Developer-reported local verification — 2026-11-24:**
+
+```text
+uv run pytest tests/test_shared_lexical_retrieval_comparison.py -q -s
+1 passed in 1.12s
+```
+
+| Metric | Symbol lexical | Chunk lexical |
+|---|---:|---:|
+| Recall@1 | 1.00 | 0.75 |
+| Recall@5 | 1.00 | 1.00 |
+| Recall@10 | 1.00 | 1.00 |
+| MRR | 1.00 | 0.875 |
+
+Per-query inspection shows the meaningful difference: for `record_payment`, symbol retrieval ranks the declaration file `src/storage/ledger.py` first. Chunk retrieval ranks `src/payments/service.py` first because it contains a call site, then ranks the declaration file second. This illustrates why symbol and chunk retrieval are complementary evidence sources rather than interchangeable retrievers.
+
+**Interpretation remains narrow:** this is a four-query, synthetic, four-file identifier benchmark, evaluated at unique-file level with an in-memory PostgREST double. It establishes that both systems can retrieve the target declaration file within top five for these four cases, while symbol retrieval ranks it first more consistently. It does not establish general retrieval superiority, passage-level quality, natural-language performance, or real repository effectiveness. The initial empty chunk results were caused by a mismatch in the test double's ILIKE handling; the test double was aligned with the previously verified chunk benchmark. Production retriever behavior was not changed.
+
+**Full-suite regression verification — developer-reported, 2026-11-24:** `uv run pytest -q` completed with **294 passed, 4 skipped, 6 warnings, and 4 subtests passed in 20.92s** after the shared comparison was added. The warnings remain the existing `pythonjsonlogger` and PyGithub deprecations.
+
+**Next:** design a broader evaluation set with separate labels for declaration discovery, call-site/context discovery, and exact passage relevance. Keep those task types separate; do not collapse them into one score. KRT-03 remains **IN_PROGRESS**.
+
+
+### Task-separated retrieval evaluation fixture — implementation pending local verification, 2026-11-24
+
+Added a larger synthetic multi-module Python corpus under `nlp/tests/fixtures/retrieval/mini_repo_v2/` with nine files spanning catalog, billing, notifications, storage, API, and token operations.
+
+Added `nlp/tests/fixtures/retrieval/retrieval_tasks_v1.json` with **33 labeled queries**:
+
+| Task | Queries | Ground truth |
+|---|---:|---|
+| Declaration discovery | 10 | Declared symbol names and containing file paths |
+| Call-site/context discovery | 10 | Exact one-based inclusive source line ranges for usage/context |
+| Passage retrieval | 10 | Exact one-based inclusive answer-bearing source ranges |
+| No evidence | 3 | Explicitly empty labels; query terms must be absent from the corpus |
+
+The fixture keeps natural-language questions separate from explicit lexical terms. It defines range-overlap relevance for chunk-level evaluation and asks that exact-range match rate remain a separate diagnostic. Task metrics must be reported separately; declaration/file discovery must not be conflated with call-site or passage relevance.
+
+Added `nlp/tests/test_retrieval_task_benchmark_fixture.py` to validate task balance, unique query IDs, Python declaration labels using AST, range bounds and term presence, and negative-query absence.
+
+**Not yet verified:** the new fixture and validation tests have been committed but have not been run locally. They do not yet constitute a retrieval benchmark runner or measured retrieval-quality results. The current 33 labels are hand-authored synthetic ground truth and need inspection against actual indexer chunk boundaries. No semantic retrieval, embeddings, or RRF should begin based on the fixture alone.
+
+**Next:** run the focused fixture validation tests, fix only incorrect labels/schema defects, then implement independent declaration, call-site, and passage evaluation runners using the real indexers/retrievers. Add a small number of multi-file and ambiguous-identifier cases only after this initial suite is verified.
+
+
+### Task-separated retrieval runners — implementation pending local verification, 2026-11-24
+
+Added `nlp/tests/test_retrieval_task_benchmark_integration.py`. It uses the real `CodeSymbolIndexer`, `SourceChunkIndexer`, `CodeLexicalRetriever`, and `SourceChunkRetriever` over the nine-file `mini_repo_v2` fixture with an in-memory PostgREST double.
+
+The runner evaluates three tasks independently:
+
+- **Declaration discovery:** symbol identity and ranked declaration candidates.
+- **Call-site/context discovery:** source-chunk range overlap against labeled call/use ranges.
+- **Passage retrieval:** source-chunk range overlap against answer-bearing ranges.
+- **No evidence:** all three negative queries must return no symbol or chunk candidates.
+
+The report includes per-query candidate rankings, relevant ranks, Recall@1/5/10, MRR, index coverage counts, and no-evidence candidate counts. Tenant/repository/snapshot/revision provenance is asserted for every returned candidate.
+
+**Not yet verified:** the integration runner has been committed but has not been executed locally. The fixture's static label validator passed (developer-reported: 4 passed in 0.02s); that does not establish that actual retrieval finds the labels. The in-memory PostgREST double is not PostgreSQL/RLS verification. The lexical query terms are explicit benchmark signals and should not be interpreted as natural-language query understanding.
+
+**Next:** run the focused integration test, inspect every task's per-query rankings, correct only demonstrably wrong benchmark labels or runner defects, then run the full NLP suite. Do not add embeddings or RRF until the runner is verified and its failure modes are understood. KRT-03 remains **IN_PROGRESS**.
+
+
+### Task-separated lexical and SCIP evaluation — verified 2026-11-25
+
+The 33-query task-separated fixture and its integration runner have now been executed locally against the real symbol/chunk indexers and lexical retrievers using an in-memory PostgREST double.
+
+**Lexical task metrics (developer-reported):**
+
+| Task | Queries | MRR | Recall@1 | Recall@5 | Recall@10 |
+|---|---:|---:|---:|---:|---:|
+| Declaration discovery | 10 | 1.00 | 1.00 | 1.00 | 1.00 |
+| Call-site/context discovery | 10 | 0.75 | 0.50 | 1.00 | 1.00 |
+| Passage retrieval | 10 | 0.95 | 0.90 | 1.00 | 1.00 |
+
+All three explicit no-evidence queries returned zero symbol and chunk candidates. The fixture indexed 29 symbols and 36 chunks across nine source files.
+
+Call-site lexical retrieval has a clear limitation: five of ten relevant ranges rank second rather than first, commonly because a definition chunk and a reference chunk share the same identifier and lexical scoring/tie-breaking does not distinguish their semantic roles. Do not add arbitrary ranking boosts. Use SCIP exact-symbol references when symbol resolution and index coverage are available; retain lexical chunks as fallback and for passage retrieval.
+
+**SCIP call-site benchmark (separate metric family):**
+
+- Real `scip-python` 0.6.8 indexing produced 99 definitions, 152 references, and 251 total occurrences.
+- Symbol resolution: 9/10 queries (90%); `call-06` remains unresolved for built-in/general terms `startswith` and `authorized`.
+- On the nine resolved queries, expected-range coverage: 9/9 (100%).
+- Occurrence precision: 9/13 (69.2%).
+- The two typed cross-file calls in `api/orders.py` are correctly resolved after annotating the fixture's `OrderStore` dependency and correcting expected source lines.
+
+SCIP reports coverage and precision, not ranked Recall@k/MRR. These metrics must not be compared numerically with lexical ranking metrics. The 69.2% precision also means additional occurrences are returned beyond the query-specific expected ranges; inspect this behavior in future realistic evaluations rather than applying arbitrary filtering.
+
+**Verification — developer-reported, 2026-11-25:**
+
+```text
+KMS_SCIP_PYTHON_BENCHMARK=1 uv run pytest -q tests/test_scip_call_site_benchmark_integration.py -s
+1 passed in 2.13s
+
+uv run pytest -q tests/test_retrieval_task_benchmark_integration.py -s
+1 passed
+
+uv run pytest -q tests/test_retrieval_task_benchmark_fixture.py
+4 passed in 0.04s
+
+uv run pytest -q
+299 passed, 5 skipped, 6 warnings, 4 subtests passed in 16.45s
+```
+
+The warnings are the existing `pythonjsonlogger` and PyGithub deprecations. The five skipped tests include opt-in integrations; this full-suite run does not replace separately executed SCIP or Supabase integration checks.
+
+**Interpretation and limitations:** this is a useful task-separated deterministic lexical baseline, not production-quality evidence. It uses a nine-file synthetic Python corpus, explicit lexical query terms, hand-authored relevance labels, and an in-memory PostgREST double. It does not measure natural-language semantic retrieval, production-repository generalization, PostgreSQL query planning/RLS, or latency/cost. The separate SCIP run uses real index generation but an in-memory occurrence persistence/retrieval double.
+
+**Decision:** retain the hybrid *candidate-source* architecture as complementary deterministic components: symbol lexical retrieval for declarations, SCIP for resolvable exact-symbol references, and source-chunk lexical retrieval for passage/context fallback. Keep structured answers separate. Do not add embeddings, RRF, or a reranker yet; first test this routing against a realistic repository and naturally phrased queries, and inspect SCIP's extra occurrences and lexical call-site rank-2 cases.
+
+KRT-03 remains **IN_PROGRESS**. The acceptance criteria requiring independently evaluated semantic retrieval and measured fusion are not met.
+
+
+### Real-repository Python retrieval evaluation — verified 2026-11-25
+
+Added and executed the opt-in benchmark `nlp/tests/test_kms_nlp_repository_retrieval_benchmark.py` against the actual `nlp/codebase` and `nlp/query_engine` Python source files (tests and fixtures excluded). The benchmark uses the real symbol/chunk indexers and lexical retrievers with an in-memory PostgREST double. It is enabled with `KMS_NLP_REPOSITORY_BENCHMARK=1` and does not run in the default test suite.
+
+**Indexed corpus:**
+
+| Measure | Result |
+|---|---:|
+| Python source files | 29 |
+| Source chunks persisted | 232 |
+| Declarations persisted | 169 |
+| Files with symbol syntax errors | 0 |
+
+**Passage retrieval — 10 manually labeled questions, 11 expected source ranges:**
+
+| Metric | Result |
+|---|---:|
+| MRR | 0.803 |
+| At least one relevant range at rank 1 | 7/10 (70%) |
+| At least one relevant range at rank 5 | 10/10 (100%) |
+| At least one relevant range at rank 10 | 10/10 (100%) |
+| Complete-query recall at 1 | 7/10 (70%) |
+| Complete-query recall at 5 | 9/10 (90%) |
+| Complete-query recall at 10 | 10/10 (100%) |
+| Range-level recall at 1 | 7/11 (63.6%) |
+| Range-level recall at 5 | 10/11 (90.9%) |
+| Range-level recall at 10 | 11/11 (100%) |
+
+One explicit no-evidence query returned zero candidates.
+
+**Declaration lookup — seven exact-identifier queries:**
+
+- MRR: **1.00**
+- Recall@1: **1.00**
+- Recall@5: **1.00**
+
+All seven expected declarations ranked first. The initial run exposed a stale test assertion expecting five queries; the assertion was corrected to match the seven-query dataset, and the rerun passed. No retrieval change was required. This is a narrow exact-identifier result, not evidence of natural-language symbol understanding.
+
+**Observed passage-ranking weakness:** `repo-04-symbol-lookup` asks where declarations are searched by qualified name and identifier. Its two expected source ranges in `codebase/symbol_retriever.py` ranked 9 and 5 in passage retrieval. This is distinct from exact declaration lookup, which ranked all seven expected declarations first. Inspect the passage query's term formulation and candidate evidence before changing ranking; do not add a benchmark-specific boost.
+
+**Verification — developer-reported, 2026-11-25:**
+
+```text
+KMS_NLP_REPOSITORY_BENCHMARK=1 uv run pytest -q tests/test_kms_nlp_repository_retrieval_benchmark.py -s
+1 passed
+```
+
+The benchmark's natural-language questions are manually authored, but the runner supplies explicit lexical terms. It therefore measures lexical retrieval on a real source corpus, not semantic understanding of free-form questions. It uses an in-memory PostgREST double; it does not measure PostgreSQL query planning/RLS, production-repository generalization, latency, or cost. The corpus is KMS's own Python retrieval subsystem, so it is not independent of the implementation being evaluated. The declaration sample is only seven queries.
+
+**Decision:** this real-repository run strengthens the lexical baseline but does not justify embeddings or RRF. Expand the independently reviewed query set and inspect passage-ranking failures first. Keep exact declaration lookup, SCIP exact-symbol references, and lexical passage retrieval as distinct candidate sources. KRT-03 remains **IN_PROGRESS**.
+
+
+### Real-repository SCIP occurrence coverage — verified 2026-11-25
+
+Added `nlp/tests/test_kms_nlp_repository_scip_benchmark.py`, an opt-in benchmark over the checked-out NLP Python source tree. It runs real `scip-python` 0.6.8 indexing, normalizes the resulting index, and exercises `ScipOccurrenceRetriever` against an in-memory PostgREST double.
+
+**Measured corpus and results:**
+
+| Measure | Result |
+|---|---:|
+| Indexed occurrences | 32,551 |
+| Definitions | 6,741 |
+| References and occurrences | 25,810 |
+| Exact-symbol queries | 3 |
+| Queries with at least one resolved symbol | 3/3 |
+| Expected source ranges matched | 3/3 (100%) |
+| No-evidence query candidates | 0 |
+
+The three reviewed targets cover construction of `SourceChunkIndexer` and `CodeSymbolIndexer` in `codebase/baseline.py`, plus the `SourceChunker` dependency import in `codebase/source_chunk_indexer.py`. The initial third label used line 6; source review corrected it to line 7. This was a benchmark-label correction, not a retriever change.
+
+A tracked empty `worker/__init__.py` exposed a valid zero-position edge case. SCIP's `(line=0, character=0)` position in an empty document now maps to byte offset 0; nonzero positions in an empty document remain rejected. Focused verification: `tests/test_scip_indexer.py` — **22 passed, 3 skipped**. Real-repository SCIP benchmark: **1 passed in 20.75s**.
+
+**Interpretation and limitations:** this validates real SCIP generation and exact-symbol occurrence coverage on one real Python subsystem. Query-to-symbol resolution is exact-token based, not natural-language understanding. The benchmark checks coverage, not ranking; only three manually reviewed targets are included. Occurrence persistence/retrieval uses an in-memory PostgREST double, not PostgreSQL/RLS. The large occurrence count is a corpus/index size measure, not a quality metric.
+
+**Decision:** accept this as a real-repository SCIP smoke/coverage baseline, not as proof of general call-site retrieval quality. Keep SCIP as a complementary exact-symbol structural source. Next, expand reviewed real-repository targets and inspect occurrence precision/over-retrieval before designing routing or fusion. Do not introduce arbitrary occurrence filters, embeddings, or RRF based on this three-query result.
+
+
+
+### KRT-03 routing and integration verification — 2026-11-25
+
+The earlier router implementation checkpoint and pending-integration section are superseded by this verified result.
+
+**Implemented contract**
+
+| Explicit task | Backend | Contract |
+|---|---|---|
+| Declaration discovery | `CodeLexicalRetriever` | Exact qualified-name, path, and identifier discovery |
+| Call-site navigation | `ScipOccurrenceRetriever.find_references` | Requires an exact SCIP symbol supplied by an upstream resolver |
+| Call-site fallback | `SourceChunkRetriever` | Used when no exact symbol is supplied or no active-snapshot references are found; fallback reason is explicit |
+| Passage retrieval | `SourceChunkRetriever` | Lexical passage retrieval with source-range provenance |
+
+The router preserves backend ordering and provenance. It does not blend scores, classify natural-language intent, resolve SCIP symbols from natural-language text, or promote definitions into references. An empty SCIP result is not proof of complete SCIP coverage.
+
+**Verification — developer-reported, 2026-11-25**
+
+```text
+uv run pytest -q tests/test_retrieval_router.py
+9 passed
+
+KMS_RETRIEVAL_ROUTER_SUPABASE_INTEGRATION=1 \
+uv run pytest -q tests/test_retrieval_router_supabase_integration.py -s
+1 passed, 2 warnings in 24.74s
+
+uv run pytest -q
+310 passed, 8 skipped, 6 warnings, 4 subtests passed in 24.13s
+```
+
+The Supabase integration used the configured development/test project and generated fixtures. It verified persisted SCIP reference routing with provenance, active-snapshot passage retrieval, mismatched tenant/repository isolation, snapshot pointer switching, exclusion of historical SCIP/chunk evidence, and lexical fallback. It uses a normalized SCIP fixture; language-indexer execution is covered separately by opt-in SCIP benchmarks.
+
+The full-suite warnings are non-failing deprecations: `pythonjsonlogger.jsonlogger` import path and PyGithub `login_or_token`. The router integration additionally reports deprecated Supabase client `timeout` and `verify` arguments.
+
+**Evaluation boundary**
+
+- Synthetic task-separated lexical benchmark (33 queries): declaration MRR/Recall@1/5/10 **1.00**; call-site/context MRR **0.75**, Recall@1 **0.50**, Recall@5/10 **1.00**; passage MRR **0.95**, Recall@1 **0.90**, Recall@5/10 **1.00**. Three no-evidence queries returned no candidates.
+- Real KMS NLP lexical benchmark: 29 Python files, 169 declarations, 232 chunks. Seven exact-identifier declaration queries achieved MRR and Recall@1/5 **1.00**. Ten passage questions achieved MRR **0.803**, query Recall@1/5/10 **0.70/1.00/1.00**, and range Recall@1/5/10 **0.636/0.909/1.00**.
+- Real-repository SCIP benchmark: nine exact-symbol queries resolved and all nine expected ranges were covered; 32,566 occurrences (6,743 definitions, 25,823 references/occurrences). This is coverage, not ranked retrieval quality.
+- Benchmarks use small manually reviewed query sets, explicit lexical terms, and in-memory PostgREST doubles. They do not establish free-form natural-language retrieval, broad repository generalization, production PostgreSQL performance/RLS, or latency/cost.
+
+**Decision and remaining acceptance review**
+
+Retain the deterministic candidate-source architecture: symbol lexical retrieval for declarations, SCIP for exact-symbol references, and source-chunk lexical retrieval for passages and fallback. Keep structured deterministic answers separate. Do not add embeddings, RRF, or reranking without a separate evaluation that demonstrates a concrete gap and provides a fair comparison.
+
+KRT-03 implementation and integration are verified. The milestone remains **IN_PROGRESS** until its original acceptance criteria are reconciled with this deliberately bounded scope. The closeout must explicitly assign natural-language task classification and query-to-symbol resolution to KRT-04 (if required there), rather than implying KRT-03 already provides them. No KRT-04 implementation should begin before that scope boundary is recorded.
+
+
+### KRT-03 acceptance review and scope decision — 2026-11-25
+
+**Decision: accept the verified deterministic retrieval foundation as the bounded KRT-03 deliverable; explicitly defer the unimplemented semantic-retrieval and rank-fusion portion of the original design.** This is a scope amendment, not a claim that every original design criterion was met.
+
+#### Acceptance matrix
+
+| Original design requirement | Outcome | Evidence / disposition |
+|---|---|---|
+| Shared evidence candidate with stable identity and source provenance | VERIFIED | `EvidenceCandidate` preserves tenant/repository, snapshot/revision, source range, content hash, retriever identity, and evidence identity. |
+| Exact lexical path/name/qualified-name/identifier retrieval | VERIFIED | `CodeLexicalRetriever` and declaration benchmark. |
+| Durable snapshot-scoped source chunks and lexical passage retrieval | VERIFIED | Persistence migration, baseline ingestion, source chunk retriever, local PostgreSQL checks, and Supabase integration. |
+| SCIP definitions/references as a distinct structural evidence source | VERIFIED | Real Python/Go/TypeScript indexing work and occurrence persistence/retrieval; exact-symbol reference path is integrated in the router. |
+| Company/repository/active-snapshot isolation | VERIFIED for exercised paths | Source-chunk and router Supabase integrations; tenant mismatch and active-snapshot switch checks. This does not replace the separate legacy-table RLS audit. |
+| Task-aware routing among declaration, call-site, and passage retrieval | VERIFIED | Explicit deterministic router; 9 focused tests and Supabase router integration passed. No natural-language classifier is included. |
+| Semantic code-chunk embeddings and vector retrieval | DEFERRED | Not implemented. Existing event embeddings are not source-code semantic retrieval. No quality claim is made. |
+| RRF across independently ranked lexical, semantic, and structural lists | DEFERRED | Not implemented. No raw-score blending or rank fusion is claimed. |
+| Benchmark proves retrieval quality | PARTIALLY VERIFIED | Synthetic task-separated and real KMS Python baselines exist, but query sets are small, lexical terms are explicit, and benchmark persistence uses in-memory PostgREST doubles. SCIP metrics are coverage/precision, not ranked relevance. |
+| Production latency, cost, and broad repository generalization | NOT EVALUATED | Outside the evidence collected in this milestone. |
+
+#### Why semantic retrieval and RRF are deferred
+
+The current measurements establish a useful deterministic baseline and expose concrete limitations, but they do not provide a fair lexical-versus-semantic comparison or demonstrate that RRF improves relevance. Implementing embeddings and fusion now would add operational and evaluation complexity without a defensible acceptance signal. This is a deferral, not a claim that semantic retrieval is unnecessary forever.
+
+A future semantic-retrieval work item must first define a reviewed natural-language benchmark, include multiple repositories/languages and no-evidence cases, measure indexing/query latency and cost, compare lexical and semantic retrieval independently, and evaluate fusion against both baselines. It must preserve company/repository/active-snapshot scope and exact source provenance. Do not attach this work to KRT-04 by default.
+
+#### KRT-04 boundary
+
+KRT-04 owns query interpretation and evidence planning, not retrieval-index implementation:
+
+1. Convert a user question into a validated typed intent/task (declaration discovery, call-site navigation, passage retrieval, or supported structured query).
+2. Extract exact paths, identifiers, qualified names, and symbol hints conservatively. A symbol is resolved only when repository-scoped evidence supports an unambiguous match; otherwise retain ambiguity or abstain.
+3. Build a bounded retrieval plan using the KRT-03 router and existing structured-answer path. Plans must carry trusted company/repository scope and must not accept tenant scope from untrusted query text.
+4. Gather candidates through the existing retrievers without changing their ranking contracts or blending incomparable scores.
+5. Produce claim-level citations tied to exact evidence ranges and source revisions; reject unsupported claims and abstain when evidence is insufficient or conflicting.
+6. Trace the chosen task, plan, retrievers, candidate IDs, fallback reasons, citations, and abstention reason for evaluation.
+
+KRT-04 does **not** implement embeddings, vector indexing, RRF, reranking, generic call-graph inference, or automatic claims that SCIP coverage is complete. Those remain separate deferred work or explicit non-goals.
+
+#### KRT-03 exit decision
+
+The deterministic retrieval foundation is accepted within the amended scope. The original design's semantic-vector and RRF criteria remain unfulfilled and are recorded as deferred rather than silently waived. Before merging this branch, retain this distinction in release notes/PR description and keep the separate RLS/security reconciliation gate visible before broad customer exposure.

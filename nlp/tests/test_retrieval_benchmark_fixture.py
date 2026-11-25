@@ -60,3 +60,24 @@ def test_expected_event_ids_exist_and_other_tenant_event_is_not_relevant():
         query for query in benchmark["queries"] if query["id"] == "scope-01"
     )
     assert scope_query["expected_event_ids"] == []
+
+
+
+def test_benchmark_marks_only_explicit_lexical_queries_as_supported():
+    benchmark = json.loads((_FIXTURE_ROOT / "benchmark.json").read_text())
+    supported = [
+        query for query in benchmark["queries"]
+        if "lexical_input" in query
+    ]
+
+    assert len(supported) == 8
+    assert all(
+        set(query["lexical_input"]).issubset(
+            {"file_paths", "qualified_names", "identifiers"}
+        )
+        for query in supported
+    )
+    assert all(
+        query.get("expected_paths") or query.get("expected_symbols")
+        for query in supported
+    )

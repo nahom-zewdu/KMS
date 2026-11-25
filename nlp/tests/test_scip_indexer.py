@@ -191,6 +191,33 @@ def test_rejects_occurrence_limit(tmp_path):
 
 
 
+def test_accepts_zero_position_in_empty_document(tmp_path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "main.py").write_bytes(b"")
+    result = normalize_scip_index(
+        _index(tmp_path, occurrences=[
+            {"range": [0, 0, 0, 0], "symbol": "scip-local local empty", "symbolRoles": 1},
+        ]),
+        repository_root=tmp_path,
+        source_revision="rev",
+    )
+    assert len(result.occurrences) == 1
+    assert result.occurrences[0].start_byte == result.occurrences[0].end_byte == 0
+
+
+def test_rejects_nonzero_position_in_empty_document(tmp_path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "main.py").write_bytes(b"")
+    with pytest.raises(ScipJobError, match="empty source file"):
+        normalize_scip_index(
+            _index(tmp_path, occurrences=[
+                {"range": [0, 1, 0, 1], "symbol": "scip-local local invalid", "symbolRoles": 1},
+            ]),
+            repository_root=tmp_path,
+            source_revision="rev",
+        )
+
+
 def test_accepts_empty_half_open_occurrence_range(tmp_path):
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "main.py").write_text("foo\n", encoding="utf-8")
