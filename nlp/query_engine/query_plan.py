@@ -81,8 +81,8 @@ class QueryConstraints:
         if self.time_to is not None and not isinstance(self.time_to, datetime):
             raise ValueError("time_to must be a datetime")
         if self.time_from and self.time_to:
-            if self.time_from.tzinfo != self.time_to.tzinfo:
-                raise ValueError("time bounds must use compatible timezone awareness")
+            if (self.time_from.utcoffset() is None) != (self.time_to.utcoffset() is None):
+                raise ValueError("time bounds must both be timezone-aware or both naive")
             if self.time_from > self.time_to:
                 raise ValueError("time_from must not be later than time_to")
 
