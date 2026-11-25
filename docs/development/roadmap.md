@@ -851,10 +851,10 @@ This slice is contract-only. It does not classify queries, resolve symbols, exec
 
 ### KRT-04.2 deterministic query classification — 2026-11-26
 
-**Status: IMPLEMENTED — NOT VERIFIED**  
+**Status: VERIFIED — submitted for review**  
 **Branch:** `feat/krt-04-query-classification`  
 **Base:** KRT-04.1 merge commit `54a0acaf7c69fecc6fc610dbc25effb750501ae3`
 
 Added `nlp/query_engine/query_planner.py` and focused tests in `nlp/tests/test_query_planner.py`. The classifier uses ordered lexical rules to produce the existing typed query-plan contract, extracts bounded paths/identifiers/terms, preserves caller-supplied trusted scope, and requires explicit conversation references before accepting a follow-up. It never resolves SCIP symbols or executes retrieval.
 
-This is a deliberately small deterministic baseline, not broad natural-language understanding. It does not change QueryEngine behavior or call external services. Verification is pending local focused and full NLP test runs. See `docs/development/milestones/2026-11-26-krt-04-query-classification.md`.
+This is a deliberately small deterministic baseline, not broad natural-language understanding. It does not change QueryEngine behavior or call external services. Developer-reported verification: focused contract + planner tests **49 passed in 1.23s**; full NLP suite **359 passed, 8 skipped, 6 warnings, 4 subtests passed in 18.70s**. The six warnings are existing python-json-logger and PyGithub deprecations. A duplicate parameterized test fixture was removed after the full-suite run; no implementation code changed. These tests verify the deterministic baseline, not broad natural-language quality. See `docs/development/milestones/2026-11-26-krt-04-query-classification.md`.
