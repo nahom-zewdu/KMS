@@ -16,6 +16,7 @@ def _review(**overrides):
         "case_id": "seed-01",
         "claim_id": "claim-1",
         "claim_text": "The handler validates the request.",
+        "cited_evidence_ids": ["ev-1", "ev-2"],
         "assessments": [
             {"evidence_id": "ev-1", "grade": 2, "rationale": "Directly shown."},
             {"evidence_id": "ev-2", "grade": 1, "rationale": "Supports only part."},
@@ -88,3 +89,27 @@ def test_empty_review_dataset_reports_unavailable_rates():
     assert report["reviewed_claims"] == 0
     assert report["supported_claim_rate"] is None
     assert report["evidence_pair_supported_rate"] is None
+
+
+
+def test_review_requires_assessment_for_every_cited_evidence_item():
+    with pytest.raises(ValidationError, match="every cited evidence ID"):
+        _review(assessments=(
+            {"evidence_id": "ev-1", "grade": 2, "rationale": "Directly shown."},
+        ))
+
+
+def test_review_rejects_assessments_for_uncited_evidence():
+    with pytest.raises(ValidationError, match="every cited evidence ID"):
+        _review(
+            cited_evidence_ids=("ev-1",),
+            assessments=(
+                {"evidence_id": "ev-1", "grade": 2, "rationale": "Directly shown."},
+                {"evidence_id": "ev-2", "grade": 1, "rationale": "Not cited."},
+            ),
+        )
+
+
+def test_review_rejects_duplicate_cited_evidence_ids():
+    with pytest.raises(ValidationError, match="cited evidence IDs must be unique"):
+        _review(cited_evidence_ids=("ev-1", "ev-1"))
