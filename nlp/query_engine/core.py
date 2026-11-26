@@ -91,7 +91,7 @@ class QueryEngine:
             if isinstance(item, dict) and item.get("role") in {"user", "assistant"}
         ]
 
-        logger.info(f"Query {query_id} | company={company_id} | question={question} | ramp_context_present={bool(ramp_context)}")
+        logger.info("Query received | query_id=%s | company=%s | ramp_context_present=%s", query_id, company_id, bool(ramp_context))
 
         if not question:
             answer_json = abstain("empty_question")
