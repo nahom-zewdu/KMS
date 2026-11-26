@@ -1,6 +1,6 @@
 # KRT-05 — Evaluation and Observability
 
-**Status:** IN_PROGRESS — KRT-05.1 benchmark contract implemented, pending local verification  
+**Status:** IN_PROGRESS — KRT-05.1 verified; KRT-05.2 implemented, pending local verification  
 **Date:** 2026-11-26  
 **Branch:** `feat/krt-05-evaluation`  
 **Base:** merged `feat/ramp` after KRT-04 PR #29
@@ -168,11 +168,11 @@ These are protocol gates for the first evaluation harness, not claims about curr
 - Add fixture integrity tests (all paths/ranges/symbols resolve; all query IDs unique; all scopes valid).
 - Produce a baseline report for deterministic retrieval and a clear placeholder for not-yet-evaluated synthesis.
 
-### KRT-05.2 — end-to-end planned-query evaluator
+### KRT-05.2 — offline planned-query evaluator
 
-- Exercise classifier → repository resolution → evidence gathering → grounded answer validation using injected deterministic synthesizer outputs.
-- Score routing, evidence recall, provenance, citation membership, and abstention.
-- Keep live LLM generation out of the default CI path.
+- Exercise the KRT-04 planned-query executor with injected deterministic synthesizer outputs and no live LLM or database writes.
+- Score expected intent/route, evidence recall against linked retrieval-fixture labels, provenance, citation membership, and abstention category.
+- Keep live LLM generation out of the default CI path. Treat this as a planned-executor harness, not a complete API/worker integration test.
 
 ### KRT-05.3 — claim-support review and LLM run capture
 
@@ -197,4 +197,4 @@ These are protocol gates for the first evaluation harness, not claims about curr
 
 ## 9. First implementation task
 
-Implement **KRT-05.1 only**. Keep the dataset compact and versioned, validate it strictly, and prove that its labels resolve against the existing fixture corpus. Do not add production telemetry or change the query pipeline in this slice.
+Implement KRT-05.1 and KRT-05.2 in order. Keep all seed labels in draft until independently reviewed. Do not add production telemetry or change the query pipeline in these slices.
