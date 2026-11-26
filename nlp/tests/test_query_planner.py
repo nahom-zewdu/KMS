@@ -87,7 +87,7 @@ def test_explicit_identifier_and_path_extraction():
 
 def test_source_file_path_is_not_misclassified_as_a_symbol_candidate():
     plan = classify_query(
-        "Find the declaration of process_task in worker_a.py",
+        "Find the declaration of process_task in worker_a.py.",
         scope=SCOPE,
     )
 
