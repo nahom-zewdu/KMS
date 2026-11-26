@@ -87,6 +87,10 @@ def test_evaluator_scores_only_reviewed_cases_and_validates_provenance_and_citat
     assert report["outcomes"][0]["evidence_recall"] == 1.0
     assert report["summary"]["mean_evidence_recall"] == 1.0
     assert report["semantic_claim_support"]["status"] == "not_evaluated"
+    assert report["summary"]["route_confusion_matrix"] == {"planned_query->planned_query": 1}
+    assert report["summary"]["per_task"]["declaration_discovery"]["cases"] == 1
+    assert report["summary"]["abstention"]["answerable_cases"] == 1
+    assert report["summary"]["abstention"]["false_abstentions"] == 0
 
 
 def test_evaluator_fails_closed_on_wrong_provenance_and_unknown_citation():
