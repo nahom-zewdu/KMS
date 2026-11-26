@@ -2,7 +2,7 @@
 
 **Dataset:** `kms-krt05-end-to-end-seed` v1.0.0  
 **Cases:** 24  
-**Status:** Review required; no case is approved by this document.
+**Status:** All 24 seed cases reviewed by Nahom on 2026-11-26. This approval covers case contracts and source-grounded labels; generated claim-to-evidence semantics remain unreviewed.
 
 ## Purpose
 
@@ -54,7 +54,7 @@ If any evidence link, scope field, expected fact, or abstention label is wrong o
 
 The seed was compared against all 15 linked retrieval labels, the nine-file synthetic source corpus, the duplicate-symbol source pair, and the structured repository fixture.
 
-Corrections made before any case can be approved:
+Corrections made before the human review session:
 
 - Replaced generic call-site and passage expected-fact text with observable source behavior. These now state the actual call relationship or calculation/branch behavior to check.
 - Reframed the unsupported-ownership query as a concrete ownership/approval question and added an explicit forbidden inference.
@@ -66,10 +66,10 @@ Review notes:
 - The ambiguous-symbol case's canonical production reason is `ambiguous_declaration`; the evaluator already accepts this as the implementation-level reason for the benchmark category `ambiguous_symbol`. These are category-versus-runtime names, not a mismatch.
 - The 15 linked retrieval references resolve to the correct task types. The referenced source ranges align with the checked-in nine-file corpus.
 - The two duplicate `process_task` declarations are present in separate fixture files. The structured fixture contains two distinct repository IDs for the benchmark company.
-- The conversation-control case contains prior context and a reference, but its behavior still needs explicit review against the conversation handler contract.
+- The conversation-control case contains prior context and a reference. Its expected routing is reviewed as a test contract; actual behavior still requires harness execution with the preceding turn included.
 - The unsupported-runtime case remains a deliberately conservative static-analysis boundary: the source fixture does not define payment-provider outage behavior.
 
-**Approval status remains unchanged:** all 24 cases are draft; no reviewer identity/date or claim-support grades have been fabricated. This audit is preparation, not independent human approval. A reviewer must still inspect each case and confirm its answerability, route, evidence, required/forbidden facts, and abstention behavior.
+**Human review record — 2026-11-26:** Nahom approved all 24 cases after reviewing the case batches in this session. The seed fixture records `review_status: reviewed`, `reviewer: Nahom`, and `reviewed_on: 2026-11-26` for each case. This is case-label approval only; no generated claims or semantic support grades have been fabricated.
 
 ## Claim-support annotation
 
@@ -90,7 +90,7 @@ The overall claim grade is a human judgment. Citation-ID membership alone is not
 - Report scope/provenance violations as hard failures, not as an average quality penalty.
 - A successful synthetic test run is not evidence of production generalization.
 - Do not use live customer prompts, private source code, secrets, or credentials in this checked-in fixture.
-- Do not claim KRT-05 quality acceptance while no independently reviewed cases or claim annotations exist.
+- Do not claim semantic claim-support quality acceptance while the claim annotation fixture remains empty. The reviewed case labels do not replace generated-claim assessments.
 
 ## Local validation
 
