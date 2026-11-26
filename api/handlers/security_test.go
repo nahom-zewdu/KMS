@@ -139,6 +139,10 @@ func TestQueryRequiresVerifiedMembershipAndUsesAuthorizedCompany(t *testing.T) {
 	storage := &securityStorage{
 		tokens:      map[string]string{"valid-token": "user-1"},
 		memberships: map[string]map[string]bool{"user-1": {"company-a": true}},
+		repositories: map[string]string{
+			"company-a|repo-id-a": "org-a/repo",
+			"company-b|org-b/repo": "org-b/repo",
+		},
 	}
 	redis := &securityRedis{}
 	router := newTestRouter(storage, redis, &securityBot{}, &securityCodebase{})
