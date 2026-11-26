@@ -33,10 +33,10 @@ func (h *QueryHandler) HandleQuery(c *gin.Context) {
 	start := time.Now()
 
 	var req struct {
-		Question  string `json:"question"`
-		Context   string `json:"context"`
-		CompanyID string `json:"company_id"`
-		Repository string `json:"repository,omitempty"`
+		Question           string                   `json:"question"`
+		Context            string                   `json:"context"`
+		CompanyID          string                   `json:"company_id"`
+		Repository         string                   `json:"repository,omitempty"`
 		ConversationHistory []map[string]interface{} `json:"conversation_history"`
 	}
 
@@ -102,17 +102,17 @@ func (h *QueryHandler) HandleQuery(c *gin.Context) {
 
 	publishStarted := time.Now()
 	err = h.redis.Publish(c.Request.Context(), "query_jobs", domain.JobPayload{
-		ID:        "*",
-		RecordID:  queryID,
-		Source:    "frontend",
-		EventType: "query",
-		Content:   content,
-		CompanyID: companyID,
+		ID:         "*",
+		RecordID:   queryID,
+		Source:     "frontend",
+		EventType:  "query",
+		Content:    content,
+		CompanyID:  companyID,
 		Repository: verifiedRepository,
 		Payload: map[string]interface{}{
-			"question":   question,
-			"context":    req.Context,
-			"company_id": companyID,
+			"question":             question,
+			"context":              req.Context,
+			"company_id":           companyID,
 			"conversation_history": req.ConversationHistory,
 		},
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
