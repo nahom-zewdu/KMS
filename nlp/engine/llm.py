@@ -25,6 +25,14 @@ client = OpenAI(
 logger = logging.getLogger("engine.llm")
 
 
+def _capture_run(**kwargs) -> None:
+    """Best-effort metadata capture must never break a successful LLM request."""
+    try:
+        record_llm_run(**kwargs)
+    except Exception:
+        logger.exception("Unable to persist opt-in LLM run metadata")
+
+
 def _is_json_validation_error(error: BadRequestError) -> bool:
     """Return True only for Groq's model-output JSON validation failure."""
     body = getattr(error, "body", None)
@@ -81,7 +89,7 @@ def llm_infer(
         if not content:
             raise RuntimeError("LLM returned an empty response")
         content = content.strip()
-        record_llm_run(
+        _capture_run(
             prompt=prompt, output=content, model=model, temperature=temperature,
             max_tokens=max_tokens, duration_ms=(time.perf_counter() - started_at) * 1000,
             status="success", usage=getattr(response, "usage", None).__dict__
@@ -121,7 +129,7 @@ def llm_infer(
 
             content = content.strip()
             json.loads(content)
-            record_llm_run(
+            _capture_run(
                 prompt=prompt, output=content, model=model, temperature=temperature,
                 max_tokens=max_tokens, duration_ms=(time.perf_counter() - started_at) * 1000,
                 status="success", usage=getattr(response, "usage", None).__dict__
@@ -129,7 +137,7 @@ def llm_infer(
             )
             return content
         except Exception as fallback_error:
-            record_llm_run(
+            _capture_run(
                 prompt=prompt, output=None, model=model, temperature=temperature,
                 max_tokens=max_tokens, duration_ms=(time.perf_counter() - started_at) * 1000,
                 status="error",
@@ -138,7 +146,7 @@ def llm_infer(
             raise
 
     except Exception as e:
-        record_llm_run(
+        _capture_run(
             prompt=prompt, output=None, model=model, temperature=temperature,
             max_tokens=max_tokens, duration_ms=(time.perf_counter() - started_at) * 1000,
             status="error",
