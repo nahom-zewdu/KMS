@@ -49,6 +49,28 @@ If any evidence link, scope field, expected fact, or abstention label is wrong o
 - Do not generate or infer review metadata from model output.
 - If feasible, have a second reviewer independently assess claim/evidence support. Resolve disagreements explicitly; do not average grades.
 
+
+## Pre-review consistency audit — 2026-11-26
+
+The seed was compared against all 15 linked retrieval labels, the nine-file synthetic source corpus, the duplicate-symbol source pair, and the structured repository fixture.
+
+Corrections made before any case can be approved:
+
+- Replaced generic call-site and passage expected-fact text with observable source behavior. These now state the actual call relationship or calculation/branch behavior to check.
+- Reframed the unsupported-ownership query as a concrete ownership/approval question and added an explicit forbidden inference.
+- Reworded the ambiguous-repository query as a natural repository-location question. The absence of repository/snapshot/revision scope remains intentional.
+- Made the structured repository-count case company-scoped: repository, snapshot, and source revision are null because the question asks for a company-wide count. The benchmark contract now rejects repository-specific scope for this task type.
+
+Review notes:
+
+- The ambiguous-symbol case's canonical production reason is `ambiguous_declaration`; the evaluator already accepts this as the implementation-level reason for the benchmark category `ambiguous_symbol`. These are category-versus-runtime names, not a mismatch.
+- The 15 linked retrieval references resolve to the correct task types. The referenced source ranges align with the checked-in nine-file corpus.
+- The two duplicate `process_task` declarations are present in separate fixture files. The structured fixture contains two distinct repository IDs for the benchmark company.
+- The conversation-control case contains prior context and a reference, but its behavior still needs explicit review against the conversation handler contract.
+- The unsupported-runtime case remains a deliberately conservative static-analysis boundary: the source fixture does not define payment-provider outage behavior.
+
+**Approval status remains unchanged:** all 24 cases are draft; no reviewer identity/date or claim-support grades have been fabricated. This audit is preparation, not independent human approval. A reviewer must still inspect each case and confirm its answerability, route, evidence, required/forbidden facts, and abstention behavior.
+
 ## Claim-support annotation
 
 Use `nlp/tests/fixtures/evaluation/krt05_claim_reviews_v1.json` for actual generated-claim annotations. Each annotation must identify the exact case and claim, list the exact `cited_evidence_ids` from that generated claim, and include exactly one assessment for every cited ID (no missing or extra assessments). Each assessment must explain its grade:
