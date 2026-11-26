@@ -7,9 +7,9 @@
 > Scoring spec vs implemented subset: `docs/product/ramp-candidate-scoring.md`.
 
 **Last updated:** 2026-11-26
-**Current branch:** `feat/krt-04-symbol-resolution`
+**Current branch:** `feat/krt-04-evidence-gathering`
 **Current milestone:** KRT-04 — Typed Query Planning and Grounded Synthesis
-**Current objective:** Review the conservative SCIP symbol-resolution slice; do not integrate production QueryEngine routing yet.
+**Current objective:** Complete bounded evidence gathering, grounded synthesis/citation validation, and a conservative QueryEngine integration checkpoint on this branch; submit one consolidated KRT-04 PR.
 
 ---
 
@@ -869,3 +869,23 @@ This is a deliberately small deterministic baseline, not broad natural-language 
 Resolve only one explicitly named declaration to one exact SCIP symbol. Use the existing company/repository/active-snapshot-scoped `CodeSymbolRetriever` and `ScipOccurrenceRetriever`; verify the declaration and SCIP definition share the same source file and range. Reject substring-only matches, multiple candidates, duplicate declarations, missing definitions, and range mismatches. No SCIP identifier is synthesized from source text.
 
 This slice is a pure resolver over injected retriever dependencies. It does not change QueryEngine, retrieval routing, synthesis, citations, or persistence. See `docs/development/milestones/2026-11-26-krt-04-symbol-resolution.md`.
+
+
+### KRT-04.3 conservative SCIP symbol resolution — 2026-11-26
+
+**Status: ACCEPTED — merged in PR #28**  
+**Branch:** `feat/krt-04-symbol-resolution`  
+**Merge commit:** `2303cbd81f4db7315d77687cb86f18f978e217b0`
+
+The resolver accepts only a ready call-site plan with repository scope, resolves one explicit qualified name or identifier through the active-snapshot declaration index, and verifies an exact matching SCIP definition occurrence by file, source range, and snapshot. It preserves the exact SCIP symbol and resolution basis; ambiguity and missing evidence remain explicit abstentions. User-reported verification: focused tests **15 passed**; full NLP suite **373 passed, 8 skipped, 6 warnings, 4 subtests passed**. No QueryEngine integration or persistence changes.
+
+### KRT-04.4 bounded evidence gathering — 2026-11-26
+
+**Status: IMPLEMENTED — pending local verification**  
+**Branch:** `feat/krt-04-evidence-gathering`
+
+Added `nlp/query_engine/evidence_gatherer.py` and focused tests in `nlp/tests/test_evidence_gatherer.py`.
+
+The gatherer routes ready passage, declaration-discovery, and resolved call-site plans to one existing KRT-03 retriever each. It forwards trusted company/repository scope, checks optional source-revision constraints, validates returned code-evidence provenance, preserves the shared `EvidenceCandidate` contract, and caps result count/content size. It fails closed for non-ready plans, courtesy/follow-up/clarification/unsupported intents, structured facts (not yet connected), missing repository scope, unsupported time constraints, ambiguous declaration targets, and unresolved call-site symbols.
+
+No QueryEngine behavior, synthesis, citation validation, schema, migration, embeddings, or RRF changes are included. Run the focused test file and full NLP suite before treating this slice as verified.
