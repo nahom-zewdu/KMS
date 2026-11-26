@@ -18,8 +18,8 @@ _FIXTURES = Path(__file__).parent / "fixtures"
 def _evidence(*, company="benchmark-company", repository="benchmark-repository",
               snapshot="benchmark-snapshot-v1", revision="benchmark-revision-v1"):
     return EvidenceCandidate(
-        company_id=company, evidence_type="code_chunk", source="fixture",
-        record_id="chunk-1", content="def find_available(): return True",
+        company_id=company, evidence_type="symbol", source="fixture",
+        record_id="symbol-1", content="function find_available",
         retriever="fixture-retriever", rank=1, repository_id=repository,
         snapshot_id=snapshot, source_revision=revision,
         file_path="catalog/products.py", content_hash="a" * 64,
@@ -81,6 +81,8 @@ def test_evaluator_scores_only_reviewed_cases_and_validates_provenance_and_citat
     assert report["summary"]["passed_cases"] == 1
     assert report["summary"]["scope_violations"] == 0
     assert report["summary"]["citation_membership_violations"] == 0
+    assert report["outcomes"][0]["evidence_recall"] == 1.0
+    assert report["summary"]["mean_evidence_recall"] == 1.0
     assert report["semantic_claim_support"]["status"] == "not_evaluated"
 
 
