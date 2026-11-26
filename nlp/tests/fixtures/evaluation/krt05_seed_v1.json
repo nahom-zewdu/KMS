@@ -553,7 +553,7 @@
       "review_status": "draft",
       "reviewer": null,
       "reviewed_on": null,
-      "rationale": "Draft ambiguity case; symbol resolution must not choose among multiple exact candidates.",
+      "rationale": "Draft ambiguity case grounded by the two same-name declarations in evaluation/ambiguous_symbols; requires independent human review.",
       "expected_intent": "declaration_discovery"
     },
     {
@@ -614,14 +614,14 @@
       "expected_route": "structured_handler",
       "evidence": [],
       "required_facts": [
-        "Return the exact repository count from the authoritative structured data."
+        "The authoritative synthetic company fixture contains exactly 2 connected repositories."
       ],
       "forbidden_claims": [],
       "expected_abstention": null,
       "review_status": "draft",
       "reviewer": null,
       "reviewed_on": null,
-      "rationale": "Draft routing control case; should use structured data rather than code retrieval.",
+      "rationale": "Draft routing and answer case grounded by structured_company_repositories_v1.json; requires independent human review.",
       "expected_intent": "structured_fact"
     },
     {
