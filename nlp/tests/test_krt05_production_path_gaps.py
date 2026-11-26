@@ -4,6 +4,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import re
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -201,8 +202,27 @@ class _TableQuery:
         for key, value in self.filters.items():
             if key.startswith("ilike:"):
                 column = key.split(":", 1)[1]
-                needle = value.strip("%").casefold()
-                rows = [row for row in rows if needle in str(row.get(column) or "").casefold()]
+                # Emulate PostgreSQL LIKE semantics: backslash escapes the
+                # following character, '%' is many characters, '_' is one.
+                expression = []
+                index = 0
+                while index < len(value):
+                    character = value[index]
+                    if character == "\\" and index + 1 < len(value):
+                        index += 1
+                        expression.append(re.escape(value[index]))
+                    elif character == "%":
+                        expression.append(".*")
+                    elif character == "_":
+                        expression.append(".")
+                    else:
+                        expression.append(re.escape(character))
+                    index += 1
+                matcher = re.compile("^" + "".join(expression) + "$", re.IGNORECASE)
+                rows = [
+                    row for row in rows
+                    if matcher.match(str(row.get(column) or "")) is not None
+                ]
             else:
                 rows = [row for row in rows if row.get(key) == value]
         for column in reversed(getattr(self, "orders", [])):
