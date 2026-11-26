@@ -231,6 +231,7 @@ def test_supported_code_query_uses_verified_repository_and_planned_executor(capl
     engine.planned_executor.execute = Mock(return_value=SimpleNamespace(
         deferred=False,
         plan=SimpleNamespace(intent=QueryIntent.PASSAGE_RETRIEVAL),
+        evidence=(),
         answer={
             "answer": "The billing handler validates invoices.",
             "confidence": "high",
@@ -255,7 +256,7 @@ def test_supported_code_query_uses_verified_repository_and_planned_executor(capl
         payload = json.loads(result)
         assert payload["claims"][0]["evidence_ids"] == ["evidence-1"]
         assert any(
-            "kms_query_outcome query_id=q-planned route=planned intent=PASSAGE_RETRIEVAL "
+            "kms_query_outcome query_id=q-planned route=planned intent=passage_retrieval "
             "outcome=answered reason=none evidence_count=0" in record.getMessage()
             for record in caplog.records
         )
