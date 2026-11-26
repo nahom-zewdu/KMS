@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -43,6 +44,9 @@ def _fixture_declarations():
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
             and node.name == "process_task"
         )
+        lines = source.splitlines(keepends=True)
+        start_byte = sum(len(line.encode("utf-8")) for line in lines[:function.lineno - 1])
+        end_byte = sum(len(line.encode("utf-8")) for line in lines[:function.end_lineno])
         rows.append({
             "id": f"decl-{filename}",
             "symbol_id": f"symbol-{filename}",
@@ -56,9 +60,9 @@ def _fixture_declarations():
             "kind": "function",
             "start_line": function.lineno,
             "end_line": function.end_lineno,
-            "start_byte": 0,
-            "end_byte": len(source.encode("utf-8")),
-            "content_hash": "a" * 64,
+            "start_byte": start_byte,
+            "end_byte": end_byte,
+            "content_hash": hashlib.sha256(source.encode("utf-8")).hexdigest(),
         })
     return rows
 
