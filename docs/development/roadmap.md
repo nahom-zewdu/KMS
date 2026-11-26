@@ -1057,3 +1057,8 @@ Audited the 24-case seed against the synthetic source corpus and upstream retrie
 The initial audit's claim that `call-03` missed the alternative lookup call was retracted: its existing lines 14–15 correctly cover both normalization and the lookup call. The detailed correction trail is in `docs/development/milestones/2026-11-26-krt-05-seed-source-audit.md`.
 
 These are fixture-integrity corrections, not human approval. All 24 seed cases remain draft; the claim-review fixture still has no reviewed annotations. The new ambiguity and structured fixtures establish expected test data but do not yet prove the production resolver/structured handler behavior.
+
+
+### KRT-05 evaluator hardening — 2026-11-26
+
+A code review found a false-pass condition for no-evidence cases: abstention alone was insufficient if the executor still returned candidates. The evaluator now records `unexpected_evidence_for_no_evidence_case` as a hard failure, with a regression test. Local verification is pending. The latest user-reported full NLP suite before this guard was **447 passed, 8 skipped, 6 warnings, 4 subtests passed**. KRT-05 remains in acceptance review; all 24 seed cases are draft and the claim-review fixture is empty.
