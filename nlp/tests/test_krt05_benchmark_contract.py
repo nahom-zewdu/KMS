@@ -85,13 +85,13 @@ def test_reviewed_case_requires_reviewer_and_date():
         BenchmarkDataset.model_validate_json(json.dumps(payload))
 
 
-def test_unknown_retrieval_reference_is_rejected():
+def test_unknown_retrieval_reference_is_rejected(tmp_path):
     dataset = load_benchmark(_DATASET_PATH)
     payload = json.loads(_RETRIEVAL_PATH.read_text(encoding="utf-8"))
     payload["queries"] = [
         query for query in payload["queries"] if query["id"] != "decl-01"
     ]
-    temporary_fixture = _FIXTURE_ROOT / "evaluation" / "_retrieval_missing_case.json"
+    temporary_fixture = tmp_path / "retrieval_missing_case.json"
     temporary_fixture.write_text(json.dumps(payload), encoding="utf-8")
     try:
         with pytest.raises(ValueError, match="unknown retrieval case"):
@@ -100,12 +100,12 @@ def test_unknown_retrieval_reference_is_rejected():
         temporary_fixture.unlink(missing_ok=True)
 
 
-def test_wrong_retrieval_task_type_is_rejected():
+def test_wrong_retrieval_task_type_is_rejected(tmp_path):
     dataset = load_benchmark(_DATASET_PATH)
     payload = json.loads(_RETRIEVAL_PATH.read_text(encoding="utf-8"))
     query = next(query for query in payload["queries"] if query["id"] == "decl-01")
     query["task_type"] = "passage_retrieval"
-    temporary_fixture = _FIXTURE_ROOT / "evaluation" / "_retrieval_wrong_type.json"
+    temporary_fixture = tmp_path / "retrieval_wrong_type.json"
     temporary_fixture.write_text(json.dumps(payload), encoding="utf-8")
     try:
         with pytest.raises(ValueError, match="wrong task type"):
