@@ -179,6 +179,16 @@ class QueryEngine:
                 )
                 return final_answer
 
+            # Never fall through to source/LLM retrieval for a query classified
+            # as a structured fact when its authoritative handler has no answer.
+            final_answer = json.dumps(abstain("structured_evidence_unavailable"), indent=2)
+            self.redis.publish(f"query_results:{query_id}", final_answer)
+            logger.warning(
+                "Abstained on structured fact without authoritative evidence | %s | company=%s",
+                query_id, company_id,
+            )
+            return final_answer
+
         if candidate_plan and candidate_plan.intent in {
             QueryIntent.PASSAGE_RETRIEVAL,
             QueryIntent.DECLARATION_DISCOVERY,
