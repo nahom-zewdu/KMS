@@ -12,6 +12,7 @@ def test_capture_is_disabled_without_explicit_path(monkeypatch):
         prompt="private prompt",
         output="private answer",
         model="model-a",
+        prompt_version="unit-v2",
         temperature=0.0,
         max_tokens=100,
         duration_ms=12.3,
@@ -36,6 +37,8 @@ def test_capture_writes_hashes_and_metadata_without_content(tmp_path, monkeypatc
 
     record = json.loads(path.read_text(encoding="utf-8"))
     assert record["model"] == "model-a"
+    assert record["prompt_version"] == "unit-v2"
+    assert path.stat().st_mode & 0o777 == 0o600
     assert record["duration_ms"] == 12.346
     assert record["usage"] == {
         "prompt_tokens": 20,
