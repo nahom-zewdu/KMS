@@ -142,6 +142,7 @@ class QueryEngine:
         # Route supported code-intelligence questions through KRT-04 only after
         # resolving one company-owned active repository. The request selector is
         # merely a selector; the database resolver verifies ownership and snapshot.
+        route_classification_started = time.perf_counter()
         try:
             candidate_plan = classify_query(
                 effective_question,
@@ -150,6 +151,10 @@ class QueryEngine:
             )
         except ValueError:
             candidate_plan = None
+        logger.info(
+            "kms_query_stage query_id=%s stage=route_classification duration_ms=%.3f",
+            query_id, (time.perf_counter() - route_classification_started) * 1000,
+        )
 
         if candidate_plan and candidate_plan.intent in {
             QueryIntent.PASSAGE_RETRIEVAL,
