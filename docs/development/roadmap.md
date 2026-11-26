@@ -7,9 +7,9 @@
 > Scoring spec vs implemented subset: `docs/product/ramp-candidate-scoring.md`.
 
 **Last updated:** 2026-11-26
-**Current branch:** `feat/ramp`
-**Current milestone:** KRT-05 — Evaluation and Observability (planning)
-**Current objective:** Specify representative end-to-end retrieval and grounded-answer evaluation before expanding retrieval or adding ranking complexity.
+**Current branch:** `feat/krt-05-evaluation`
+**Current milestone:** KRT-05.1 — Benchmark contract and reviewed seed dataset
+**Current objective:** Implement the versioned benchmark schema and a small reviewed seed set that reuses existing retrieval fixtures without duplicating their source of truth.
 
 ---
 
@@ -28,6 +28,7 @@
 | `docs/architecture/knowledge-reliability.md` | Current knowledge-pipeline audit and target architecture |
 | `docs/development/milestones/2026-11-22-krt-03-hybrid-retrieval-design.md` | KRT-03 retrieval design, sequence, and acceptance criteria |
 | `docs/development/milestones/2026-11-26-krt-04-authenticated-repository-routing.md` | KRT-04.8 authenticated repository propagation and production routing |
+| `docs/development/milestones/2026-11-26-krt-05-evaluation-design.md` | KRT-05 evaluation strategy, metrics, dataset, and implementation sequence |
 | `docs/development/milestones/2026-11-14-knowledge-reliability.md` | Specified implementation milestone and acceptance criteria |
 | this file | Task state, verified status, selected next work |
 
@@ -76,6 +77,8 @@ An `IMPORTS` edge (`A imports B`) is a structural dependency. It does not, by it
 |---|---|---|
 | KRT-02 code intelligence | VERIFIED | Tree-sitter declarations and persisted SCIP occurrences; Python, Go, and TypeScript integrations exercised separately. See `docs/development/milestones/2026-11-22-krt-02-code-intelligence.md`. |
 | KRT-03 hybrid retrieval | VERIFIED — bounded deterministic retrieval foundation; semantic/fusion scope deferred | Task-aware routing, snapshot-scoped lexical source chunks, symbol lookup, SCIP occurrence retrieval, and Supabase tenant/snapshot integration are verified. Latest full NLP suite: **310 passed, 8 skipped, 6 warnings, 4 subtests passed**; router Supabase integration: **1 passed**. See the acceptance review in the KRT-03 design note. The original semantic-code-retrieval + RRF acceptance criteria were not implemented and are explicitly deferred; this milestone does not claim a complete semantic hybrid retriever. |
+| KRT-04 typed query planning and grounded synthesis | MERGED — PR #29 | Typed query planning, bounded evidence gathering, claim-level citation membership validation, and authenticated repository routing; semantic claim support remains unevaluated. |
+| KRT-05 evaluation and observability | SPECIFIED — KRT-05.1 next | Benchmark strategy documented; first implementation is versioned dataset/schema validation. |
 | Reliability Batch 1 | ACCEPTED | Tenant/failure semantics hardened. Unchanged by this branch; not re-verified on 2026-09-21. |
 | Reliability Batch 2 | ACCEPTED | Redis pending-message recovery/ACK semantics hardened. Not re-verified on 2026-09-21. |
 | Reliability Batch 3 | ACCEPTED | Durable codebase-analysis lifecycle and failure propagation. Not re-verified on 2026-09-21. |
@@ -970,3 +973,12 @@ Acceptance is limited to the delivered implementation and its tests. Citation va
 **Out of scope initially:** adding embeddings, RRF, cross-encoder reranking, or broad query-engine rewrites. Those require benchmark evidence that the current deterministic retrieval path is insufficient.
 
 **First deliverable:** a benchmark design and evaluation harness proposal, with a small manually reviewed seed set and explicit limitations. Do not claim broad relevance from synthetic fixtures alone.
+
+
+### KRT-05 design — 2026-11-26
+
+**Status: SPECIFIED**  
+**Branch:** `feat/krt-05-evaluation`  
+**Design:** `docs/development/milestones/2026-11-26-krt-05-evaluation-design.md`
+
+The evaluation design separates retrieval relevance, hard scope/provenance gates, claim-level semantic support, abstention/routing quality, and operational measurements. It reuses the existing 33-case retrieval fixture rather than duplicating it. KRT-05.1 is limited to a versioned benchmark contract, a compact manually reviewed end-to-end seed set, and fixture-integrity validation. Live LLM calls and production telemetry are deferred.
