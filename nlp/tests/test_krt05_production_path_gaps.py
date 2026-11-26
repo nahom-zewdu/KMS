@@ -269,6 +269,32 @@ def test_query_engine_routes_repository_count_before_source_retrieval(monkeypatc
     assert engine.redis.messages[0][0] == "query_results:krt05-structured-count"
 
 
+
+def test_query_engine_abstains_if_structured_repository_count_cannot_be_verified(monkeypatch):
+    db = _FixtureSupabase({"repositories": []})
+    engine = QueryEngine(supabase=db, redis=_FakeRedis())
+
+    monkeypatch.setattr("query_engine.core.answer_structured_question", lambda *_args, **_kwargs: None)
+
+    def unexpected_source_retrieval(*_args, **_kwargs):
+        raise AssertionError("unverified structured facts must not enter source retrieval")
+
+    monkeypatch.setattr(
+        "query_engine.core.retrieve_source_chunks",
+        unexpected_source_retrieval,
+    )
+
+    result = engine.handle_query({
+        "record_id": "krt05-structured-count-unavailable",
+        "company_id": "benchmark-company",
+        "content": "How many repositories are connected to this company?",
+    })
+
+    payload = json.loads(result)
+    assert payload["abstain_reason"] == "structured_evidence_unavailable"
+    assert engine.redis.messages[0][0] == "query_results:krt05-structured-count-unavailable"
+
+
 def test_structured_repository_count_uses_authoritative_company_scoped_fixture():
     db = _FixtureSupabase({
         "repositories": _structured_repository_rows(),
