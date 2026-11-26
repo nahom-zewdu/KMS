@@ -25,6 +25,17 @@ client = OpenAI(
 logger = logging.getLogger("engine.llm")
 
 
+def _usage_metadata(response) -> dict | None:
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return None
+    if hasattr(usage, "model_dump"):
+        return usage.model_dump()
+    if hasattr(usage, "__dict__"):
+        return vars(usage)
+    return None
+
+
 def _capture_run(**kwargs) -> None:
     """Best-effort metadata capture must never break a successful LLM request."""
     try:
@@ -90,10 +101,10 @@ def llm_infer(
             raise RuntimeError("LLM returned an empty response")
         content = content.strip()
         _capture_run(
-            prompt=prompt, output=content, model=model, temperature=temperature,
+            prompt=prompt, output=content, model=model,
+            prompt_version=os.getenv("KMS_LLM_PROMPT_VERSION", "unspecified"), temperature=temperature,
             max_tokens=max_tokens, duration_ms=(time.perf_counter() - started_at) * 1000,
-            status="success", usage=getattr(response, "usage", None).__dict__
-            if getattr(response, "usage", None) is not None else None,
+            status="success", usage=_usage_metadata(response),
         )
         return content
 
@@ -132,13 +143,13 @@ def llm_infer(
             _capture_run(
                 prompt=prompt, output=content, model=model, temperature=temperature,
                 max_tokens=max_tokens, duration_ms=(time.perf_counter() - started_at) * 1000,
-                status="success", usage=getattr(response, "usage", None).__dict__
-                if getattr(response, "usage", None) is not None else None,
+                status="success", usage=_usage_metadata(response),
             )
             return content
         except Exception as fallback_error:
             _capture_run(
-                prompt=prompt, output=None, model=model, temperature=temperature,
+                prompt=prompt, output=None, model=model,
+                prompt_version=os.getenv("KMS_LLM_PROMPT_VERSION", "unspecified"), temperature=temperature,
                 max_tokens=max_tokens, duration_ms=(time.perf_counter() - started_at) * 1000,
                 status="error",
             )
