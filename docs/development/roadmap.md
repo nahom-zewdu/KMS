@@ -78,7 +78,7 @@ An `IMPORTS` edge (`A imports B`) is a structural dependency. It does not, by it
 | KRT-02 code intelligence | VERIFIED | Tree-sitter declarations and persisted SCIP occurrences; Python, Go, and TypeScript integrations exercised separately. See `docs/development/milestones/2026-11-22-krt-02-code-intelligence.md`. |
 | KRT-03 hybrid retrieval | VERIFIED — bounded deterministic retrieval foundation; semantic/fusion scope deferred | Task-aware routing, snapshot-scoped lexical source chunks, symbol lookup, SCIP occurrence retrieval, and Supabase tenant/snapshot integration are verified. Latest full NLP suite: **310 passed, 8 skipped, 6 warnings, 4 subtests passed**; router Supabase integration: **1 passed**. See the acceptance review in the KRT-03 design note. The original semantic-code-retrieval + RRF acceptance criteria were not implemented and are explicitly deferred; this milestone does not claim a complete semantic hybrid retriever. |
 | KRT-04 typed query planning and grounded synthesis | MERGED — PR #29 | Typed query planning, bounded evidence gathering, claim-level citation membership validation, and authenticated repository routing; semantic claim support remains unevaluated. |
-| KRT-05 evaluation and observability | IN_PROGRESS — KRT-05.1 | Strict benchmark contract and 24-case draft seed dataset added; awaiting local test verification and human review of labels. |
+| KRT-05 evaluation and observability | IN_PROGRESS — KRT-05.2 | KRT-05.1 verified; offline planned-query evaluator implemented with deterministic test doubles, pending local verification. |
 | Reliability Batch 1 | ACCEPTED | Tenant/failure semantics hardened. Unchanged by this branch; not re-verified on 2026-09-21. |
 | Reliability Batch 2 | ACCEPTED | Redis pending-message recovery/ACK semantics hardened. Not re-verified on 2026-09-21. |
 | Reliability Batch 3 | ACCEPTED | Durable codebase-analysis lifecycle and failure propagation. Not re-verified on 2026-09-21. |
@@ -986,9 +986,21 @@ The evaluation design separates retrieval relevance, hard scope/provenance gates
 
 ### KRT-05.1 implementation — 2026-11-26
 
-**Status: IMPLEMENTED — pending local verification**  
+**Status: VERIFIED**  
 **Branch:** `feat/krt-05-evaluation`
 
 Added `nlp/evaluation/benchmark.py` with strict Pydantic contracts, dataset loading, review-state gating, unique case validation, and referential integrity checks against the existing KRT-03 retrieval fixture. Added `nlp/tests/fixtures/evaluation/krt05_seed_v1.json` with 24 draft cases: 15 linked retrieval cases, 3 no-evidence cases, 2 ambiguity cases, 2 unsupported cases, 1 structured-fact routing case, and 1 conversation-control case. Retrieval ground truth is referenced by ID rather than copied. All cases remain `draft` and are excluded from scored aggregates until a human reviewer approves them. Added focused contract and fixture-integrity tests in `nlp/tests/test_krt05_benchmark_contract.py`.
 
-Pending user-reported verification: `uv run pytest -q tests/test_krt05_benchmark_contract.py` and the full NLP suite.
+User-reported verification: `uv run pytest -q tests/test_krt05_benchmark_contract.py` — **9 passed**; full NLP suite — **422 passed, 8 skipped, 6 warnings, 4 subtests passed**.
+
+
+### KRT-05.2 implementation — 2026-11-26
+
+**Status: IMPLEMENTED — pending local verification**  
+**Branch:** `feat/krt-05-evaluation`
+
+Added `nlp/evaluation/planned_query_evaluator.py`, a deterministic offline evaluator for the KRT-04 planned-query executor. It scores only reviewed cases; reports draft/rejected cases as excluded; checks expected intent and route, evidence provenance against company/repository/snapshot/revision, citation-ID membership, and abstention category; and emits sanitized JSON without source text. It records zero LLM calls and database writes and explicitly marks semantic claim support as not evaluated. Conversation-control cases now carry bounded explicit prior-turn context and references; the ambiguous-repository case carries no selected repository and verifies fail-closed behavior at the gatherer boundary. Added deterministic evaluator tests for reviewed-case gating, provenance/citation failures, report writing, and conversation context.
+
+The evaluator is an orchestration-component harness, not a full production API/worker integration test. The existing retrieval benchmark remains the authority for retrieval ranking metrics. Semantic claim entailment remains human-reviewed work in KRT-05.3.
+
+Pending user-reported verification: `uv run pytest -q tests/test_krt05_planned_query_evaluator.py tests/test_krt05_benchmark_contract.py` and the full NLP suite.
