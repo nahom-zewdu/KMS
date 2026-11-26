@@ -9,7 +9,7 @@
 **Last updated:** 2026-11-26
 **Current branch:** `feat/krt-04-evidence-gathering`
 **Current milestone:** KRT-04 — Typed Query Planning and Grounded Synthesis
-**Current objective:** Complete trusted repository-scope resolution, integrate planned queries without regressing legacy routes, verify, then submit one consolidated KRT-04 PR.
+**Current objective:** Verify KRT-04.8 authenticated repository propagation and planned-query production routing; then complete end-to-end tests and submit one consolidated KRT-04 PR.
 
 ---
 
@@ -915,11 +915,24 @@ Production `QueryEngine.handle_query` remains unchanged. The public job currentl
 
 ### KRT-04.7 trusted repository scope resolution — 2026-11-26
 
-**Status: IMPLEMENTED — pending local verification**  
+**Status: VERIFIED — user-reported full suite (408 passed); extended in KRT-04.8**  
 **Branch:** `feat/krt-04-evidence-gathering`
 
 Added `nlp/query_engine/repository_scope.py` and `nlp/tests/test_repository_scope.py`.
 
-The resolver treats the company ID as trusted input from the authenticated job boundary. A caller-supplied repository ID is only a selector: it is queried together with the company ID and accepted only when the returned row matches both and has an active snapshot. When no repository selector is supplied, the resolver checks for exactly one active repository, bounding the lookup to two rows; zero or multiple active repositories return explicit non-resolved outcomes rather than silently selecting one.
+The resolver treats the company ID as trusted input from the authenticated job boundary. A caller-supplied repository ID is only a selector: it is queried together with the company ID and accepted only when the returned row matches both and has an active snapshot. The resolver also accepts a canonical full name returned by the authenticated API and converts it to the internal repository ID. When no repository selector is supplied, the resolver checks for exactly one active repository, bounding the lookup to two rows; zero or multiple active repositories return explicit non-resolved outcomes rather than silently selecting one.
 
-This slice does not yet change the Redis job contract, QueryEngine, cache behavior, legacy retrieval, or frontend API. A future integration must source any explicit repository selector from a trusted server-side context, not arbitrary question payload data. Local focused and full-suite verification are pending.
+Focused test verification: **8 passed**; full NLP suite before KRT-04.8: **408 passed, 8 skipped, 6 warnings, 4 subtests passed**. The resolver itself remains fail-closed for zero or multiple active repositories.
+
+
+
+### KRT-04.8 authenticated repository propagation and production routing — 2026-11-26
+
+**Status: IMPLEMENTED — pending local verification**  
+**Branch:** `feat/krt-04-evidence-gathering`
+
+The authenticated `POST /query` endpoint now accepts an optional `repository` selector. When supplied, the API resolves it using the authenticated company scope through the existing `ResolveRepositoryForCompany` storage boundary. The canonical verified repository full name is carried in a dedicated top-level Redis job field; it is not copied from arbitrary nested payload data. Worker normalization preserves only that top-level field. The Python repository resolver accepts the canonical full name and resolves it to the internal repository ID using a company predicate and active-snapshot check.
+
+`QueryEngine` now routes supported passage, declaration, and call-site questions through the KRT-04 planned executor before the legacy source-code retrieval route. It resolves either the explicitly verified repository or the sole active repository for the company. If the repository is missing or ambiguous, the query abstains rather than falling back to company-wide legacy retrieval. Structured-fact, courtesy, and conversation-control handling remain on their existing paths. Claim-level citations are now passed through the Go query response.
+
+Added/extended tests for API repository ownership enforcement, top-level-only worker propagation, full-name-to-ID resolution, planned query integration, and ambiguous-repository abstention. Local verification is pending. The legacy adaptive retrieval route remains available for query types not routed by KRT-04; this is not a full replacement of all legacy query behavior.
