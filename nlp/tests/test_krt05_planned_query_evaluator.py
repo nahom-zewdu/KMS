@@ -53,7 +53,7 @@ class FakeExecutor:
 def _result(case, evidence, answer):
     plan = QueryPlan(
         query=case.question,
-        intent=QueryIntent.PASSAGE_RETRIEVAL,
+        intent=QueryIntent.DECLARATION_DISCOVERY,
         scope=QueryScope(case.scope.company_id, case.scope.repository_id),
         terms=("find_available",),
     )
