@@ -96,6 +96,32 @@ class BenchmarkCase(BenchmarkModel):
     @model_validator(mode="after")
     def validate_case_contract(self) -> "BenchmarkCase":
         """Keep answerability, route, abstention, and review metadata consistent."""
+        route_intents = {
+            "planned_query": {
+                "declaration_discovery", "call_site_navigation", "passage_retrieval"
+            },
+            "structured_handler": {"structured_fact"},
+            "conversation_handler": {"follow_up", "clarification", "courtesy"},
+            "legacy_unsupported": {"unsupported"},
+            "abstain": {
+                "declaration_discovery", "call_site_navigation", "passage_retrieval",
+                "unsupported",
+            },
+        }
+        if self.expected_intent not in route_intents[self.expected_route]:
+            raise ValueError("expected_intent is inconsistent with expected_route")
+        task_intents = {
+            "declaration_discovery": {"declaration_discovery"},
+            "call_site_navigation": {"call_site_navigation"},
+            "passage_retrieval": {"passage_retrieval"},
+            "no_evidence": {"passage_retrieval"},
+            "ambiguous_scope": {"declaration_discovery", "passage_retrieval"},
+            "unsupported": {"unsupported"},
+            "structured_fact": {"structured_fact"},
+            "conversation_control": {"follow_up", "clarification", "courtesy"},
+        }
+        if self.expected_intent not in task_intents[self.task_type]:
+            raise ValueError("expected_intent is inconsistent with task_type")
         if self.expected_route == "planned_query":
             if self.task_type not in {
                 "declaration_discovery", "call_site_navigation", "passage_retrieval"
