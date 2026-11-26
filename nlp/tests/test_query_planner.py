@@ -96,6 +96,16 @@ def test_source_file_path_is_not_misclassified_as_a_symbol_candidate():
     assert plan.qualified_names == ()
 
 
+
+def test_structured_count_with_explicit_company_reference_is_not_follow_up():
+    plan = classify_query(
+        "How many repositories are connected to this company?",
+        scope=SCOPE,
+    )
+
+    assert plan.intent is QueryIntent.STRUCTURED_FACT
+
+
 def test_extraction_is_bounded_and_deduplicated():
     tick = chr(96)
     query = "Explain " + " ".join(tick + f"symbol_{i}" + tick for i in range(35))
