@@ -143,6 +143,9 @@ func (h *QueryHandler) HandleQuery(c *gin.Context) {
 			if ar, ok := parsed["abstain_reason"]; ok {
 				resp["abstain_reason"] = ar
 			}
+			if claims, ok := parsed["claims"]; ok {
+				resp["claims"] = claims
+			}
 		}
 		log.Printf("QueryID: %s - answered in %.3fs company=%s", queryID, time.Since(start).Seconds(), companyID)
 		c.JSON(http.StatusOK, resp)
