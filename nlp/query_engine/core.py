@@ -156,9 +156,14 @@ class QueryEngine:
             QueryIntent.DECLARATION_DISCOVERY,
             QueryIntent.CALL_SITE_NAVIGATION,
         }:
+            repository_started = time.perf_counter()
             repository_resolution = self.repository_scope_resolver.resolve(
                 company_id,
                 repository_id=job.get("repository"),
+            )
+            logger.info(
+                "kms_query_stage query_id=%s stage=repository_scope duration_ms=%.3f",
+                query_id, (time.perf_counter() - repository_started) * 1000,
             )
             if not repository_resolution.resolved:
                 answer_json = abstain(
@@ -168,6 +173,13 @@ class QueryEngine:
                 self.redis.publish(f"query_results:{query_id}", final_answer)
                 return final_answer
 
+            def observe_planned_stage(stage: str, duration_ms: float) -> None:
+                logger.info(
+                    "kms_query_stage query_id=%s stage=%s duration_ms=%.3f",
+                    query_id, stage, duration_ms,
+                )
+
+            planned_started = time.perf_counter()
             planned = self.planned_executor.execute(
                 effective_question,
                 scope=QueryScope(
@@ -175,6 +187,11 @@ class QueryEngine:
                     repository_id=repository_resolution.repository_id,
                 ),
                 conversation_history=conversation_history,
+                stage_observer=observe_planned_stage,
+            )
+            logger.info(
+                "kms_query_stage query_id=%s stage=planned_query_total duration_ms=%.3f",
+                query_id, (time.perf_counter() - planned_started) * 1000,
             )
             if not planned.deferred and planned.answer is not None:
                 final_answer = json.dumps(dict(planned.answer), indent=2)
