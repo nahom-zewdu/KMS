@@ -35,6 +35,7 @@ class ClaimReview(ReviewModel):
     case_id: str = Field(min_length=1, max_length=64)
     claim_id: str = Field(min_length=1, max_length=128)
     claim_text: str = Field(min_length=1, max_length=2_000)
+    cited_evidence_ids: tuple[str, ...] = Field(min_length=1, max_length=8)
     assessments: tuple[ClaimEvidenceAssessment, ...] = Field(min_length=1, max_length=8)
     overall_grade: SupportGrade
     status: Literal["draft", "reviewed", "rejected"] = "draft"
@@ -49,9 +50,16 @@ class ClaimReview(ReviewModel):
                 raise ValueError("reviewed annotations require reviewer and reviewed_on")
         elif self.reviewer is not None or self.reviewed_on is not None:
             raise ValueError("unreviewed annotations cannot claim reviewer metadata")
-        evidence_ids = [item.evidence_id for item in self.assessments]
-        if len(evidence_ids) != len(set(evidence_ids)):
+        cited_ids = list(self.cited_evidence_ids)
+        if any(not item or len(item) > 256 for item in cited_ids):
+            raise ValueError("cited evidence IDs must be non-empty and bounded")
+        if len(cited_ids) != len(set(cited_ids)):
+            raise ValueError("cited evidence IDs must be unique")
+        assessed_ids = [item.evidence_id for item in self.assessments]
+        if len(assessed_ids) != len(set(assessed_ids)):
             raise ValueError("evidence assessments must have unique evidence IDs")
+        if set(assessed_ids) != set(cited_ids):
+            raise ValueError("every cited evidence ID must have exactly one assessment")
         return self
 
 
