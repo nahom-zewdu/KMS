@@ -244,3 +244,8 @@ User-reported verification after the latest observability and planned-route chan
 - The warnings are existing `pythonjsonlogger` and PyGithub deprecations.
 
 This verifies the implemented test coverage, not production telemetry behavior. No production traffic, p50/p95, cost, or semantic claim-support quality is asserted. The initial 24-case seed still has no independently reviewed end-to-end cases, and the claim-review fixture is empty; those remain explicit quality-evidence gaps.
+
+
+## 11. Human review execution protocol
+
+The checked-in seed currently contains 24 cases distributed as 5 declaration, 5 call-site, 5 passage, 3 no-evidence, 2 ambiguous-scope, 2 unsupported-intent, 1 structured-fact, and 1 conversation-control case. This is the actual fixture composition; it differs from the initial target distribution above. See [KRT-05 Seed Dataset — Human Review Protocol](2026-11-26-krt-05-human-review-protocol.md) for the per-case approval procedure. No case should be marked reviewed until its evidence, scope, answerability, expected route, required facts, and abstention expectation have been independently checked.
