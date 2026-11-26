@@ -1,6 +1,6 @@
 # KRT-05 — Evaluation and Observability
 
-**Status:** SPECIFIED — first implementation slice pending  
+**Status:** IN_PROGRESS — KRT-05.1 benchmark contract implemented, pending local verification  
 **Date:** 2026-11-26  
 **Branch:** `feat/krt-05-evaluation`  
 **Base:** merged `feat/ramp` after KRT-04 PR #29
