@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from codebase.symbol_retriever import CodeSymbolRetriever
+from query_engine.core import QueryEngine
 from query_engine.evidence_gatherer import BoundedEvidenceGatherer
 from query_engine.planned_query import PlannedQueryExecutor
 from query_engine.query_plan import QueryScope
@@ -217,6 +218,41 @@ def _structured_repository_rows():
         {"company_id": company_id, **repository}
         for repository in fixture["companies"][company_id]["repositories"]
     ]
+
+
+
+class _FakeRedis:
+    def __init__(self):
+        self.messages = []
+
+    def publish(self, channel, message):
+        self.messages.append((channel, message))
+
+
+def test_query_engine_routes_repository_count_before_source_retrieval(monkeypatch):
+    db = _FixtureSupabase({
+        "repositories": _structured_repository_rows(),
+    })
+    engine = QueryEngine(supabase=db, redis=_FakeRedis())
+
+    def unexpected_source_retrieval(*_args, **_kwargs):
+        raise AssertionError("structured facts must not enter source retrieval")
+
+    monkeypatch.setattr(
+        "query_engine.core.retrieve_source_chunks",
+        unexpected_source_retrieval,
+    )
+
+    result = engine.handle_query({
+        "record_id": "krt05-structured-count",
+        "company_id": "benchmark-company",
+        "content": "How many repositories are connected to this company?",
+    })
+
+    payload = json.loads(result)
+    assert payload["answer"] == "2 connected repositories are registered for this company."
+    assert payload["abstain_reason"] is None
+    assert engine.redis.messages[0][0] == "query_results:krt05-structured-count"
 
 
 def test_structured_repository_count_uses_authoritative_company_scoped_fixture():
