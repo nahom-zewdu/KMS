@@ -1,6 +1,6 @@
 # KRT-04.3 — Conservative SCIP Symbol Resolution
 
-**Status:** SPECIFIED  
+**Status:** IMPLEMENTED — NOT VERIFIED  
 **Date:** 2026-11-26  
 **Branch:** `feat/krt-04-symbol-resolution`  
 **Base:** KRT-04.2 merge commit `0334cff51a72d788137b1346827df60eaab7dc92`
@@ -47,6 +47,12 @@ No failure state should be silently converted into a guessed symbol.
 - Missing repository scope is rejected before retriever calls.
 - Trusted company/repository arguments are passed unchanged.
 - Active-snapshot behavior remains delegated to existing retrievers.
+
+## Implementation checkpoint
+
+Implemented as `nlp/query_engine/symbol_resolution.py` with focused tests in `nlp/tests/test_symbol_resolution.py`. The resolver uses injected retrievers, filters identifier substring results to exact names, checks declaration/SCIP definition file and byte/line ranges plus snapshot identity, and returns explicit failure reasons. It does not alter production routing.
+
+**Verification:** pending local focused and full NLP test runs. Do not treat this implementation as verified until those runs pass.
 
 ## Boundaries
 
