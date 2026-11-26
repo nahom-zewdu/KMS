@@ -44,12 +44,12 @@ The seed's ambiguous-symbol case is now backed by a dedicated two-file ambiguity
 - **Correction:** Added a versioned synthetic structured-data fixture containing exactly two repository records for `benchmark-company`. The seed's required fact now states that expected count.
 - **Remaining limitation:** The fixture is ground truth for the benchmark only; it does not prove the live structured handler reads equivalent authoritative records. That route needs an injected integration test before approval.
 
-### F-06 — Ambiguous-repository scope mixes an absent repository with snapshot metadata — OPEN
+### F-06 — Ambiguous-repository scope mixes an absent repository with snapshot metadata — FIXED
 
 - **Case:** `seed-ambiguous-repository`
 - **Scope:** Repository ID is null while snapshot ID and source revision are populated.
 - **Assessment:** This is internally inconsistent if those fields are trusted snapshot metadata. It can be retained only if explicitly treated as untrusted hints that must not resolve repository selection.
-- **Action required:** Model snapshot/revision as absent for this case, or document and test that these values are ignored until a repository is resolved. Do not approve the case until that interpretation is explicit.
+- **Correction:** The case now has `repository_id`, `snapshot_id`, and `source_revision` all absent. `BenchmarkScope` permits absent snapshot/revision metadata for unresolved scopes, and a contract test enforces this representation. The default scope and repository-selected cases remain fully versioned.
 
 ## Static checks
 
@@ -62,4 +62,4 @@ The seed's ambiguous-symbol case is now backed by a dedicated two-file ambiguity
 
 ## Approval decision
 
-The two source-label corrections and two missing-fixture issues have been addressed at fixture level. **The ambiguous-repository case remains open.** None of these changes constitute independent human approval or establish semantic claim support.
+The two source-label corrections and two missing-fixture issues have been addressed at fixture level. **The fixture-level inconsistencies are corrected.** None of these changes constitute independent human approval or establish semantic claim support.
