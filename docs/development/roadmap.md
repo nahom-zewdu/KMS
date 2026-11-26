@@ -9,7 +9,7 @@
 **Last updated:** 2026-11-26
 **Current branch:** `feat/krt-04-symbol-resolution`
 **Current milestone:** KRT-04 — Typed Query Planning and Grounded Synthesis
-**Current objective:** Resolve explicitly named call-site symbols to exact SCIP identifiers using tenant- and active-snapshot-scoped declaration/occurrence evidence; do not integrate production QueryEngine routing yet.
+**Current objective:** Review the conservative SCIP symbol-resolution slice; do not integrate production QueryEngine routing yet.
 
 ---
 
