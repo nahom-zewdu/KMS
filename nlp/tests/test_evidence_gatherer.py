@@ -144,7 +144,7 @@ def test_declaration_discovery_uses_exact_qualified_name_and_provenance():
 
 def test_declaration_discovery_filters_non_exact_name_and_revision():
     symbols = Symbols([
-        _symbol_row(qualified_name="billing.calculate_tax_extra"),
+        _symbol_row(name="calculate_tax_extra", qualified_name="billing.calculate_tax_extra"),
         _symbol_row(symbol_id="symbol-old", source_revision="rev-old"),
     ])
     result = _gatherer(symbols=symbols).gather(
