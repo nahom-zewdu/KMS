@@ -994,6 +994,13 @@ Added `nlp/evaluation/benchmark.py` with strict Pydantic contracts, dataset load
 User-reported verification: `uv run pytest -q tests/test_krt05_benchmark_contract.py` — **9 passed**; full NLP suite — **422 passed, 8 skipped, 6 warnings, 4 subtests passed**.
 
 
+### KRT-05.3 human claim-support review contract — 2026-11-26
+
+**Status: IMPLEMENTED — pending local verification**  
+**Branch:** `feat/krt-05-evaluation`
+
+Added a strict immutable annotation contract for human claim-to-evidence judgments, with independent 0/1/2 grades per cited evidence item, an overall claim grade, rationale, reviewer identity, and review date. Draft/rejected annotations are excluded from aggregate summaries. The committed annotation artifact is intentionally empty: no generated labels are represented as human-reviewed ground truth. This slice does not perform LLM evaluation or assert semantic quality.
+
 ### KRT-05.2 implementation — 2026-11-26
 
 **Status: IMPLEMENTED — pending local verification**  
