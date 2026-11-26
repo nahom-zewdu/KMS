@@ -7,6 +7,7 @@ claim and its cited source; that requires separate evaluation.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from typing import Any, Mapping, Sequence
 
 from .evidence import EvidenceCandidate
@@ -65,6 +66,16 @@ class GroundedAnswerValidator:
         evidence: Sequence[EvidenceCandidate],
     ) -> GroundedAnswerResult:
         """Validate bounded claim text and require known evidence IDs per claim."""
+        if isinstance(payload, str):
+            text = payload.strip()
+            if text.startswith("```"):
+                text = text.strip("`").strip()
+                if text[:4].lower() == "json":
+                    text = text[4:].strip()
+            try:
+                payload = json.loads(text)
+            except (TypeError, ValueError):
+                return self._abstain("invalid_grounded_answer")
         if not isinstance(payload, Mapping):
             return self._abstain("invalid_grounded_answer")
 
