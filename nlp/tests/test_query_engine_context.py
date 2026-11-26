@@ -40,6 +40,8 @@ def _make_engine():
 
 def test_query_with_no_ramp_context_uses_content_question_and_keeps_behavior():
     engine = _make_engine()
+    original_classifier = core_module.classify_query
+    core_module.classify_query = Mock(return_value=SimpleNamespace(intent=QueryIntent.UNSUPPORTED))
     engine.cache.get = Mock(return_value=None)
 
     original = core_module.reasoning_synthesize
@@ -63,11 +65,14 @@ def test_query_with_no_ramp_context_uses_content_question_and_keeps_behavior():
         assert args[0] == "What does the payments service do?"
         assert kwargs["ramp_context"] is None
     finally:
+        core_module.classify_query = original_classifier
         core_module.reasoning_synthesize = original
 
 
 def test_query_with_ramp_context_uses_question_for_retrieval_but_passes_context_to_synthesis():
     engine = _make_engine()
+    original_classifier = core_module.classify_query
+    core_module.classify_query = Mock(return_value=SimpleNamespace(intent=QueryIntent.UNSUPPORTED))
     original = core_module.reasoning_synthesize
     core_module.reasoning_synthesize = Mock(return_value={
         "answer": "Billing is handled here.",
@@ -94,11 +99,14 @@ def test_query_with_ramp_context_uses_question_for_retrieval_but_passes_context_
         assert args[0] == "What does the payments service do?"
         assert kwargs["ramp_context"] == "Role: backend engineer\nStep 3: Understand payment service\nPath: services/payments"
     finally:
+        core_module.classify_query = original_classifier
         core_module.reasoning_synthesize = original
 
 
 def test_company_scope_is_preserved_and_ramp_context_does_not_become_company_evidence():
     engine = _make_engine()
+    original_classifier = core_module.classify_query
+    core_module.classify_query = Mock(return_value=SimpleNamespace(intent=QueryIntent.UNSUPPORTED))
     original = core_module.reasoning_synthesize
     captured = {}
 
@@ -130,6 +138,7 @@ def test_company_scope_is_preserved_and_ramp_context_does_not_become_company_evi
         assert captured["ramp_context"] == "Owners: Bob\nStep 1: Understand payments"
         assert captured["allowed_owners"] == ["Alice"]
     finally:
+        core_module.classify_query = original_classifier
         core_module.reasoning_synthesize = original
 
     prompt = "Ramp step context (interpretation only; not company evidence):\nOwners: Bob\nStep 1: Understand payments"
@@ -261,6 +270,7 @@ def test_ambiguous_repository_scope_abstains_without_legacy_broad_retrieval():
     engine.repository_scope_resolver.resolve = Mock(return_value=SimpleNamespace(
         resolved=False, repository_id=None, reason="multiple_active_repositories",
     ))
+    engine.planned_executor.execute = Mock(wraps=engine.planned_executor.execute)
     original_source = core_module.retrieve_source_chunks
     original_structured = core_module.answer_structured_question
     core_module.retrieve_source_chunks = Mock(return_value=[])
