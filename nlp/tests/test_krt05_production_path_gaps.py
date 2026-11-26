@@ -108,7 +108,7 @@ def test_duplicate_fixture_declarations_abstain_through_planned_query_pipeline()
         "company_id": "benchmark-company",
         "repository_id": "benchmark-repository",
         "snapshot_id": "benchmark-snapshot-v1",
-        "ilike:qualified_name": "%process_task%",
+        "ilike:qualified_name": "%process\_task%",
     }
     assert symbol_query.pattern == "%process_task%"
     assert result.reason == "ambiguous_declaration"
