@@ -51,7 +51,7 @@ If any evidence link, scope field, expected fact, or abstention label is wrong o
 
 ## Claim-support annotation
 
-Use `nlp/tests/fixtures/evaluation/krt05_claim_reviews_v1.json` for actual generated-claim annotations. Each annotation must identify the exact case and claim, include one assessment per cited evidence item, and explain its grade:
+Use `nlp/tests/fixtures/evaluation/krt05_claim_reviews_v1.json` for actual generated-claim annotations. Each annotation must identify the exact case and claim, list the exact `cited_evidence_ids` from that generated claim, and include exactly one assessment for every cited ID (no missing or extra assessments). Each assessment must explain its grade:
 
 | Grade | Meaning |
 |---:|---|
@@ -82,3 +82,8 @@ uv run pytest -q \
 ```
 
 Then run the full NLP suite. Include the exact results and commit in the milestone record; do not replace earlier results without preserving their context.
+
+
+## Annotation completeness invariant
+
+The claim-review schema enforces a one-to-one match between `cited_evidence_ids` and assessment evidence IDs. An annotation cannot be considered structurally valid if a citation is omitted from review or an uncited evidence item is graded. This prevents reviewers from selectively assessing only favorable citations. The invariant is covered by tests for missing, extra, and duplicate IDs.
