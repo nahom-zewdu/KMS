@@ -901,3 +901,13 @@ Added a bounded grounded-synthesis prompt and a strict validator. Model claims m
 **Known limitation:** this validates citation membership, not semantic entailment. A real evidence ID can still be irrelevant to a claim. Semantic claim-evidence quality remains an explicit evaluation requirement; this milestone does not claim hallucination-free or entailment-proven answers.
 
 Focused and full-suite verification are pending. Production QueryEngine behavior remains unchanged.
+
+
+### KRT-04.6 planned-query orchestration boundary — 2026-11-26
+
+**Status: IMPLEMENTED — pending local verification**  
+**Branch:** `feat/krt-04-evidence-gathering`
+
+Added `PlannedQueryExecutor` to compose classification, exact SCIP symbol resolution, bounded evidence gathering, grounded synthesis, and citation validation. It explicitly defers structured facts and conversation follow-ups to existing handlers and abstains on unsupported queries, ambiguous symbols, missing evidence, or invalid citations. Tests cover the full orchestration seam.
+
+Production `QueryEngine.handle_query` remains unchanged. The public job currently establishes company scope but not a trusted repository ID; arbitrary payload repository IDs must not be trusted, and implicitly selecting among multiple company repositories would be ambiguous. Trusted repository selection and legacy-route compatibility are required before production cutover.
