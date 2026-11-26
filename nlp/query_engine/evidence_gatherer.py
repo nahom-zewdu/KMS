@@ -137,6 +137,25 @@ class BoundedEvidenceGatherer:
         else:
             return EvidenceGatheringResult(plan, reason="declaration_target_required")
 
+        # A bare identifier can match declarations in several files. Returning
+        # all matches as ordinary evidence invites synthesis to choose one without
+        # a user-provided disambiguator. Collapse duplicate persisted copies, then
+        # fail closed when more than one distinct declaration remains.
+        unique_rows: dict[tuple[Any, ...], dict[str, Any]] = {}
+        for row in rows:
+            identity = (
+                row.get("symbol_id") or row.get("id"),
+                row.get("snapshot_id"),
+                row.get("file_path"),
+                row.get("start_byte"),
+                row.get("end_byte"),
+                row.get("qualified_name"),
+            )
+            unique_rows.setdefault(identity, row)
+        rows = list(unique_rows.values())
+        if len(rows) > 1:
+            return EvidenceGatheringResult(plan, reason="ambiguous_declaration")
+
         evidence = []
         for row in rows:
             candidate = self._symbol_candidate(plan, repository_id, row, len(evidence) + 1)
