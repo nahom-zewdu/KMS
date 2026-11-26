@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+from codebase.symbol_retriever import CodeSymbolRetriever
 from query_engine.evidence_gatherer import BoundedEvidenceGatherer
 from query_engine.planned_query import PlannedQueryExecutor
 from query_engine.query_plan import QueryScope
@@ -14,39 +15,6 @@ from query_engine.structured import answer_structured_question
 
 
 _FIXTURES = Path(__file__).parent / "fixtures" / "evaluation"
-
-
-class _FixtureDeclarations:
-    """Declaration reader populated from the checked-in duplicate-symbol sources."""
-
-    def __init__(self, rows):
-        self.rows = rows
-        self.calls = []
-
-    def search_names(self, *, company_id, repository_id, term):
-        self.calls.append((company_id, repository_id, term))
-        return [
-            row for row in self.rows
-            if row["company_id"] == company_id
-            and row["repository_id"] == repository_id
-            and row["name"] == term
-        ]
-
-    def find_qualified_name(self, *, company_id, repository_id, qualified_name):
-        return [
-            row for row in self.rows
-            if row["company_id"] == company_id
-            and row["repository_id"] == repository_id
-            and row["qualified_name"] == qualified_name
-        ]
-
-    def list_file_symbols(self, *, company_id, repository_id, file_path):
-        return [
-            row for row in self.rows
-            if row["company_id"] == company_id
-            and row["repository_id"] == repository_id
-            and row["file_path"] == file_path
-        ]
 
 
 class _UnusedOccurrences:
@@ -95,7 +63,16 @@ def _fixture_declarations():
 
 
 def test_duplicate_fixture_declarations_abstain_through_planned_query_pipeline():
-    declarations = _FixtureDeclarations(_fixture_declarations())
+    rows = _fixture_declarations()
+    db = _FixtureSupabase({
+        "repositories": [{
+            "id": "benchmark-repository",
+            "company_id": "benchmark-company",
+            "active_snapshot_id": "benchmark-snapshot-v1",
+        }],
+        "code_symbols": rows,
+    })
+    declarations = CodeSymbolRetriever(db)
     occurrences = _UnusedOccurrences()
     gatherer = BoundedEvidenceGatherer(
         source_chunks=_UnusedSourceChunks(),
@@ -119,9 +96,15 @@ def test_duplicate_fixture_declarations_abstain_through_planned_query_pipeline()
     )
 
     assert result.plan.intent.value == "declaration_discovery"
-    assert declarations.calls == [(
-        "benchmark-company", "benchmark-repository", "process_task",
-    )]
+    symbol_query = next(
+        query for table, query in db.queries if table == "code_symbols"
+    )
+    assert symbol_query.filters == {
+        "company_id": "benchmark-company",
+        "repository_id": "benchmark-repository",
+        "snapshot_id": "benchmark-snapshot-v1",
+    }
+    assert symbol_query.pattern == "%process_task%"
     assert result.reason == "ambiguous_declaration"
     assert result.answer["abstain_reason"] == "ambiguous_declaration"
     assert result.evidence == ()
@@ -141,7 +124,13 @@ class _TableQuery:
         self.filters[key] = value
         return self
 
-    def order(self, *_args, **_kwargs):
+    def ilike(self, key, pattern):
+        self.pattern = pattern
+        self.filters[f"ilike:{key}"] = pattern
+        return self
+
+    def order(self, key, **_kwargs):
+        self.orders = getattr(self, "orders", []) + [key]
         return self
 
     def limit(self, maximum):
@@ -149,10 +138,16 @@ class _TableQuery:
         return self
 
     def execute(self):
-        rows = [
-            row for row in self.rows
-            if all(row.get(key) == value for key, value in self.filters.items())
-        ]
+        rows = list(self.rows)
+        for key, value in self.filters.items():
+            if key.startswith("ilike:"):
+                column = key.split(":", 1)[1]
+                needle = value.strip("%").casefold()
+                rows = [row for row in rows if needle in str(row.get(column) or "").casefold()]
+            else:
+                rows = [row for row in rows if row.get(key) == value]
+        for column in reversed(getattr(self, "orders", [])):
+            rows.sort(key=lambda row: str(row.get(column) or ""))
         if self.maximum is not None:
             rows = rows[:self.maximum]
         return SimpleNamespace(data=rows)
