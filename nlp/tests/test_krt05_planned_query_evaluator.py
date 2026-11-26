@@ -16,14 +16,15 @@ _FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def _evidence(*, company="benchmark-company", repository="benchmark-repository",
-              snapshot="benchmark-snapshot-v1", revision="benchmark-revision-v1"):
+              snapshot="benchmark-snapshot-v1", revision="benchmark-revision-v1",
+              evidence_type="symbol", start_line=1, end_line=2):
     return EvidenceCandidate(
-        company_id=company, evidence_type="symbol", source="fixture",
+        company_id=company, evidence_type=evidence_type, source="fixture",
         record_id="symbol-1", content="function find_available",
         retriever="fixture-retriever", rank=1, repository_id=repository,
         snapshot_id=snapshot, source_revision=revision,
         file_path="catalog/products.py", content_hash="a" * 64,
-        start_line=1, end_line=2, start_byte=0, end_byte=42,
+        start_line=start_line, end_line=end_line, start_byte=0, end_byte=42,
     )
 
 
@@ -141,3 +142,39 @@ def test_dataset_carries_bounded_follow_up_context():
     assert case.expected_intent == "follow_up"
     assert case.conversation_history
     assert case.conversation_refs
+
+
+
+def test_call_site_recall_requires_occurrence_evidence_at_labeled_range():
+    dataset = load_benchmark(_FIXTURES / "evaluation" / "krt05_seed_v1.json")
+    raw = next(case.model_dump() for case in dataset.cases if case.id == "seed-call-01")
+    raw.update({
+        "review_status": "reviewed",
+        "reviewer": "test-reviewer",
+        "reviewed_on": "2026-11-26",
+    })
+    from evaluation.benchmark import BenchmarkCase
+    case = BenchmarkCase.model_validate(raw)
+    dataset = dataset.model_copy(update={"cases": (case,)})
+    evidence = _evidence(
+        evidence_type="occurrence", start_line=12, end_line=13,
+    )
+    plan = QueryPlan(
+        query=case.question,
+        intent=QueryIntent.CALL_SITE_NAVIGATION,
+        scope=QueryScope(case.scope.company_id, case.scope.repository_id),
+        terms=("find_available",),
+    )
+    result = SimpleNamespace(
+        plan=plan,
+        evidence=(evidence,),
+        answer={"claims": [{"text": "Call site.", "evidence_ids": [evidence.evidence_id]}]},
+        deferred=False,
+        reason=None,
+    )
+    report = evaluate_planned_queries(
+        dataset, FakeExecutor(result=result, calls=[]), commit="abc123",
+    )
+
+    assert report["outcomes"][0]["evidence_recall"] == 1.0
+    assert report["summary"]["passed_cases"] == 1
