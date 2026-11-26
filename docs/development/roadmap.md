@@ -1062,3 +1062,8 @@ These are fixture-integrity corrections, not human approval. All 24 seed cases r
 ### KRT-05 evaluator hardening — 2026-11-26
 
 A code review found a false-pass condition for no-evidence cases: abstention alone was insufficient if the executor still returned candidates. The evaluator now records `unexpected_evidence_for_no_evidence_case` as a hard failure, with a regression test. Local verification is pending. The latest user-reported full NLP suite before this guard was **447 passed, 8 skipped, 6 warnings, 4 subtests passed**. KRT-05 remains in acceptance review; all 24 seed cases are draft and the claim-review fixture is empty.
+
+
+### Evaluation report reproducibility — 2026-11-26
+
+The offline planned-query report now includes a SHA-256 fingerprint of the exact retrieval-label fixture bytes, alongside the benchmark dataset fingerprint. This makes a report identify both the reviewed case set and the retrieval ground-truth artifact used to score evidence recall. Regression coverage asserts that the fingerprint is emitted. Pending local verification.
