@@ -49,7 +49,7 @@ class BenchmarkScope(BenchmarkModel):
     """Trusted synthetic tenant and source version used for a case."""
 
     company_id: str = Field(min_length=1, max_length=128)
-    repository_id: str = Field(min_length=1, max_length=128)
+    repository_id: str | None = Field(default=None, max_length=128)
     snapshot_id: str = Field(min_length=1, max_length=256)
     source_revision: str = Field(min_length=1, max_length=128)
 
