@@ -26,7 +26,8 @@
 | `docs/decisions/ADR-003-deterministic-ramp.md` | Deterministic fact/selection layer |
 | `docs/decisions/ADR-004-imports-are-not-workflows.md` | Import edges are structural, not behavioral proof |
 | `docs/architecture/knowledge-reliability.md` | Current knowledge-pipeline audit and target architecture |
-| `docs/development/milestones/2026-11-22-krt-03-hybrid-retrieval-design.md` | KRT-03 retrieval design, sequence, and acceptance criteria |\n| `docs/development/milestones/2026-11-14-knowledge-reliability.md` | Specified implementation milestone and acceptance criteria |\n| this file | Task state, verified status, selected next work |
+| `docs/development/milestones/2026-11-22-krt-03-hybrid-retrieval-design.md` | KRT-03 retrieval design, sequence, and acceptance criteria |
+| `docs/development/milestones/2026-11-26-krt-04-authenticated-repository-routing.md` | KRT-04.8 authenticated repository propagation and production routing |\n| `docs/development/milestones/2026-11-14-knowledge-reliability.md` | Specified implementation milestone and acceptance criteria |\n| this file | Task state, verified status, selected next work |
 
 Do not copy pipeline diagrams into every document. Link here or to the intelligence model.
 
