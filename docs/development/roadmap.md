@@ -78,7 +78,7 @@ An `IMPORTS` edge (`A imports B`) is a structural dependency. It does not, by it
 | KRT-02 code intelligence | VERIFIED | Tree-sitter declarations and persisted SCIP occurrences; Python, Go, and TypeScript integrations exercised separately. See `docs/development/milestones/2026-11-22-krt-02-code-intelligence.md`. |
 | KRT-03 hybrid retrieval | VERIFIED — bounded deterministic retrieval foundation; semantic/fusion scope deferred | Task-aware routing, snapshot-scoped lexical source chunks, symbol lookup, SCIP occurrence retrieval, and Supabase tenant/snapshot integration are verified. Latest full NLP suite: **310 passed, 8 skipped, 6 warnings, 4 subtests passed**; router Supabase integration: **1 passed**. See the acceptance review in the KRT-03 design note. The original semantic-code-retrieval + RRF acceptance criteria were not implemented and are explicitly deferred; this milestone does not claim a complete semantic hybrid retriever. |
 | KRT-04 typed query planning and grounded synthesis | MERGED — PR #29 | Typed query planning, bounded evidence gathering, claim-level citation membership validation, and authenticated repository routing; semantic claim support remains unevaluated. |
-| KRT-05 evaluation and observability | SPECIFIED — KRT-05.1 next | Benchmark strategy documented; first implementation is versioned dataset/schema validation. |
+| KRT-05 evaluation and observability | IN_PROGRESS — KRT-05.1 | Strict benchmark contract and 24-case draft seed dataset added; awaiting local test verification and human review of labels. |
 | Reliability Batch 1 | ACCEPTED | Tenant/failure semantics hardened. Unchanged by this branch; not re-verified on 2026-09-21. |
 | Reliability Batch 2 | ACCEPTED | Redis pending-message recovery/ACK semantics hardened. Not re-verified on 2026-09-21. |
 | Reliability Batch 3 | ACCEPTED | Durable codebase-analysis lifecycle and failure propagation. Not re-verified on 2026-09-21. |
@@ -982,3 +982,13 @@ Acceptance is limited to the delivered implementation and its tests. Citation va
 **Design:** `docs/development/milestones/2026-11-26-krt-05-evaluation-design.md`
 
 The evaluation design separates retrieval relevance, hard scope/provenance gates, claim-level semantic support, abstention/routing quality, and operational measurements. It reuses the existing 33-case retrieval fixture rather than duplicating it. KRT-05.1 is limited to a versioned benchmark contract, a compact manually reviewed end-to-end seed set, and fixture-integrity validation. Live LLM calls and production telemetry are deferred.
+
+
+### KRT-05.1 implementation — 2026-11-26
+
+**Status: IMPLEMENTED — pending local verification**  
+**Branch:** `feat/krt-05-evaluation`
+
+Added `nlp/evaluation/benchmark.py` with strict Pydantic contracts, dataset loading, review-state gating, unique case validation, and referential integrity checks against the existing KRT-03 retrieval fixture. Added `nlp/tests/fixtures/evaluation/krt05_seed_v1.json` with 24 draft cases: 15 linked retrieval cases, 3 no-evidence cases, 2 ambiguity cases, 2 unsupported cases, 1 structured-fact routing case, and 1 conversation-control case. Retrieval ground truth is referenced by ID rather than copied. All cases remain `draft` and are excluded from scored aggregates until a human reviewer approves them. Added focused contract and fixture-integrity tests in `nlp/tests/test_krt05_benchmark_contract.py`.
+
+Pending user-reported verification: `uv run pytest -q tests/test_krt05_benchmark_contract.py` and the full NLP suite.
