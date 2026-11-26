@@ -68,6 +68,7 @@ func (h *QueryHandler) HandleQuery(c *gin.Context) {
 		return
 	}
 
+	queryID := uuid.New().String()
 	verifiedRepository := ""
 	if repository := strings.TrimSpace(req.Repository); repository != "" {
 		repositoryStarted := time.Now()
@@ -84,13 +85,12 @@ func (h *QueryHandler) HandleQuery(c *gin.Context) {
 			return
 		}
 		verifiedRepository = resolved
-		log.Printf("kms_query_stage stage=repository_verification duration_ms=%.3f", float64(time.Since(repositoryStarted).Microseconds())/1000)
+		log.Printf("kms_query_stage query_id=%s stage=repository_verification duration_ms=%.3f", queryID, float64(time.Since(repositoryStarted).Microseconds())/1000)
 	}
 
 	content := question
 
-	queryID := uuid.New().String()
-	log.Printf("QueryID: %s - frontend query company=%s q=%q", queryID, companyID, question)
+	log.Printf("QueryID: %s - frontend query company=%s", queryID, companyID)
 
 	// Subscribe first so we do not miss a fast answer.
 	answerChan, err := h.redis.Subscribe(c.Request.Context(), "query_results:"+queryID)
