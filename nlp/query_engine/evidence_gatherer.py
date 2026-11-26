@@ -6,7 +6,7 @@ provenance before exposing evidence to later query stages.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
 from codebase.scip_occurrence_retriever import ScipOccurrenceRetriever
@@ -221,5 +221,8 @@ class BoundedEvidenceGatherer:
     def _result(
         self, plan: QueryPlan, candidates: list[EvidenceCandidate], empty_reason: str
     ) -> EvidenceGatheringResult:
-        bounded = tuple(candidates[:self.max_results])
+        bounded = tuple(
+            replace(item, content=item.content[:self.max_content_chars])
+            for item in candidates[:self.max_results]
+        )
         return EvidenceGatheringResult(plan, bounded, None if bounded else empty_reason)
