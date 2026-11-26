@@ -225,10 +225,10 @@ Human claim/evidence annotations have a strict versioned contract and aggregate 
 **Status: IMPLEMENTED — pending local verification**
 
 Added correlation by existing query ID and structured, content-free timing logs at:
-- API repository verification, job publication, and worker round trip;
+- API repository verification, job publication, worker round trip, and timeout;
 - worker start, completion, and failure;
-- NLP repository scope, planned-query total, classification, symbol resolution, evidence gathering, synthesis, and citation validation.
+- NLP route classification, repository scope, planned-query total, symbol resolution, evidence gathering, synthesis, and citation validation.
 
-The planned-query observer is optional and isolated: observer failures cannot alter query execution. Query text was removed from the API/NLP query-received logs touched by this slice. Existing analytics persistence remains unchanged. These are structured application logs, not a metrics backend or distributed tracing system. Stage coverage is currently strongest for the KRT-04 planned route; legacy adaptive/structured routes do not yet expose equivalent per-stage breakdowns.
+The planned route also emits bounded outcome events for answered and abstained queries, including intent, reason category, and evidence count. The planned-query observer is optional and isolated: observer failures cannot alter query execution. Query text was removed from the API/NLP query-received logs touched by this slice. Existing analytics persistence remains unchanged. These are structured application logs, not a metrics backend or distributed tracing system. Stage/outcome coverage is currently strongest for the KRT-04 planned route; legacy adaptive/structured routes do not yet expose equivalent per-stage breakdowns.
 
 **Explicitly not claimed:** p50/p95 latency, cost estimates, production traffic metrics, full distributed traces, or semantic claim-support quality. Those require adequate sample sizes, configured pricing data, deployment telemetry infrastructure, and independently reviewed labels.
