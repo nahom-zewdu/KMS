@@ -97,6 +97,8 @@ def test_abstention_requires_an_explicit_reason():
 def test_reviewed_case_requires_reviewer_and_date():
     payload = json.loads(_DATASET_PATH.read_text(encoding="utf-8"))
     payload["cases"][0]["review_status"] = "reviewed"
+    payload["cases"][0]["reviewer"] = None
+    payload["cases"][0]["reviewed_on"] = None
 
     with pytest.raises(ValidationError, match="reviewed cases require"):
         BenchmarkDataset.model_validate_json(json.dumps(payload))
