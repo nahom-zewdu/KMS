@@ -27,6 +27,8 @@ def _review(**overrides):
         "rationale": "The core claim is supported.",
     }
     values.update(overrides)
+    if isinstance(values.get("assessments"), list):
+        values["assessments"] = tuple(values["assessments"])
     return ClaimReview.model_validate(values)
 
 
