@@ -61,6 +61,13 @@ class BenchmarkEvidenceReference(BenchmarkModel):
     evidence_kind: Literal["declaration", "call_site", "passage"]
 
 
+class ConversationTurn(BenchmarkModel):
+    """Bounded prior conversation context required to test follow-up routing."""
+
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=1_000)
+
+
 class BenchmarkCase(BenchmarkModel):
     """One end-to-end case with explicit expected route and review state."""
 
@@ -71,6 +78,8 @@ class BenchmarkCase(BenchmarkModel):
     answerability: Answerability
     expected_route: ExpectedRoute
     evidence: tuple[BenchmarkEvidenceReference, ...] = Field(max_length=8)
+    conversation_history: tuple[ConversationTurn, ...] = Field(max_length=8)
+    conversation_refs: tuple[str, ...] = Field(max_length=10)
     required_facts: tuple[str, ...] = Field(max_length=8)
     forbidden_claims: tuple[str, ...] = Field(max_length=8)
     expected_abstention: AbstentionCategory | None = None
@@ -96,6 +105,11 @@ class BenchmarkCase(BenchmarkModel):
                 raise ValueError("abstention cases require unanswerable status and a reason")
         elif self.expected_abstention is not None:
             raise ValueError("expected_abstention is only valid for abstain route")
+        if self.task_type == "conversation_control":
+            if not self.conversation_history or not self.conversation_refs:
+                raise ValueError("conversation-control cases require history and references")
+        elif self.conversation_history or self.conversation_refs:
+            raise ValueError("conversation context is only valid for conversation-control cases")
         if self.task_type == "no_evidence" and self.evidence:
             raise ValueError("no_evidence cases cannot declare positive evidence")
         if self.review_status == "reviewed":
