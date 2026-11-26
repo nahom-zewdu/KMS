@@ -10,6 +10,7 @@ from dataclasses import asdict, dataclass
 import hashlib
 import json
 from pathlib import Path
+from statistics import mean
 from typing import Any, Mapping, Protocol
 
 from query_engine.query_plan import QueryScope
@@ -34,6 +35,8 @@ class EvaluationOutcome:
     observed_disposition: str
     observed_route: str
     evidence_count: int
+    expected_evidence_count: int
+    evidence_recall: float | None
     provenance_valid: bool
     citation_membership_valid: bool
     abstained: bool
@@ -79,11 +82,59 @@ def _validate_citation_membership(answer: Mapping[str, Any], evidence: tuple[Any
     )
 
 
+def _load_retrieval_labels(dataset: BenchmarkDataset, path: str | Path | None):
+    fixture_path = Path(path) if path is not None else (
+        Path(__file__).resolve().parents[1] / dataset.retrieval_fixture
+    )
+    payload = json.loads(fixture_path.read_text(encoding="utf-8"))
+    return {item["id"]: item for item in payload.get("queries", [])}
+
+
+def _evidence_recall(case: BenchmarkCase, evidence: tuple[Any, ...], labels: Mapping[str, Any]):
+    expected: list[tuple[str, Any]] = []
+    for reference in case.evidence:
+        query = labels.get(reference.retrieval_case_id)
+        if query is None:
+            raise ValueError(f"{case.id}: missing retrieval label {reference.retrieval_case_id}")
+        if reference.evidence_kind == "declaration":
+            expected.extend(("declaration", (symbol, path)) for symbol in query.get("expected_symbols", [])
+                            for path in query.get("expected_paths", []))
+        else:
+            expected.extend((reference.evidence_kind, item) for item in query.get("expected_ranges", []))
+
+    if not expected:
+        return 0, None
+
+    hits = 0
+    for kind, label in expected:
+        matched = False
+        for item in evidence:
+            if kind == "declaration":
+                symbol, expected_path = label
+                symbol_text = str(item.content).split()[-1] if item.content else ""
+                matched = (
+                    item.evidence_type == "symbol"
+                    and item.file_path == expected_path
+                    and (symbol_text == symbol or symbol_text.endswith("." + symbol))
+                )
+            else:
+                matched = (
+                    item.file_path == label["file_path"]
+                    and item.start_line <= label["end_line"]
+                    and item.end_line >= label["start_line"]
+                )
+            if matched:
+                break
+        hits += int(matched)
+    return len(expected), hits / len(expected)
+
+
 def evaluate_planned_queries(
     dataset: BenchmarkDataset,
     executor: PlannedExecutor,
     *,
     commit: str,
+    retrieval_fixture_path: str | Path | None = None,
     environment: str = "synthetic-offline",
 ) -> dict[str, Any]:
     """Run reviewed cases and return a deterministic, source-free report.
@@ -96,6 +147,7 @@ def evaluate_planned_queries(
     if not environment or len(environment) > 128:
         raise ValueError("environment must be a non-empty bounded label")
 
+    labels = _load_retrieval_labels(dataset, retrieval_fixture_path)
     outcomes: list[EvaluationOutcome] = []
     excluded = Counter()
     for case in dataset.cases:
@@ -118,6 +170,7 @@ def evaluate_planned_queries(
         answer = getattr(result, "answer", None) or {}
         route = _observed_route(result)
         provenance_valid = _validate_provenance(case, evidence)
+        expected_evidence_count, evidence_recall = _evidence_recall(case, evidence, labels)
         citation_valid = (
             _validate_citation_membership(answer, evidence)
             if route == "planned_query" else not bool(answer.get("claims"))
@@ -132,7 +185,7 @@ def evaluate_planned_queries(
             failures.append("evidence_provenance_mismatch")
         if not citation_valid:
             failures.append("citation_membership_mismatch")
-        if case.expected_route == "planned_query" and not evidence:
+        if case.expected_route == "planned_query" and (evidence_recall is None or evidence_recall == 0):
             failures.append("expected_evidence_missing")
         if case.expected_route == "abstain" and not abstained:
             failures.append("expected_abstention_missing")
@@ -156,6 +209,8 @@ def evaluate_planned_queries(
             observed_disposition=str(plan.disposition.value),
             observed_route=route,
             evidence_count=len(evidence),
+            expected_evidence_count=expected_evidence_count,
+            evidence_recall=evidence_recall,
             provenance_valid=provenance_valid,
             citation_membership_valid=citation_valid,
             abstained=abstained,
@@ -187,6 +242,9 @@ def evaluate_planned_queries(
             "excluded_cases": sum(excluded.values()),
             "excluded_by_review_status": dict(sorted(excluded.items())),
             "scope_violations": sum(not item.provenance_valid for item in outcomes),
+            "mean_evidence_recall": mean(
+                item.evidence_recall for item in outcomes if item.evidence_recall is not None
+            ) if any(item.evidence_recall is not None for item in outcomes) else None,
             "citation_membership_violations": sum(
                 not item.citation_membership_valid for item in outcomes
             ),
