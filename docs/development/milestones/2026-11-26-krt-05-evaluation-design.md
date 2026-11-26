@@ -249,3 +249,10 @@ This verifies the implemented test coverage, not production telemetry behavior. 
 ## 11. Human review execution protocol
 
 The checked-in seed currently contains 24 cases distributed as 5 declaration, 5 call-site, 5 passage, 3 no-evidence, 2 ambiguous-scope, 2 unsupported-intent, 1 structured-fact, and 1 conversation-control case. This is the actual fixture composition; it differs from the initial target distribution above. See [KRT-05 Seed Dataset — Human Review Protocol](2026-11-26-krt-05-human-review-protocol.md) for the per-case approval procedure. No case should be marked reviewed until its evidence, scope, answerability, expected route, required facts, and abstention expectation have been independently checked.
+
+
+### KRT-05 evaluator hardening — 2026-11-26
+
+**Status: IMPLEMENTED — pending local verification**
+
+A review of the evaluator found that a reviewed `no_evidence` case could pass while the executor returned evidence, provided the answer abstained and the returned candidate did not violate the scope checks. Added an explicit hard failure for any evidence returned on a no-evidence case, plus a regression test. This is a benchmark correctness guard; it does not change query runtime behavior or create human-reviewed labels.
