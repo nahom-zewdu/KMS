@@ -44,7 +44,7 @@ _ENGINEERING_CONTEXT = re.compile(
 _PATH = re.compile(
     r"(?<![\w.-])(?:[\w@.+-]+/)*[\w@.+-]+\."
     r"(?:py|pyi|go|js|jsx|ts|tsx|java|rs|rb|php|sql|yaml|yml|json|toml|md)"
-    r"(?![\w.-])", re.IGNORECASE)
+    r"(?![\w-]|\.(?=\w))", re.IGNORECASE)
 _BACKTICK = re.compile(r"\x60([^\x60]{1,256})\x60")
 _QUALIFIED = re.compile(r"\b[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+\b")
 _IDENTIFIER = re.compile(r"\b[A-Za-z_]\w{1,255}\b")
