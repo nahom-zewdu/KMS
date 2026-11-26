@@ -86,10 +86,24 @@ def _extract(
         MAX_IDENTIFIER_COUNT,
     )
     explicit = [match.group(1).strip() for match in _BACKTICK.finditer(query)]
+    path_tokens = {
+        part.casefold()
+        for path in paths
+        for part in re.split(r"[/\\.]", path)
+        if part
+    }
     identifiers = _unique_bounded(
-        [*explicit, *qualified, *(token for token in _IDENTIFIER.findall(query)
-          if "_" in token or any(char.isupper() for char in token[1:]))],
-        MAX_IDENTIFIER_COUNT)
+        [
+            *explicit,
+            *qualified,
+            *(
+                token for token in _IDENTIFIER.findall(query)
+                if token.casefold() not in path_tokens
+                and ("_" in token or any(char.isupper() for char in token[1:]))
+            ),
+        ],
+        MAX_IDENTIFIER_COUNT,
+    )
     terms = _unique_bounded(
         (word for word in _WORD.findall(query) if word.casefold() not in _STOP_WORDS),
         MAX_TERM_COUNT)
