@@ -118,8 +118,10 @@ def _evidence_recall(case: BenchmarkCase, evidence: tuple[Any, ...], labels: Map
                     and (symbol_text == symbol or symbol_text.endswith("." + symbol))
                 )
             else:
+                required_type = "occurrence" if kind == "call_site" else "code_chunk"
                 matched = (
-                    item.file_path == label["file_path"]
+                    item.evidence_type == required_type
+                    and item.file_path == label["file_path"]
                     and item.start_line <= label["end_line"]
                     and item.end_line >= label["start_line"]
                 )
