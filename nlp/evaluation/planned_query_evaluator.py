@@ -30,6 +30,7 @@ class EvaluationOutcome:
 
     case_id: str
     task_type: str
+    answerability: str
     expected_route: str
     observed_intent: str
     observed_disposition: str
@@ -189,6 +190,8 @@ def evaluate_planned_queries(
             failures.append("citation_membership_mismatch")
         if case.expected_route == "planned_query" and (evidence_recall is None or evidence_recall == 0):
             failures.append("expected_evidence_missing")
+        elif case.expected_route == "planned_query" and evidence_recall < 1.0:
+            failures.append("expected_evidence_incomplete")
         if case.expected_route == "abstain" and not abstained:
             failures.append("expected_abstention_missing")
         if case.expected_route == "abstain" and abstained:
@@ -206,6 +209,7 @@ def evaluate_planned_queries(
         outcomes.append(EvaluationOutcome(
             case_id=case.id,
             task_type=case.task_type,
+            answerability=case.answerability,
             expected_route=case.expected_route,
             observed_intent=str(plan.intent.value),
             observed_disposition=str(plan.disposition.value),
@@ -222,6 +226,26 @@ def evaluate_planned_queries(
 
     route_counts = Counter(item.observed_route for item in outcomes)
     task_counts = Counter(item.task_type for item in outcomes)
+    route_confusion = Counter(
+        (item.expected_route, item.observed_route) for item in outcomes
+    )
+    task_metrics: dict[str, Any] = {}
+    for task_type in sorted(task_counts):
+        task_outcomes = [item for item in outcomes if item.task_type == task_type]
+        recalls = [item.evidence_recall for item in task_outcomes if item.evidence_recall is not None]
+        task_metrics[task_type] = {
+            "cases": len(task_outcomes),
+            "passed_cases": sum(item.passed for item in task_outcomes),
+            "failed_cases": sum(not item.passed for item in task_outcomes),
+            "mean_evidence_recall": mean(recalls) if recalls else None,
+            "route_counts": dict(sorted(Counter(item.observed_route for item in task_outcomes).items())),
+        }
+    answerable = [item for item in outcomes if item.answerability == "answerable"]
+    partially_answerable = [item for item in outcomes if item.answerability == "partially_answerable"]
+    unanswerable = [item for item in outcomes if item.answerability == "unanswerable"]
+    false_abstentions = sum(item.observed_route == "abstain" for item in answerable + partially_answerable)
+    correct_abstentions = sum(item.observed_route == "abstain" for item in unanswerable)
+    incorrect_unanswerable_answers = sum(item.observed_route != "abstain" for item in unanswerable)
     return {
         "report_schema_version": 1,
         "benchmark": {
@@ -252,6 +276,19 @@ def evaluate_planned_queries(
             ),
             "route_counts": dict(sorted(route_counts.items())),
             "task_counts": dict(sorted(task_counts.items())),
+            "route_confusion_matrix": {
+                f"{expected}->{observed}": count
+                for (expected, observed), count in sorted(route_confusion.items())
+            },
+            "per_task": task_metrics,
+            "abstention": {
+                "answerable_cases": len(answerable),
+                "partially_answerable_cases": len(partially_answerable),
+                "unanswerable_cases": len(unanswerable),
+                "false_abstentions": false_abstentions,
+                "correct_abstentions": correct_abstentions,
+                "incorrect_answers_on_unanswerable_cases": incorrect_unanswerable_answers,
+            },
         },
         "semantic_claim_support": {
             "status": "not_evaluated",
