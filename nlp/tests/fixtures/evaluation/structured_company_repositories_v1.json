@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "companies": {
+    "benchmark-company": {
+      "repositories": [
+        {
+          "id": "repo-catalog",
+          "full_name": "benchmark/catalog"
+        },
+        {
+          "id": "repo-billing",
+          "full_name": "benchmark/billing"
+        }
+      ]
+    }
+  }
+}
