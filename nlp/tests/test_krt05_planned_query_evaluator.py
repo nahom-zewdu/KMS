@@ -38,7 +38,9 @@ def _reviewed_dataset():
     })
     from evaluation.benchmark import BenchmarkCase
     case = BenchmarkCase.model_validate(first)
-    return dataset.model_copy(update={"cases": (case,)}), case
+    return dataset.model_copy(update={
+        "cases": (case, *dataset.cases[1:]),
+    }), case
 
 
 @dataclass
@@ -122,7 +124,11 @@ def test_draft_only_dataset_is_reported_as_excluded_without_running_executor():
 
 def test_report_writer_emits_stable_sorted_json(tmp_path):
     dataset, _ = _reviewed_dataset()
-    executor = FakeExecutor(result=None, calls=[])
+    case = dataset.scored_cases[0]
+    executor = FakeExecutor(
+        result=_result(case, [], {"claims": [], "abstain_reason": "no_matching_evidence"}),
+        calls=[],
+    )
     report = evaluate_planned_queries(dataset, executor, commit="abc123")
     path = tmp_path / "report.json"
 
