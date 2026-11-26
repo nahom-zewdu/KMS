@@ -8,6 +8,9 @@ completion if Groq rejects the generated JSON during server-side validation.
 import os
 import json
 import logging
+import time
+
+from evaluation.run_capture import record_llm_run
 from openai import OpenAI, BadRequestError
 from functools import lru_cache
 from dotenv import load_dotenv
@@ -50,6 +53,7 @@ def llm_infer(
     specific case, retry once without response_format and rely on the explicit
     JSON-only instruction in the prompt. Other 400 errors are still raised.
     """
+    started_at = time.perf_counter()
     json_prompt = (
         "Return ONLY a valid JSON object. Do not include markdown, code fences, "
         "comments, or explanatory text.\n\n"
@@ -76,7 +80,14 @@ def llm_infer(
         content = response.choices[0].message.content
         if not content:
             raise RuntimeError("LLM returned an empty response")
-        return content.strip()
+        content = content.strip()
+        record_llm_run(
+            prompt=prompt, output=content, model=model, temperature=temperature,
+            max_tokens=max_tokens, duration_ms=(time.perf_counter() - started_at) * 1000,
+            status="success", usage=getattr(response, "usage", None).__dict__
+            if getattr(response, "usage", None) is not None else None,
+        )
+        return content
 
     except BadRequestError as e:
         if not _is_json_validation_error(e):
@@ -110,12 +121,28 @@ def llm_infer(
 
             content = content.strip()
             json.loads(content)
+            record_llm_run(
+                prompt=prompt, output=content, model=model, temperature=temperature,
+                max_tokens=max_tokens, duration_ms=(time.perf_counter() - started_at) * 1000,
+                status="success", usage=getattr(response, "usage", None).__dict__
+                if getattr(response, "usage", None) is not None else None,
+            )
             return content
-        except Exception:
+        except Exception as fallback_error:
+            record_llm_run(
+                prompt=prompt, output=None, model=model, temperature=temperature,
+                max_tokens=max_tokens, duration_ms=(time.perf_counter() - started_at) * 1000,
+                status="error",
+            )
             logger.exception("LLM JSON fallback failed")
             raise
 
     except Exception as e:
+        record_llm_run(
+            prompt=prompt, output=None, model=model, temperature=temperature,
+            max_tokens=max_tokens, duration_ms=(time.perf_counter() - started_at) * 1000,
+            status="error",
+        )
         logger.exception("LLM ERROR: %s", e)
         raise
 
