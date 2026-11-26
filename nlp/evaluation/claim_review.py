@@ -39,7 +39,7 @@ class ClaimReview(ReviewModel):
     overall_grade: SupportGrade
     status: Literal["draft", "reviewed", "rejected"] = "draft"
     reviewer: str | None = Field(default=None, max_length=128)
-    reviewed_on: str | None = Field(default=None, pattern=r"^\\d{4}-\\d{2}-\\d{2}$")
+    reviewed_on: str | None = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     rationale: str = Field(min_length=1, max_length=1_000)
 
     @model_validator(mode="after")
@@ -60,7 +60,7 @@ class ClaimReviewDataset(ReviewModel):
 
     schema_version: Literal[1]
     dataset_id: str = Field(min_length=1, max_length=100)
-    dataset_version: str = Field(pattern=r"^\\d+\\.\\d+\\.\\d+$")
+    dataset_version: str = Field(pattern=r"^\d+\.\d+\.\d+$")
     reviews: tuple[ClaimReview, ...] = Field(max_length=2_000)
 
     @model_validator(mode="after")
