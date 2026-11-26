@@ -547,11 +547,11 @@
         "source_revision": "benchmark-revision-v1"
       },
       "answerability": "unanswerable",
-      "expected_route": "legacy_unsupported",
+      "expected_route": "abstain",
       "evidence": [],
       "required_facts": [],
       "forbidden_claims": [],
-      "expected_abstention": null,
+      "expected_abstention": "unsupported_intent",
       "review_status": "draft",
       "reviewer": null,
       "reviewed_on": null,
@@ -568,11 +568,11 @@
         "source_revision": "benchmark-revision-v1"
       },
       "answerability": "unanswerable",
-      "expected_route": "legacy_unsupported",
+      "expected_route": "abstain",
       "evidence": [],
       "required_facts": [],
       "forbidden_claims": [],
-      "expected_abstention": null,
+      "expected_abstention": "unsupported_intent",
       "review_status": "draft",
       "reviewer": null,
       "reviewed_on": null,
@@ -622,7 +622,20 @@
       "review_status": "draft",
       "reviewer": null,
       "reviewed_on": null,
-      "rationale": "Draft conversation-control case; requires a preceding turn to be included in the final harness."
+      "rationale": "Draft conversation-control case; requires a preceding turn to be included in the final harness.",
+      "conversation_history": [
+        {
+          "role": "user",
+          "content": "Explain the billing module."
+        },
+        {
+          "role": "assistant",
+          "content": "The billing module calculates invoice totals."
+        }
+      ],
+      "conversation_refs": [
+        "seed-context-billing"
+      ]
     }
   ]
 }
