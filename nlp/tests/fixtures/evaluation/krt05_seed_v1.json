@@ -1,0 +1,628 @@
+{
+  "schema_version": 1,
+  "dataset_id": "kms-krt05-end-to-end-seed",
+  "dataset_version": "1.0.0",
+  "description": "Draft end-to-end KRT-04 evaluation seed. Cases are excluded from aggregate scoring until independently reviewed and approved.",
+  "retrieval_fixture": "tests/fixtures/retrieval/retrieval_tasks_v1.json",
+  "default_scope": {
+    "company_id": "benchmark-company",
+    "repository_id": "benchmark-repository",
+    "snapshot_id": "benchmark-snapshot-v1",
+    "source_revision": "benchmark-revision-v1"
+  },
+  "cases": [
+    {
+      "id": "seed-decl-01",
+      "task_type": "declaration_discovery",
+      "question": "Where is product availability checked?",
+      "scope": {
+        "company_id": "benchmark-company",
+        "repository_id": "benchmark-repository",
+        "snapshot_id": "benchmark-snapshot-v1",
+        "source_revision": "benchmark-revision-v1"
+      },
+      "answerability": "answerable",
+      "expected_route": "planned_query",
+      "evidence": [
+        {
+          "retrieval_case_id": "decl-01",
+          "evidence_kind": "declaration"
+        }
+      ],
+      "required_facts": [
+        "Identify the declaration find_available in catalog/products.py."
+      ],
+      "forbidden_claims": [],
+      "expected_abstention": null,
+      "review_status": "draft",
+      "reviewer": null,
+      "reviewed_on": null,
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring."
+    },
+    {
+      "id": "seed-decl-02",
+      "task_type": "declaration_discovery",
+      "question": "Where is the product reservation operation defined?",
+      "scope": {
+        "company_id": "benchmark-company",
+        "repository_id": "benchmark-repository",
+        "snapshot_id": "benchmark-snapshot-v1",
+        "source_revision": "benchmark-revision-v1"
+      },
+      "answerability": "answerable",
+      "expected_route": "planned_query",
+      "evidence": [
+        {
+          "retrieval_case_id": "decl-02",
+          "evidence_kind": "declaration"
+        }
+      ],
+      "required_facts": [
+        "Identify the declaration reserve in catalog/products.py."
+      ],
+      "forbidden_claims": [],
+      "expected_abstention": null,
+      "review_status": "draft",
+      "reviewer": null,
+      "reviewed_on": null,
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring."
+    },
+    {
+      "id": "seed-decl-03",
+      "task_type": "declaration_discovery",
+      "question": "Where is SKU normalization implemented?",
+      "scope": {
+        "company_id": "benchmark-company",
+        "repository_id": "benchmark-repository",
+        "snapshot_id": "benchmark-snapshot-v1",
+        "source_revision": "benchmark-revision-v1"
+      },
+      "answerability": "answerable",
+      "expected_route": "planned_query",
+      "evidence": [
+        {
+          "retrieval_case_id": "decl-03",
+          "evidence_kind": "declaration"
+        }
+      ],
+      "required_facts": [
+        "Identify the declaration normalize_sku in catalog/search.py."
+      ],
+      "forbidden_claims": [],
+      "expected_abstention": null,
+      "review_status": "draft",
+      "reviewer": null,
+      "reviewed_on": null,
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring."
+    },
+    {
+      "id": "seed-decl-04",
+      "task_type": "declaration_discovery",
+      "question": "Where is the invoice subtotal calculated?",
+      "scope": {
+        "company_id": "benchmark-company",
+        "repository_id": "benchmark-repository",
+        "snapshot_id": "benchmark-snapshot-v1",
+        "source_revision": "benchmark-revision-v1"
+      },
+      "answerability": "answerable",
+      "expected_route": "planned_query",
+      "evidence": [
+        {
+          "retrieval_case_id": "decl-04",
+          "evidence_kind": "declaration"
+        }
+      ],
+      "required_facts": [
+        "Identify the declaration calculate_subtotal in billing/invoice.py."
+      ],
+      "forbidden_claims": [],
+      "expected_abstention": null,
+      "review_status": "draft",
+      "reviewer": null,
+      "reviewed_on": null,
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring."
+    },
+    {
+      "id": "seed-decl-05",
+      "task_type": "declaration_discovery",
+      "question": "Where is invoice tax calculated?",
+      "scope": {
+        "company_id": "benchmark-company",
+        "repository_id": "benchmark-repository",
+        "snapshot_id": "benchmark-snapshot-v1",
+        "source_revision": "benchmark-revision-v1"
+      },
+      "answerability": "answerable",
+      "expected_route": "planned_query",
+      "evidence": [
+        {
+          "retrieval_case_id": "decl-05",
+          "evidence_kind": "declaration"
+        }
+      ],
+      "required_facts": [
+        "Identify the declaration calculate_tax in billing/invoice.py."
+      ],
+      "forbidden_claims": [],
+      "expected_abstention": null,
+      "review_status": "draft",
+      "reviewer": null,
+      "reviewed_on": null,
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring."
+    },
+    {
+      "id": "seed-call-01",
+      "task_type": "call_site_navigation",
+      "question": "Which code checks availability before reserving a product?",
+      "scope": {
+        "company_id": "benchmark-company",
+        "repository_id": "benchmark-repository",
+        "snapshot_id": "benchmark-snapshot-v1",
+        "source_revision": "benchmark-revision-v1"
+      },
+      "answerability": "answerable",
+      "expected_route": "planned_query",
+      "evidence": [
+        {
+          "retrieval_case_id": "call-01",
+          "evidence_kind": "call_site"
+        }
+      ],
+      "required_facts": [
+        "Identify the call-site context overlapping the expected range in catalog/products.py."
+      ],
+      "forbidden_claims": [],
+      "expected_abstention": null,
+      "review_status": "draft",
+      "reviewer": null,
+      "reviewed_on": null,
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring."
+    },
+    {
+      "id": "seed-call-02",
+      "task_type": "call_site_navigation",
+      "question": "Where does catalog search normalize an SKU before checking availability?",
+      "scope": {
+        "company_id": "benchmark-company",
+        "repository_id": "benchmark-repository",
+        "snapshot_id": "benchmark-snapshot-v1",
+        "source_revision": "benchmark-revision-v1"
+      },
+      "answerability": "answerable",
+      "expected_route": "planned_query",
+      "evidence": [
+        {
+          "retrieval_case_id": "call-02",
+          "evidence_kind": "call_site"
+        }
+      ],
+      "required_facts": [
+        "Identify the call-site context overlapping the expected range in catalog/search.py."
+      ],
+      "forbidden_claims": [],
+      "expected_abstention": null,
+      "review_status": "draft",
+      "reviewer": null,
+      "reviewed_on": null,
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring."
+    },
+    {
+      "id": "seed-call-03",
+      "task_type": "call_site_navigation",
+      "question": "Where are alternative product recommendations normalized?",
+      "scope": {
+        "company_id": "benchmark-company",
+        "repository_id": "benchmark-repository",
+        "snapshot_id": "benchmark-snapshot-v1",
+        "source_revision": "benchmark-revision-v1"
+      },
+      "answerability": "answerable",
+      "expected_route": "planned_query",
+      "evidence": [
+        {
+          "retrieval_case_id": "call-03",
+          "evidence_kind": "call_site"
+        }
+      ],
+      "required_facts": [
+        "Identify the call-site context overlapping the expected range in catalog/search.py."
+      ],
+      "forbidden_claims": [],
+      "expected_abstention": null,
+      "review_status": "draft",
+      "reviewer": null,
+      "reviewed_on": null,
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring."
+    },
+    {
+      "id": "seed-call-04",
+      "task_type": "call_site_navigation",
+      "question": "Where does invoice construction call the subtotal calculator?",
+      "scope": {
+        "company_id": "benchmark-company",
+        "repository_id": "benchmark-repository",
+        "snapshot_id": "benchmark-snapshot-v1",
+        "source_revision": "benchmark-revision-v1"
+      },
+      "answerability": "answerable",
+      "expected_route": "planned_query",
+      "evidence": [
+        {
+          "retrieval_case_id": "call-04",
+          "evidence_kind": "call_site"
+        }
+      ],
+      "required_facts": [
+        "Identify the call-site context overlapping the expected range in billing/invoice.py."
+      ],
+      "forbidden_claims": [],
+      "expected_abstention": null,
+      "review_status": "draft",
+      "reviewer": null,
+      "reviewed_on": null,
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring."
+    },
+    {
+      "id": "seed-call-05",
+      "task_type": "call_site_navigation",
+      "question": "Where does invoice construction calculate tax from the subtotal?",
+      "scope": {
+        "company_id": "benchmark-company",
+        "repository_id": "benchmark-repository",
+        "snapshot_id": "benchmark-snapshot-v1",
+        "source_revision": "benchmark-revision-v1"
+      },
+      "answerability": "answerable",
+      "expected_route": "planned_query",
+      "evidence": [
+        {
+          "retrieval_case_id": "call-05",
+          "evidence_kind": "call_site"
+        }
+      ],
+      "required_facts": [
+        "Identify the call-site context overlapping the expected range in billing/invoice.py."
+      ],
+      "forbidden_claims": [],
+      "expected_abstention": null,
+      "review_status": "draft",
+      "reviewer": null,
+      "reviewed_on": null,
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring."
+    },
+    {
+      "id": "seed-passage-01",
+      "task_type": "passage_retrieval",
+      "question": "What happens when a product is unavailable for reservation?",
+      "scope": {
+        "company_id": "benchmark-company",
+        "repository_id": "benchmark-repository",
+        "snapshot_id": "benchmark-snapshot-v1",
+        "source_revision": "benchmark-revision-v1"
+      },
+      "answerability": "answerable",
+      "expected_route": "planned_query",
+      "evidence": [
+        {
+          "retrieval_case_id": "passage-01",
+          "evidence_kind": "passage"
+        }
+      ],
+      "required_facts": [
+        "Explain the behavior supported by the labeled range in catalog/products.py."
+      ],
+      "forbidden_claims": [],
+      "expected_abstention": null,
+      "review_status": "draft",
+      "reviewer": null,
+      "reviewed_on": null,
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring."
+    },
+    {
+      "id": "seed-passage-02",
+      "task_type": "passage_retrieval",
+      "question": "How is an SKU normalized?",
+      "scope": {
+        "company_id": "benchmark-company",
+        "repository_id": "benchmark-repository",
+        "snapshot_id": "benchmark-snapshot-v1",
+        "source_revision": "benchmark-revision-v1"
+      },
+      "answerability": "answerable",
+      "expected_route": "planned_query",
+      "evidence": [
+        {
+          "retrieval_case_id": "passage-02",
+          "evidence_kind": "passage"
+        }
+      ],
+      "required_facts": [
+        "Explain the behavior supported by the labeled range in catalog/search.py."
+      ],
+      "forbidden_claims": [],
+      "expected_abstention": null,
+      "review_status": "draft",
+      "reviewer": null,
+      "reviewed_on": null,
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring."
+    },
+    {
+      "id": "seed-passage-03",
+      "task_type": "passage_retrieval",
+      "question": "How is the invoice subtotal computed?",
+      "scope": {
+        "company_id": "benchmark-company",
+        "repository_id": "benchmark-repository",
+        "snapshot_id": "benchmark-snapshot-v1",
+        "source_revision": "benchmark-revision-v1"
+      },
+      "answerability": "answerable",
+      "expected_route": "planned_query",
+      "evidence": [
+        {
+          "retrieval_case_id": "passage-03",
+          "evidence_kind": "passage"
+        }
+      ],
+      "required_facts": [
+        "Explain the behavior supported by the labeled range in billing/invoice.py."
+      ],
+      "forbidden_claims": [],
+      "expected_abstention": null,
+      "review_status": "draft",
+      "reviewer": null,
+      "reviewed_on": null,
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring."
+    },
+    {
+      "id": "seed-passage-04",
+      "task_type": "passage_retrieval",
+      "question": "How is tax rounded for an invoice?",
+      "scope": {
+        "company_id": "benchmark-company",
+        "repository_id": "benchmark-repository",
+        "snapshot_id": "benchmark-snapshot-v1",
+        "source_revision": "benchmark-revision-v1"
+      },
+      "answerability": "answerable",
+      "expected_route": "planned_query",
+      "evidence": [
+        {
+          "retrieval_case_id": "passage-04",
+          "evidence_kind": "passage"
+        }
+      ],
+      "required_facts": [
+        "Explain the behavior supported by the labeled range in billing/invoice.py."
+      ],
+      "forbidden_claims": [],
+      "expected_abstention": null,
+      "review_status": "draft",
+      "reviewer": null,
+      "reviewed_on": null,
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring."
+    },
+    {
+      "id": "seed-passage-05",
+      "task_type": "passage_retrieval",
+      "question": "What condition makes a payment authorization invalid?",
+      "scope": {
+        "company_id": "benchmark-company",
+        "repository_id": "benchmark-repository",
+        "snapshot_id": "benchmark-snapshot-v1",
+        "source_revision": "benchmark-revision-v1"
+      },
+      "answerability": "answerable",
+      "expected_route": "planned_query",
+      "evidence": [
+        {
+          "retrieval_case_id": "passage-05",
+          "evidence_kind": "passage"
+        }
+      ],
+      "required_facts": [
+        "Explain the behavior supported by the labeled range in billing/payment.py."
+      ],
+      "forbidden_claims": [],
+      "expected_abstention": null,
+      "review_status": "draft",
+      "reviewer": null,
+      "reviewed_on": null,
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring."
+    },
+    {
+      "id": "seed-no-evidence-1",
+      "task_type": "no_evidence",
+      "question": "Where is the Kubernetes deployment reconciler implemented?",
+      "scope": {
+        "company_id": "benchmark-company",
+        "repository_id": "benchmark-repository",
+        "snapshot_id": "benchmark-snapshot-v1",
+        "source_revision": "benchmark-revision-v1"
+      },
+      "answerability": "unanswerable",
+      "expected_route": "abstain",
+      "evidence": [],
+      "required_facts": [],
+      "forbidden_claims": [],
+      "expected_abstention": "no_evidence",
+      "review_status": "draft",
+      "reviewer": null,
+      "reviewed_on": null,
+      "rationale": "Draft no-evidence case; expected to abstain after the fixture retrievers return no relevant evidence."
+    },
+    {
+      "id": "seed-no-evidence-2",
+      "task_type": "no_evidence",
+      "question": "Where is the invoice chargeback dispute workflow implemented?",
+      "scope": {
+        "company_id": "benchmark-company",
+        "repository_id": "benchmark-repository",
+        "snapshot_id": "benchmark-snapshot-v1",
+        "source_revision": "benchmark-revision-v1"
+      },
+      "answerability": "unanswerable",
+      "expected_route": "abstain",
+      "evidence": [],
+      "required_facts": [],
+      "forbidden_claims": [],
+      "expected_abstention": "no_evidence",
+      "review_status": "draft",
+      "reviewer": null,
+      "reviewed_on": null,
+      "rationale": "Draft no-evidence case; expected to abstain after the fixture retrievers return no relevant evidence."
+    },
+    {
+      "id": "seed-no-evidence-3",
+      "task_type": "no_evidence",
+      "question": "Where is the password reset email token expiry policy implemented?",
+      "scope": {
+        "company_id": "benchmark-company",
+        "repository_id": "benchmark-repository",
+        "snapshot_id": "benchmark-snapshot-v1",
+        "source_revision": "benchmark-revision-v1"
+      },
+      "answerability": "unanswerable",
+      "expected_route": "abstain",
+      "evidence": [],
+      "required_facts": [],
+      "forbidden_claims": [],
+      "expected_abstention": "no_evidence",
+      "review_status": "draft",
+      "reviewer": null,
+      "reviewed_on": null,
+      "rationale": "Draft no-evidence case; expected to abstain after the fixture retrievers return no relevant evidence."
+    },
+    {
+      "id": "seed-ambiguous-repository",
+      "task_type": "ambiguous_scope",
+      "question": "Explain the billing workflow without selecting which active repository contains it.",
+      "scope": {
+        "company_id": "benchmark-company",
+        "repository_id": "benchmark-repository",
+        "snapshot_id": "benchmark-snapshot-v1",
+        "source_revision": "benchmark-revision-v1"
+      },
+      "answerability": "unanswerable",
+      "expected_route": "abstain",
+      "evidence": [],
+      "required_facts": [],
+      "forbidden_claims": [],
+      "expected_abstention": "ambiguous_repository",
+      "review_status": "draft",
+      "reviewer": null,
+      "reviewed_on": null,
+      "rationale": "Draft ambiguity case; multiple active repositories must not be silently selected."
+    },
+    {
+      "id": "seed-ambiguous-symbol",
+      "task_type": "ambiguous_scope",
+      "question": "Find the declaration of process in the repository where multiple declarations share that identifier.",
+      "scope": {
+        "company_id": "benchmark-company",
+        "repository_id": "benchmark-repository",
+        "snapshot_id": "benchmark-snapshot-v1",
+        "source_revision": "benchmark-revision-v1"
+      },
+      "answerability": "unanswerable",
+      "expected_route": "abstain",
+      "evidence": [],
+      "required_facts": [],
+      "forbidden_claims": [],
+      "expected_abstention": "ambiguous_symbol",
+      "review_status": "draft",
+      "reviewer": null,
+      "reviewed_on": null,
+      "rationale": "Draft ambiguity case; symbol resolution must not choose among multiple exact candidates."
+    },
+    {
+      "id": "seed-unsupported-ownership",
+      "task_type": "unsupported",
+      "question": "Who owns the billing service and approves changes to it?",
+      "scope": {
+        "company_id": "benchmark-company",
+        "repository_id": "benchmark-repository",
+        "snapshot_id": "benchmark-snapshot-v1",
+        "source_revision": "benchmark-revision-v1"
+      },
+      "answerability": "unanswerable",
+      "expected_route": "legacy_unsupported",
+      "evidence": [],
+      "required_facts": [],
+      "forbidden_claims": [],
+      "expected_abstention": null,
+      "review_status": "draft",
+      "reviewer": null,
+      "reviewed_on": null,
+      "rationale": "Ownership/approval claim has no labeled evidence in this synthetic source fixture."
+    },
+    {
+      "id": "seed-unsupported-runtime",
+      "task_type": "unsupported",
+      "question": "What happens at runtime when the payment provider is unavailable?",
+      "scope": {
+        "company_id": "benchmark-company",
+        "repository_id": "benchmark-repository",
+        "snapshot_id": "benchmark-snapshot-v1",
+        "source_revision": "benchmark-revision-v1"
+      },
+      "answerability": "unanswerable",
+      "expected_route": "legacy_unsupported",
+      "evidence": [],
+      "required_facts": [],
+      "forbidden_claims": [],
+      "expected_abstention": null,
+      "review_status": "draft",
+      "reviewer": null,
+      "reviewed_on": null,
+      "rationale": "Runtime behavior is not established by the static source evidence in this fixture."
+    },
+    {
+      "id": "seed-structured-count",
+      "task_type": "structured_fact",
+      "question": "How many repositories are connected to this company?",
+      "scope": {
+        "company_id": "benchmark-company",
+        "repository_id": "benchmark-repository",
+        "snapshot_id": "benchmark-snapshot-v1",
+        "source_revision": "benchmark-revision-v1"
+      },
+      "answerability": "answerable",
+      "expected_route": "structured_handler",
+      "evidence": [],
+      "required_facts": [
+        "Return the exact repository count from the authoritative structured data."
+      ],
+      "forbidden_claims": [],
+      "expected_abstention": null,
+      "review_status": "draft",
+      "reviewer": null,
+      "reviewed_on": null,
+      "rationale": "Draft routing control case; should use structured data rather than code retrieval."
+    },
+    {
+      "id": "seed-followup-context",
+      "task_type": "conversation_control",
+      "question": "And where is that implemented?",
+      "scope": {
+        "company_id": "benchmark-company",
+        "repository_id": "benchmark-repository",
+        "snapshot_id": "benchmark-snapshot-v1",
+        "source_revision": "benchmark-revision-v1"
+      },
+      "answerability": "partially_answerable",
+      "expected_route": "conversation_handler",
+      "evidence": [],
+      "required_facts": [
+        "Resolve only against an explicit prior conversation reference or ask for clarification."
+      ],
+      "forbidden_claims": [],
+      "expected_abstention": null,
+      "review_status": "draft",
+      "reviewer": null,
+      "reviewed_on": null,
+      "rationale": "Draft conversation-control case; requires a preceding turn to be included in the final harness."
+    }
+  ]
+}
