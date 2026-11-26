@@ -1,8 +1,10 @@
 import json
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import query_engine.core as core_module
 from query_engine.core import QueryEngine
+from query_engine.query_plan import QueryIntent
 
 
 class FakeRedis:
@@ -209,3 +211,70 @@ def test_thank_you_followup_does_not_query_knowledge_graph():
     assert payload["answer"] == "You're welcome."
     assert payload["sources"] == []
     engine.retriever.retrieve.assert_not_called()
+
+
+
+def test_supported_code_query_uses_verified_repository_and_planned_executor():
+    engine = _make_engine()
+    engine.repository_scope_resolver.resolve = Mock(return_value=SimpleNamespace(
+        resolved=True, repository_id="repo-1", reason=None,
+    ))
+    engine.planned_executor.execute = Mock(return_value=SimpleNamespace(
+        deferred=False,
+        plan=SimpleNamespace(intent=QueryIntent.PASSAGE_RETRIEVAL),
+        answer={
+            "answer": "The billing handler validates invoices.",
+            "confidence": "high",
+            "sources": [{"source": "source-code-chunks", "record_id": "chunk-1"}],
+            "owners": [],
+            "abstain_reason": None,
+            "claims": [{"text": "The handler validates invoices.", "evidence_ids": ["evidence-1"]}],
+        },
+    ))
+    original_source = core_module.retrieve_source_chunks
+    original_structured = core_module.answer_structured_question
+    core_module.retrieve_source_chunks = Mock(return_value=[])
+    core_module.answer_structured_question = Mock(return_value=None)
+    try:
+        result = engine.handle_query({
+            "record_id": "q-planned",
+            "company_id": "company-a",
+            "repository": "acme/billing",
+            "content": "Explain billing in billing/tax.py",
+        })
+        payload = json.loads(result)
+        assert payload["claims"][0]["evidence_ids"] == ["evidence-1"]
+        engine.repository_scope_resolver.resolve.assert_called_once_with(
+            "company-a", repository_id="acme/billing",
+        )
+        planned_scope = engine.planned_executor.execute.call_args.kwargs["scope"]
+        assert planned_scope.company_id == "company-a"
+        assert planned_scope.repository_id == "repo-1"
+        engine.retriever.retrieve.assert_not_called()
+    finally:
+        core_module.retrieve_source_chunks = original_source
+        core_module.answer_structured_question = original_structured
+
+
+def test_ambiguous_repository_scope_abstains_without_legacy_broad_retrieval():
+    engine = _make_engine()
+    engine.repository_scope_resolver.resolve = Mock(return_value=SimpleNamespace(
+        resolved=False, repository_id=None, reason="multiple_active_repositories",
+    ))
+    original_source = core_module.retrieve_source_chunks
+    original_structured = core_module.answer_structured_question
+    core_module.retrieve_source_chunks = Mock(return_value=[])
+    core_module.answer_structured_question = Mock(return_value=None)
+    try:
+        result = engine.handle_query({
+            "record_id": "q-ambiguous-repo",
+            "company_id": "company-a",
+            "content": "Explain billing in billing/tax.py",
+        })
+        payload = json.loads(result)
+        assert payload["abstain_reason"] == "repository_scope_multiple_active_repositories"
+        engine.planned_executor.execute.assert_not_called()
+        engine.retriever.retrieve.assert_not_called()
+    finally:
+        core_module.retrieve_source_chunks = original_source
+        core_module.answer_structured_question = original_structured
