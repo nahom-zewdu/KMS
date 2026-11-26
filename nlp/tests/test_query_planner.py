@@ -84,6 +84,18 @@ def test_explicit_identifier_and_path_extraction():
     assert "Invoice.total" in plan.identifiers
 
 
+
+def test_source_file_path_is_not_misclassified_as_a_symbol_candidate():
+    plan = classify_query(
+        "Find the declaration of process_task in worker_a.py",
+        scope=SCOPE,
+    )
+
+    assert plan.file_paths == ("worker_a.py",)
+    assert plan.identifiers == ("process_task",)
+    assert plan.qualified_names == ()
+
+
 def test_extraction_is_bounded_and_deduplicated():
     tick = chr(96)
     query = "Explain " + " ".join(tick + f"symbol_{i}" + tick for i in range(35))
