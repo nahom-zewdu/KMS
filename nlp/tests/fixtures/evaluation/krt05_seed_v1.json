@@ -519,8 +519,8 @@
       "scope": {
         "company_id": "benchmark-company",
         "repository_id": null,
-        "snapshot_id": "benchmark-snapshot-v1",
-        "source_revision": "benchmark-revision-v1"
+        "snapshot_id": null,
+        "source_revision": null
       },
       "answerability": "unanswerable",
       "expected_route": "abstain",
@@ -531,7 +531,7 @@
       "review_status": "draft",
       "reviewer": null,
       "reviewed_on": null,
-      "rationale": "Draft ambiguity case; multiple active repositories must not be silently selected.",
+      "rationale": "Draft ambiguity case; repository selection must fail closed. Snapshot and revision are absent because no repository has been selected.",
       "expected_intent": "passage_retrieval"
     },
     {
