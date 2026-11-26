@@ -175,3 +175,48 @@ def test_invalid_model_citation_is_rejected_at_orchestration_boundary():
     result = executor.execute("Explain calculate_tax", scope=SCOPE)
     assert result.answer["abstain_reason"] == "citation_not_in_retrieved_evidence"
     assert result.answer["sources"] == []
+
+
+
+def test_stage_observer_reports_pipeline_timings_without_prompt_or_evidence():
+    evidence = _evidence()
+    observed = []
+    executor = PlannedQueryExecutor(
+        evidence_gatherer=Gatherer([evidence]),
+        symbol_resolver=Resolver(),
+        synthesizer=lambda *_: {
+            "claims": [{"text": "Tax calculation is defined.", "evidence_ids": [evidence.evidence_id]}]
+        },
+    )
+
+    result = executor.execute(
+        "Explain calculate_tax in billing/tax.py",
+        scope=SCOPE,
+        stage_observer=lambda stage, duration: observed.append((stage, duration)),
+    )
+
+    assert result.completed
+    assert [stage for stage, _ in observed] == [
+        "classification", "evidence_gathering", "synthesis", "citation_validation"
+    ]
+    assert all(isinstance(duration, float) and duration >= 0 for _, duration in observed)
+
+
+def test_stage_observer_failure_does_not_change_query_result():
+    evidence = _evidence()
+    executor = PlannedQueryExecutor(
+        evidence_gatherer=Gatherer([evidence]),
+        symbol_resolver=Resolver(),
+        synthesizer=lambda *_: {
+            "claims": [{"text": "Tax calculation is defined.", "evidence_ids": [evidence.evidence_id]}]
+        },
+    )
+
+    result = executor.execute(
+        "Explain calculate_tax in billing/tax.py",
+        scope=SCOPE,
+        stage_observer=lambda *_: (_ for _ in ()).throw(RuntimeError("metrics unavailable")),
+    )
+
+    assert result.completed
+    assert result.answer["claims"][0]["text"] == "Tax calculation is defined."
