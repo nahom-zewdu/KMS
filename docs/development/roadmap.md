@@ -1039,3 +1039,10 @@ Latest user-reported validation after the observability integration:
 - Existing deprecation warnings remain non-blocking.
 
 KRT-05 implementation is complete for the scoped harness and instrumentation. Acceptance is still gated on the quality evidence described in the milestone: the seed dataset's 24 cases are still draft unless independently reviewed, the claim-support annotation fixture is empty, and no live LLM evaluation or production telemetry run has been performed. Do not describe KRT-05 as proving answer quality or production readiness.
+
+
+### KRT-05 human review preparation — 2026-11-26
+
+**Status: PROTOCOL ADDED — labels remain draft**
+
+Added [the seed human-review protocol](milestones/2026-11-26-krt-05-human-review-protocol.md), including the actual 24-case distribution, independent evidence/scope verification steps, approval metadata requirements, claim-support grading rules, and reporting constraints. Corrected the evaluation design's seed-set category breakdown to match the checked-in fixture: 2 unsupported, 1 structured-fact, and 1 conversation-control case. No labels were changed or invented; all 24 cases remain draft and the claim-review fixture remains empty.
