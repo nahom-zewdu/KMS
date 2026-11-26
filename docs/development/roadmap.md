@@ -1046,3 +1046,14 @@ KRT-05 implementation is complete for the scoped harness and instrumentation. Ac
 **Status: PROTOCOL ADDED — labels remain draft**
 
 Added [the seed human-review protocol](milestones/2026-11-26-krt-05-human-review-protocol.md), including the actual 24-case distribution, independent evidence/scope verification steps, approval metadata requirements, claim-support grading rules, and reporting constraints. Corrected the evaluation design's seed-set category breakdown to match the checked-in fixture: 2 unsupported, 1 structured-fact, and 1 conversation-control case. No labels were changed or invented; all 24 cases remain draft and the claim-review fixture remains empty.
+
+
+### KRT-05 seed source audit — 2026-11-26
+
+**Status: FIXTURES CORRECTED — pending local verification; labels remain draft**
+
+Audited the 24-case seed against the synthetic source corpus and upstream retrieval labels. Corrected the payment/refund answer-bearing ranges, added two evaluation-only duplicate `process_task` declarations for the ambiguous-symbol case, added an explicit two-repository structured-data fixture for the structured-count case, and represented the ambiguous-repository case without repository/snapshot/revision metadata. Contract tests cover the new control fixtures and unresolved-scope invariant.
+
+The initial audit's claim that `call-03` missed the alternative lookup call was retracted: its existing lines 14–15 correctly cover both normalization and the lookup call. The detailed correction trail is in `docs/development/milestones/2026-11-26-krt-05-seed-source-audit.md`.
+
+These are fixture-integrity corrections, not human approval. All 24 seed cases remain draft; the claim-review fixture still has no reviewed annotations. The new ambiguity and structured fixtures establish expected test data but do not yet prove the production resolver/structured handler behavior.
