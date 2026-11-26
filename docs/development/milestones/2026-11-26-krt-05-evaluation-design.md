@@ -1,6 +1,6 @@
 # KRT-05 — Evaluation and Observability
 
-**Status:** IN_PROGRESS — KRT-05.1 verified; KRT-05.2 implemented, pending local verification  
+**Status:** IN_PROGRESS — KRT-05.1 through KRT-05.3 implemented and locally verified; KRT-05.4 instrumentation implemented, pending local verification  
 **Date:** 2026-11-26  
 **Branch:** `feat/krt-05-evaluation`  
 **Base:** merged `feat/ramp` after KRT-04 PR #29
@@ -198,3 +198,37 @@ These are protocol gates for the first evaluation harness, not claims about curr
 ## 9. First implementation task
 
 Implement KRT-05.1 and KRT-05.2 in order. Keep all seed labels in draft until independently reviewed. Do not add production telemetry or change the query pipeline in these slices.
+
+
+## 10. Implementation progress — 2026-11-26
+
+### KRT-05.1 — benchmark contract and seed dataset
+
+**Status: VERIFIED**
+
+Typed benchmark contracts and the 24-case seed dataset are implemented. Cases without independent review remain draft and are excluded from scored aggregates. The dataset uses explicit case-level scope; the earlier uniform-default-scope assumption was corrected.
+
+### KRT-05.2 — offline planned-query evaluator
+
+**Status: VERIFIED**
+
+The deterministic evaluator exercises the planned-query executor with injected results and fixture evidence. It reports routing, evidence retrieval labels, provenance, citation membership, abstention outcomes, and excluded cases. It does not claim semantic entailment or production generalization.
+
+### KRT-05.3 — claim-support review and LLM run capture
+
+**Status: VERIFIED**
+
+Human claim/evidence annotations have a strict versioned contract and aggregate report. The checked-in annotation fixture is intentionally empty: no claims are represented as independently reviewed yet. Opt-in local JSONL LLM capture records model/prompt version, token limits, latency, status, prompt/output hashes, and allowlisted provider token usage. It stores no prompt, output, or source content and enforces owner-only file permissions. Live provider evaluation remains opt-in and has not been reported as a benchmark result.
+
+### KRT-05.4 — query-stage observability
+
+**Status: IMPLEMENTED — pending local verification**
+
+Added correlation by existing query ID and structured, content-free timing logs at:
+- API repository verification, job publication, and worker round trip;
+- worker start, completion, and failure;
+- NLP repository scope, planned-query total, classification, symbol resolution, evidence gathering, synthesis, and citation validation.
+
+The planned-query observer is optional and isolated: observer failures cannot alter query execution. Query text was removed from the API/NLP query-received logs touched by this slice. Existing analytics persistence remains unchanged. These are structured application logs, not a metrics backend or distributed tracing system. Stage coverage is currently strongest for the KRT-04 planned route; legacy adaptive/structured routes do not yet expose equivalent per-stage breakdowns.
+
+**Explicitly not claimed:** p50/p95 latency, cost estimates, production traffic metrics, full distributed traces, or semantic claim-support quality. Those require adequate sample sizes, configured pricing data, deployment telemetry infrastructure, and independently reviewed labels.
