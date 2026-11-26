@@ -1,10 +1,20 @@
 from types import SimpleNamespace
+from unittest.mock import patch
 
-from worker.query import QueryHandler
+
+def _query_handler_class():
+    # QueryHandler currently initializes default clients at import time.
+    with (
+        patch("utils.supabase.init_supabase", return_value=None),
+        patch("utils.redis.init_redis", return_value=None),
+    ):
+        from worker.query import QueryHandler
+    return QueryHandler
 
 
 def test_worker_emits_correlated_content_free_lifecycle_logs(caplog):
-    handler = QueryHandler.__new__(QueryHandler)
+    query_handler = _query_handler_class()
+    handler = query_handler.__new__(query_handler)
     handler.query_engine = SimpleNamespace(handle_query=lambda job: "ok")
     job = {"record_id": "query-123", "content": "private question"}
 
