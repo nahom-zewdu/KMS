@@ -107,8 +107,12 @@ def evaluate_planned_queries(
             company_id=case.scope.company_id,
             repository_id=case.scope.repository_id,
         )
-        history = ()
-        result = executor.execute(case.question, scope=scope, conversation_history=history)
+        result = executor.execute(
+            case.question,
+            scope=scope,
+            conversation_history=tuple(turn.model_dump() for turn in case.conversation_history),
+            conversation_refs=case.conversation_refs,
+        )
         plan = result.plan
         evidence = tuple(getattr(result, "evidence", ()) or ())
         answer = getattr(result, "answer", None) or {}
@@ -130,6 +134,17 @@ def evaluate_planned_queries(
             failures.append("expected_evidence_missing")
         if case.expected_route == "abstain" and not abstained:
             failures.append("expected_abstention_missing")
+        if case.expected_route == "abstain" and abstained:
+            expected_reason = {
+                "no_evidence": {"no_matching_evidence", "call_sites_not_found", "declaration_not_found"},
+                "ambiguous_repository": {"repository_scope_required"},
+                "ambiguous_symbol": {"ambiguous_declaration", "multiple_symbol_candidates"},
+                "unsupported_intent": {"unsupported_query"},
+                "insufficient_evidence": {"no_matching_evidence", "declaration_not_found", "call_sites_not_found"},
+            }.get(case.expected_abstention, set())
+            observed_reason = answer.get("abstain_reason") or getattr(result, "reason", None)
+            if observed_reason not in expected_reason:
+                failures.append("abstention_reason_mismatch")
 
         outcomes.append(EvaluationOutcome(
             case_id=case.id,
