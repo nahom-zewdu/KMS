@@ -19,6 +19,15 @@ from .cache import QueryCache
 from .analytics import log_query
 from .structured import answer_structured_question
 from .source_retriever import retrieve_source_chunks
+from codebase.source_chunk_retriever import SourceChunkRetriever
+from codebase.symbol_retriever import CodeSymbolRetriever
+from codebase.scip_occurrence_retriever import ScipOccurrenceRetriever
+from .evidence_gatherer import BoundedEvidenceGatherer
+from .planned_query import PlannedQueryExecutor
+from .query_plan import QueryIntent, QueryScope
+from .query_planner import classify_query
+from .repository_scope import TrustedRepositoryScopeResolver
+from .symbol_resolution import ConservativeScipSymbolResolver
 
 logger = logging.getLogger("kms.core")
 
@@ -32,6 +41,18 @@ class QueryEngine:
         self.redis = redis
         self.cache = QueryCache(redis)
         self.retriever = AdaptiveRetriever(supabase)
+        self.repository_scope_resolver = TrustedRepositoryScopeResolver(supabase)
+        source_chunks = SourceChunkRetriever(supabase)
+        symbols = CodeSymbolRetriever(supabase)
+        occurrences = ScipOccurrenceRetriever(supabase)
+        self.planned_executor = PlannedQueryExecutor(
+            evidence_gatherer=BoundedEvidenceGatherer(
+                source_chunks=source_chunks,
+                symbols=symbols,
+                occurrences=occurrences,
+            ),
+            symbol_resolver=ConservativeScipSymbolResolver(symbols, occurrences),
+        )
 
     def _cache_key(self, question: str, company_id: str, ramp_context: str | None = None) -> str:
         normalized_question = (question or "").strip()
@@ -117,6 +138,55 @@ class QueryEngine:
             final_answer = json.dumps(answer_json, indent=2)
             self.redis.publish(f"query_results:{query_id}", final_answer)
             return final_answer
+
+        # Route supported code-intelligence questions through KRT-04 only after
+        # resolving one company-owned active repository. The request selector is
+        # merely a selector; the database resolver verifies ownership and snapshot.
+        try:
+            candidate_plan = classify_query(
+                effective_question,
+                scope=QueryScope(company_id=company_id),
+                conversation_history=conversation_history,
+            )
+        except ValueError:
+            candidate_plan = None
+
+        if candidate_plan and candidate_plan.intent in {
+            QueryIntent.PASSAGE_RETRIEVAL,
+            QueryIntent.DECLARATION_DISCOVERY,
+            QueryIntent.CALL_SITE_NAVIGATION,
+        }:
+            repository_resolution = self.repository_scope_resolver.resolve(
+                company_id,
+                repository_id=job.get("repository"),
+            )
+            if not repository_resolution.resolved:
+                answer_json = abstain(
+                    f"repository_scope_{repository_resolution.reason or 'unresolved'}"
+                )
+                final_answer = json.dumps(answer_json, indent=2)
+                self.redis.publish(f"query_results:{query_id}", final_answer)
+                return final_answer
+
+            planned = self.planned_executor.execute(
+                effective_question,
+                scope=QueryScope(
+                    company_id=company_id,
+                    repository_id=repository_resolution.repository_id,
+                ),
+                conversation_history=conversation_history,
+            )
+            if not planned.deferred and planned.answer is not None:
+                final_answer = json.dumps(dict(planned.answer), indent=2)
+                self.redis.publish(f"query_results:{query_id}", final_answer)
+                logger.info(
+                    "KRT-04 planned answer sent | %s | company=%s | repository=%s | "
+                    "intent=%s | abstain=%s",
+                    query_id, company_id, repository_resolution.repository_id,
+                    planned.plan.intent.value,
+                    planned.answer.get("abstain_reason"),
+                )
+                return final_answer
 
         # For file-explanation questions, retrieve bounded source text from files
         # already indexed under this company before asking the model to explain them.

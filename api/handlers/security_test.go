@@ -139,6 +139,10 @@ func TestQueryRequiresVerifiedMembershipAndUsesAuthorizedCompany(t *testing.T) {
 	storage := &securityStorage{
 		tokens:      map[string]string{"valid-token": "user-1"},
 		memberships: map[string]map[string]bool{"user-1": {"company-a": true}},
+		repositories: map[string]string{
+			"company-a|repo-id-a": "org-a/repo",
+			"company-b|org-b/repo": "org-b/repo",
+		},
 	}
 	redis := &securityRedis{}
 	router := newTestRouter(storage, redis, &securityBot{}, &securityCodebase{})
@@ -147,8 +151,10 @@ func TestQueryRequiresVerifiedMembershipAndUsesAuthorizedCompany(t *testing.T) {
 		name        string
 		token       string
 		companyID   string
+		repository  string
 		wantStatus  int
 		wantPublish bool
+		wantRepo    string
 	}{
 		{name: "missing authentication", companyID: "company-a", wantStatus: http.StatusUnauthorized},
 		{name: "invalid authentication", token: "forged-token", companyID: "company-a", wantStatus: http.StatusUnauthorized},
@@ -156,13 +162,15 @@ func TestQueryRequiresVerifiedMembershipAndUsesAuthorizedCompany(t *testing.T) {
 		{name: "missing company", token: "valid-token", wantStatus: http.StatusBadRequest},
 		{name: "default company", token: "valid-token", companyID: "default", wantStatus: http.StatusBadRequest},
 		{name: "authorized company", token: "valid-token", companyID: "company-a", wantStatus: http.StatusOK, wantPublish: true},
+		{name: "cross-company repository", token: "valid-token", companyID: "company-a", repository: "org-b/repo", wantStatus: http.StatusForbidden},
+		{name: "authorized repository", token: "valid-token", companyID: "company-a", repository: "repo-id-a", wantStatus: http.StatusOK, wantPublish: true, wantRepo: "org-a/repo"},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			redis.published = nil
 			redis.subscribe = false
-			body, _ := json.Marshal(map[string]string{"question": "hello", "company_id": test.companyID})
+			body, _ := json.Marshal(map[string]string{"question": "hello", "company_id": test.companyID, "repository": test.repository})
 			request := httptest.NewRequest(http.MethodPost, "/query", bytes.NewReader(body))
 			if test.token != "" {
 				request.Header.Set("Authorization", "Bearer "+test.token)
@@ -178,7 +186,7 @@ func TestQueryRequiresVerifiedMembershipAndUsesAuthorizedCompany(t *testing.T) {
 			}
 			if test.wantPublish {
 				job := redis.published[0]
-				if job.CompanyID != "company-a" || job.Payload["company_id"] != "company-a" {
+				if job.CompanyID != "company-a" || job.Payload["company_id"] != "company-a" || job.Repository != test.wantRepo {
 					t.Fatalf("job tenant context not propagated: %#v", job)
 				}
 			}

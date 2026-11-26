@@ -7,9 +7,9 @@
 > Scoring spec vs implemented subset: `docs/product/ramp-candidate-scoring.md`.
 
 **Last updated:** 2026-11-26
-**Current branch:** `feat/krt-04-symbol-resolution`
+**Current branch:** `feat/krt-04-evidence-gathering`
 **Current milestone:** KRT-04 — Typed Query Planning and Grounded Synthesis
-**Current objective:** Review the conservative SCIP symbol-resolution slice; do not integrate production QueryEngine routing yet.
+**Current objective:** Complete final KRT-04 review and submit one consolidated PR for user review.
 
 ---
 
@@ -26,7 +26,10 @@
 | `docs/decisions/ADR-003-deterministic-ramp.md` | Deterministic fact/selection layer |
 | `docs/decisions/ADR-004-imports-are-not-workflows.md` | Import edges are structural, not behavioral proof |
 | `docs/architecture/knowledge-reliability.md` | Current knowledge-pipeline audit and target architecture |
-| `docs/development/milestones/2026-11-22-krt-03-hybrid-retrieval-design.md` | KRT-03 retrieval design, sequence, and acceptance criteria |\n| `docs/development/milestones/2026-11-14-knowledge-reliability.md` | Specified implementation milestone and acceptance criteria |\n| this file | Task state, verified status, selected next work |
+| `docs/development/milestones/2026-11-22-krt-03-hybrid-retrieval-design.md` | KRT-03 retrieval design, sequence, and acceptance criteria |
+| `docs/development/milestones/2026-11-26-krt-04-authenticated-repository-routing.md` | KRT-04.8 authenticated repository propagation and production routing |
+| `docs/development/milestones/2026-11-14-knowledge-reliability.md` | Specified implementation milestone and acceptance criteria |
+| this file | Task state, verified status, selected next work |
 
 Do not copy pipeline diagrams into every document. Link here or to the intelligence model.
 
@@ -869,3 +872,70 @@ This is a deliberately small deterministic baseline, not broad natural-language 
 Resolve only one explicitly named declaration to one exact SCIP symbol. Use the existing company/repository/active-snapshot-scoped `CodeSymbolRetriever` and `ScipOccurrenceRetriever`; verify the declaration and SCIP definition share the same source file and range. Reject substring-only matches, multiple candidates, duplicate declarations, missing definitions, and range mismatches. No SCIP identifier is synthesized from source text.
 
 This slice is a pure resolver over injected retriever dependencies. It does not change QueryEngine, retrieval routing, synthesis, citations, or persistence. See `docs/development/milestones/2026-11-26-krt-04-symbol-resolution.md`.
+
+
+### KRT-04.3 conservative SCIP symbol resolution — 2026-11-26
+
+**Status: ACCEPTED — merged in PR #28**  
+**Branch:** `feat/krt-04-symbol-resolution`  
+**Merge commit:** `2303cbd81f4db7315d77687cb86f18f978e217b0`
+
+The resolver accepts only a ready call-site plan with repository scope, resolves one explicit qualified name or identifier through the active-snapshot declaration index, and verifies an exact matching SCIP definition occurrence by file, source range, and snapshot. It preserves the exact SCIP symbol and resolution basis; ambiguity and missing evidence remain explicit abstentions. User-reported verification: focused tests **15 passed**; full NLP suite **373 passed, 8 skipped, 6 warnings, 4 subtests passed**. No QueryEngine integration or persistence changes.
+
+### KRT-04.4 bounded evidence gathering — 2026-11-26
+
+**Status: VERIFIED — user-reported local tests**  
+**Branch:** `feat/krt-04-evidence-gathering`
+
+Added `nlp/query_engine/evidence_gatherer.py` and focused tests in `nlp/tests/test_evidence_gatherer.py`.
+
+The gatherer routes ready passage, declaration-discovery, and resolved call-site plans to one existing KRT-03 retriever each. It forwards trusted company/repository scope, checks optional source-revision constraints, validates returned code-evidence provenance, preserves the shared `EvidenceCandidate` contract, and caps result count/content size. It fails closed for non-ready plans, courtesy/follow-up/clarification/unsupported intents, structured facts (not yet connected), missing repository scope, unsupported time constraints, ambiguous declaration targets, and unresolved call-site symbols.
+
+No QueryEngine behavior, synthesis, citation validation, schema, migration, embeddings, or RRF changes are included. User-reported full-suite verification is recorded under KRT-04.6 below.
+
+
+### KRT-04.5 claim-level grounded synthesis and citation validation — 2026-11-26
+
+**Status: VERIFIED — user-reported local tests**  
+**Branch:** `feat/krt-04-evidence-gathering`
+
+Added a bounded grounded-synthesis prompt and a strict validator. Model claims must cite exact `EvidenceCandidate.evidence_id` values from the supplied evidence set; source references are reconstructed from those candidates. Malformed output, empty claims, and unknown citation IDs fail closed. The validator returns claim-level citations while preserving the existing answer contract fields.
+
+**Known limitation:** this validates citation membership, not semantic entailment. A real evidence ID can still be irrelevant to a claim. Semantic claim-evidence quality remains an explicit evaluation requirement; this milestone does not claim hallucination-free or entailment-proven answers.
+
+User-reported verification on 2026-11-26: `tests/test_planned_query.py` **7 passed**; full NLP suite **400 passed, 8 skipped, 6 warnings, 4 subtests passed in 15.63s**. Warnings are existing python-json-logger and PyGithub deprecations. Production QueryEngine behavior remains unchanged.
+
+
+### KRT-04.6 planned-query orchestration boundary — 2026-11-26
+
+**Status: VERIFIED — user-reported local tests**  
+**Branch:** `feat/krt-04-evidence-gathering`
+
+Added `PlannedQueryExecutor` to compose classification, exact SCIP symbol resolution, bounded evidence gathering, grounded synthesis, and citation validation. It explicitly defers structured facts and conversation follow-ups to existing handlers and abstains on unsupported queries, ambiguous symbols, missing evidence, or invalid citations. Tests cover the full orchestration seam.
+
+Production `QueryEngine.handle_query` remains unchanged. The public job currently establishes company scope but not a trusted repository ID; arbitrary payload repository IDs must not be trusted, and implicitly selecting among multiple company repositories would be ambiguous. Trusted repository selection and legacy-route compatibility are required before production cutover.
+
+
+### KRT-04.7 trusted repository scope resolution — 2026-11-26
+
+**Status: VERIFIED — user-reported full suite (408 passed); extended in KRT-04.8**  
+**Branch:** `feat/krt-04-evidence-gathering`
+
+Added `nlp/query_engine/repository_scope.py` and `nlp/tests/test_repository_scope.py`.
+
+The resolver treats the company ID as trusted input from the authenticated job boundary. A caller-supplied repository ID is only a selector: it is queried together with the company ID and accepted only when the returned row matches both and has an active snapshot. The resolver also accepts a canonical full name returned by the authenticated API and converts it to the internal repository ID. When no repository selector is supplied, the resolver checks for exactly one active repository, bounding the lookup to two rows; zero or multiple active repositories return explicit non-resolved outcomes rather than silently selecting one.
+
+Focused test verification: **8 passed**; full NLP suite before KRT-04.8: **408 passed, 8 skipped, 6 warnings, 4 subtests passed**. The resolver itself remains fail-closed for zero or multiple active repositories.
+
+
+
+### KRT-04.8 authenticated repository propagation and production routing — 2026-11-26
+
+**Status: VERIFIED — user-reported tests (413 passed, 8 skipped)**  
+**Branch:** `feat/krt-04-evidence-gathering`
+
+The authenticated `POST /query` endpoint now accepts an optional `repository` selector. When supplied, the API resolves it using the authenticated company scope through the existing `ResolveRepositoryForCompany` storage boundary. The canonical verified repository full name is carried in a dedicated top-level Redis job field; it is not copied from arbitrary nested payload data. Worker normalization preserves only that top-level field. The Python repository resolver accepts the canonical full name and resolves it to the internal repository ID using a company predicate and active-snapshot check.
+
+`QueryEngine` now routes supported passage, declaration, and call-site questions through the KRT-04 planned executor before the legacy source-code retrieval route. It resolves either the explicitly verified repository or the sole active repository for the company. If the repository is missing or ambiguous, the query abstains rather than falling back to company-wide legacy retrieval. Structured-fact, courtesy, and conversation-control handling remain on their existing paths. Claim-level citations are now passed through the Go query response.
+
+Added/extended tests for API repository ownership enforcement, top-level-only worker propagation, full-name-to-ID resolution, planned query integration, and ambiguous-repository abstention. User-reported verification: focused repository/worker/QueryEngine tests **20 passed in 0.97s**; full NLP suite **413 passed, 8 skipped, 6 warnings, 4 subtests passed in 12.32s**; Go API `go test ./...` passed across all packages. The legacy adaptive retrieval route remains available for query types not routed by KRT-04; this is not a full replacement of all legacy query behavior.

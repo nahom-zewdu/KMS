@@ -257,6 +257,7 @@ class RedisStreamConsumer:
             "payload": payload,
             "created_at": raw.get("CreatedAt") or raw.get("created_at", ""),
             "company_id": company_id,
+            "repository": str(raw.get("Repository") or raw.get("repository") or "").strip() or None,
         }
 
     def _delivery_count(self, stream: str, msg_id: str) -> int:

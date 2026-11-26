@@ -36,6 +36,7 @@ func (h *QueryHandler) HandleQuery(c *gin.Context) {
 		Question  string `json:"question"`
 		Context   string `json:"context"`
 		CompanyID string `json:"company_id"`
+		Repository string `json:"repository,omitempty"`
 		ConversationHistory []map[string]interface{} `json:"conversation_history"`
 	}
 
@@ -67,6 +68,23 @@ func (h *QueryHandler) HandleQuery(c *gin.Context) {
 		return
 	}
 
+	verifiedRepository := ""
+	if repository := strings.TrimSpace(req.Repository); repository != "" {
+		resolved, resolveErr := h.storage.ResolveRepositoryForCompany(
+			c.Request.Context(), normalizeCompanyID(companyID), repository,
+		)
+		if resolveErr != nil {
+			log.Printf("Query repository verification failed: %v", resolveErr)
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Unable to verify repository access"})
+			return
+		}
+		if strings.TrimSpace(resolved) == "" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Repository is not accessible to this company"})
+			return
+		}
+		verifiedRepository = resolved
+	}
+
 	content := question
 
 	queryID := uuid.New().String()
@@ -87,6 +105,7 @@ func (h *QueryHandler) HandleQuery(c *gin.Context) {
 		EventType: "query",
 		Content:   content,
 		CompanyID: companyID,
+		Repository: verifiedRepository,
 		Payload: map[string]interface{}{
 			"question":   question,
 			"context":    req.Context,
@@ -123,6 +142,9 @@ func (h *QueryHandler) HandleQuery(c *gin.Context) {
 			}
 			if ar, ok := parsed["abstain_reason"]; ok {
 				resp["abstain_reason"] = ar
+			}
+			if claims, ok := parsed["claims"]; ok {
+				resp["claims"] = claims
 			}
 		}
 		log.Printf("QueryID: %s - answered in %.3fs company=%s", queryID, time.Since(start).Seconds(), companyID)
