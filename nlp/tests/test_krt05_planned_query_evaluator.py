@@ -142,6 +142,7 @@ def test_report_writer_emits_stable_sorted_json(tmp_path):
     assert content.endswith("\n")
     assert '"report_schema_version": 1' in content
     assert '"dataset_sha256"' in content
+    assert '"retrieval_fixture_sha256"' in content
 
 
 
