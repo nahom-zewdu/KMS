@@ -192,6 +192,8 @@ def evaluate_planned_queries(
             failures.append("expected_evidence_missing")
         elif case.expected_route == "planned_query" and evidence_recall < 1.0:
             failures.append("expected_evidence_incomplete")
+        if case.task_type == "no_evidence" and evidence:
+            failures.append("unexpected_evidence_for_no_evidence_case")
         if case.expected_route == "abstain" and not abstained:
             failures.append("expected_abstention_missing")
         if case.expected_route == "abstain" and abstained:
