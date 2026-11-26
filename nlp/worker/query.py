@@ -25,10 +25,10 @@ class QueryHandler:
         )
         try:
             self.query_engine.handle_query(job)
-        except Exception:
-            logger.exception(
-                "kms_query_stage query_id=%s stage=worker_failure duration_ms=%.3f",
-                query_id, (time.perf_counter() - started) * 1000,
+        except Exception as exc:
+            logger.error(
+                "kms_query_stage query_id=%s stage=worker_failure duration_ms=%.3f error_type=%s",
+                query_id, (time.perf_counter() - started) * 1000, type(exc).__name__,
             )
             raise  # Let consumer retry
         logger.info(
