@@ -9,7 +9,7 @@
 **Last updated:** 2026-11-26
 **Current branch:** `feat/krt-04-evidence-gathering`
 **Current milestone:** KRT-04 — Typed Query Planning and Grounded Synthesis
-**Current objective:** Complete bounded evidence gathering, grounded synthesis/citation validation, and a conservative QueryEngine integration checkpoint on this branch; submit one consolidated KRT-04 PR.
+**Current objective:** Complete trusted repository-scope resolution, integrate planned queries without regressing legacy routes, verify, then submit one consolidated KRT-04 PR.
 
 ---
 
@@ -881,7 +881,7 @@ The resolver accepts only a ready call-site plan with repository scope, resolves
 
 ### KRT-04.4 bounded evidence gathering — 2026-11-26
 
-**Status: IMPLEMENTED — pending local verification**  
+**Status: VERIFIED — user-reported local tests**  
 **Branch:** `feat/krt-04-evidence-gathering`
 
 Added `nlp/query_engine/evidence_gatherer.py` and focused tests in `nlp/tests/test_evidence_gatherer.py`.
@@ -893,21 +893,33 @@ No QueryEngine behavior, synthesis, citation validation, schema, migration, embe
 
 ### KRT-04.5 claim-level grounded synthesis and citation validation — 2026-11-26
 
-**Status: IMPLEMENTED — pending local verification**  
+**Status: VERIFIED — user-reported local tests**  
 **Branch:** `feat/krt-04-evidence-gathering`
 
 Added a bounded grounded-synthesis prompt and a strict validator. Model claims must cite exact `EvidenceCandidate.evidence_id` values from the supplied evidence set; source references are reconstructed from those candidates. Malformed output, empty claims, and unknown citation IDs fail closed. The validator returns claim-level citations while preserving the existing answer contract fields.
 
 **Known limitation:** this validates citation membership, not semantic entailment. A real evidence ID can still be irrelevant to a claim. Semantic claim-evidence quality remains an explicit evaluation requirement; this milestone does not claim hallucination-free or entailment-proven answers.
 
-Focused and full-suite verification are pending. Production QueryEngine behavior remains unchanged.
+User-reported verification on 2026-11-26: `tests/test_planned_query.py` **7 passed**; full NLP suite **400 passed, 8 skipped, 6 warnings, 4 subtests passed in 15.63s**. Warnings are existing python-json-logger and PyGithub deprecations. Production QueryEngine behavior remains unchanged.
 
 
 ### KRT-04.6 planned-query orchestration boundary — 2026-11-26
 
-**Status: IMPLEMENTED — pending local verification**  
+**Status: VERIFIED — user-reported local tests**  
 **Branch:** `feat/krt-04-evidence-gathering`
 
 Added `PlannedQueryExecutor` to compose classification, exact SCIP symbol resolution, bounded evidence gathering, grounded synthesis, and citation validation. It explicitly defers structured facts and conversation follow-ups to existing handlers and abstains on unsupported queries, ambiguous symbols, missing evidence, or invalid citations. Tests cover the full orchestration seam.
 
 Production `QueryEngine.handle_query` remains unchanged. The public job currently establishes company scope but not a trusted repository ID; arbitrary payload repository IDs must not be trusted, and implicitly selecting among multiple company repositories would be ambiguous. Trusted repository selection and legacy-route compatibility are required before production cutover.
+
+
+### KRT-04.7 trusted repository scope resolution — 2026-11-26
+
+**Status: IMPLEMENTED — pending local verification**  
+**Branch:** `feat/krt-04-evidence-gathering`
+
+Added `nlp/query_engine/repository_scope.py` and `nlp/tests/test_repository_scope.py`.
+
+The resolver treats the company ID as trusted input from the authenticated job boundary. A caller-supplied repository ID is only a selector: it is queried together with the company ID and accepted only when the returned row matches both and has an active snapshot. When no repository selector is supplied, the resolver checks for exactly one active repository, bounding the lookup to two rows; zero or multiple active repositories return explicit non-resolved outcomes rather than silently selecting one.
+
+This slice does not yet change the Redis job contract, QueryEngine, cache behavior, legacy retrieval, or frontend API. A future integration must source any explicit repository selector from a trusted server-side context, not arbitrary question payload data. Local focused and full-suite verification are pending.
