@@ -889,3 +889,15 @@ Added `nlp/query_engine/evidence_gatherer.py` and focused tests in `nlp/tests/te
 The gatherer routes ready passage, declaration-discovery, and resolved call-site plans to one existing KRT-03 retriever each. It forwards trusted company/repository scope, checks optional source-revision constraints, validates returned code-evidence provenance, preserves the shared `EvidenceCandidate` contract, and caps result count/content size. It fails closed for non-ready plans, courtesy/follow-up/clarification/unsupported intents, structured facts (not yet connected), missing repository scope, unsupported time constraints, ambiguous declaration targets, and unresolved call-site symbols.
 
 No QueryEngine behavior, synthesis, citation validation, schema, migration, embeddings, or RRF changes are included. Run the focused test file and full NLP suite before treating this slice as verified.
+
+
+### KRT-04.5 claim-level grounded synthesis and citation validation — 2026-11-26
+
+**Status: IMPLEMENTED — pending local verification**  
+**Branch:** `feat/krt-04-evidence-gathering`
+
+Added a bounded grounded-synthesis prompt and a strict validator. Model claims must cite exact `EvidenceCandidate.evidence_id` values from the supplied evidence set; source references are reconstructed from those candidates. Malformed output, empty claims, and unknown citation IDs fail closed. The validator returns claim-level citations while preserving the existing answer contract fields.
+
+**Known limitation:** this validates citation membership, not semantic entailment. A real evidence ID can still be irrelevant to a claim. Semantic claim-evidence quality remains an explicit evaluation requirement; this milestone does not claim hallucination-free or entailment-proven answers.
+
+Focused and full-suite verification are pending. Production QueryEngine behavior remains unchanged.
