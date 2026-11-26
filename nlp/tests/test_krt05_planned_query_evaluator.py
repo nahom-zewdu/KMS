@@ -145,6 +145,48 @@ def test_report_writer_emits_stable_sorted_json(tmp_path):
 
 
 
+
+def test_no_evidence_case_fails_if_executor_returns_any_candidate():
+    dataset = load_benchmark(_FIXTURES / "evaluation" / "krt05_seed_v1.json")
+    raw = next(
+        case.model_dump() for case in dataset.cases
+        if case.id == "seed-no-evidence-1"
+    )
+    raw.update({
+        "review_status": "reviewed",
+        "reviewer": "test-reviewer",
+        "reviewed_on": "2026-11-26",
+    })
+    from evaluation.benchmark import BenchmarkCase
+    case = BenchmarkCase.model_validate(raw)
+    dataset = dataset.model_copy(update={"cases": (case,)})
+    evidence = _evidence()
+    plan = QueryPlan(
+        query=case.question,
+        intent=QueryIntent.PASSAGE_RETRIEVAL,
+        scope=QueryScope(case.scope.company_id, case.scope.repository_id),
+    )
+    result = SimpleNamespace(
+        plan=plan,
+        evidence=(evidence,),
+        answer={
+            "claims": [],
+            "abstain_reason": "no_matching_evidence",
+        },
+        deferred=False,
+        reason="no_matching_evidence",
+    )
+
+    report = evaluate_planned_queries(
+        dataset, FakeExecutor(result=result, calls=[]), commit="abc123",
+    )
+
+    outcome = report["outcomes"][0]
+    assert not outcome["passed"]
+    assert "unexpected_evidence_for_no_evidence_case" in outcome["failures"]
+
+
+
 def test_dataset_carries_bounded_follow_up_context():
     dataset = load_benchmark(_FIXTURES / "evaluation" / "krt05_seed_v1.json")
     case = next(case for case in dataset.cases if case.task_type == "conversation_control")
