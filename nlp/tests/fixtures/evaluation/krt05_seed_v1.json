@@ -559,7 +559,7 @@
     {
       "id": "seed-unsupported-ownership",
       "task_type": "unsupported",
-      "question": "Who owns the billing service and approves changes to it?",
+      "question": "What is the meaning of life?",
       "scope": {
         "company_id": "benchmark-company",
         "repository_id": "benchmark-repository",
