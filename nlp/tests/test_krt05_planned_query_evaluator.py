@@ -129,6 +129,24 @@ def test_evaluator_fails_closed_on_wrong_provenance_and_unknown_citation():
     assert report["summary"]["citation_membership_violations"] == 1
 
 
+def test_deferred_execution_is_not_misreported_as_production_handler():
+    dataset, case = _reviewed_dataset()
+    result = _result(case, [], {"claims": [], "abstain_reason": None})
+    result.deferred = True
+    result.reason = "legacy_structured_route"
+    executor = FakeExecutor(result=result, calls=[])
+
+    report = evaluate_planned_queries(dataset, executor, commit="abc123")
+
+    outcome = report["outcomes"][0]
+    assert outcome["observed_route"] == "deferred"
+    assert not outcome["passed"]
+    assert "route_mismatch" in outcome["failures"]
+    assert report["summary"]["route_confusion_matrix"] == {
+        "planned_query->deferred": 1,
+    }
+
+
 def test_draft_only_dataset_is_reported_as_excluded_without_running_executor():
     dataset = _draft_dataset()
     executor = FakeExecutor(result=None, calls=[])
