@@ -122,16 +122,18 @@ class BoundedEvidenceGatherer:
             return EvidenceGatheringResult(plan, reason="multiple_file_paths_require_clarification")
         if plan.file_paths:
             rows = self.symbols.list_file_symbols(**kwargs, file_path=plan.file_paths[0])
-        elif len(plan.qualified_names) == 1:
+        elif plan.qualified_names:
+            if len(plan.qualified_names) != 1:
+                return EvidenceGatheringResult(plan, reason="multiple_symbol_candidates")
             name = plan.qualified_names[0]
             rows = self.symbols.find_qualified_name(**kwargs, qualified_name=name)
             rows = [row for row in rows if row.get("qualified_name") == name]
-        elif len(plan.identifiers) == 1:
+        elif plan.identifiers:
+            if len(plan.identifiers) != 1:
+                return EvidenceGatheringResult(plan, reason="multiple_symbol_candidates")
             name = plan.identifiers[0]
             rows = self.symbols.search_names(**kwargs, term=name)
             rows = [row for row in rows if row.get("name") == name or row.get("qualified_name") == name]
-        elif len(plan.qualified_names) > 1 or len(plan.identifiers) > 1:
-            return EvidenceGatheringResult(plan, reason="multiple_symbol_candidates")
         else:
             return EvidenceGatheringResult(plan, reason="declaration_target_required")
 
@@ -170,6 +172,8 @@ class BoundedEvidenceGatherer:
         required = ("snapshot_id", "source_revision", "file_path", "content_hash",
                     "start_line", "end_line", "start_byte", "end_byte")
         if any(row.get(key) is None for key in required):
+            return None
+        if not self._row_scope_matches(plan, repository_id, row):
             return None
         if not self._revision_matches(plan, row.get("source_revision")):
             return None
@@ -211,6 +215,16 @@ class BoundedEvidenceGatherer:
             end_line=int(row["end_line"]), start_byte=int(row["start_byte"]),
             end_byte=int(row["end_byte"]),
             metadata={"role": row["role"], "symbol": symbol},
+        )
+
+    @staticmethod
+    def _row_scope_matches(
+        plan: QueryPlan, repository_id: str, row: dict[str, Any]
+    ) -> bool:
+        """Require returned database rows to agree with the trusted plan scope."""
+        return (
+            row.get("company_id") == plan.scope.company_id
+            and row.get("repository_id") == repository_id
         )
 
     @staticmethod
