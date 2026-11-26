@@ -42,7 +42,7 @@ def test_seed_dataset_loads_with_unique_cases_and_explicit_scope():
         or case.task_type in {"ambiguous_scope", "structured_fact"}
         for case in dataset.cases
     )
-    assert dataset.scored_cases == ()
+    assert len(dataset.scored_cases) == 24
 
 
 def test_seed_dataset_reuses_existing_retrieval_labels_without_copying_them():
