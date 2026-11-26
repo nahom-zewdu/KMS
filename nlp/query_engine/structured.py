@@ -236,6 +236,40 @@ def _active_plan(supabase: Any, company_id: str, context: dict[str, Any]) -> dic
     return rows[0] if rows else None
 
 
+def _repository_count_answer(supabase: Any, company_id: str) -> dict[str, Any]:
+    """Count connected repositories from the company-scoped authoritative table."""
+    repositories = _rows(
+        supabase.table("repositories")
+        .select("id,full_name")
+        .eq("company_id", company_id)
+        .order("full_name")
+    )
+    # IDs are the stable identity; ignore malformed rows and collapse duplicate
+    # response rows rather than inflating the count.
+    unique: dict[str, dict[str, Any]] = {}
+    for row in repositories:
+        repository_id = str(row.get("id") or "").strip()
+        full_name = str(row.get("full_name") or "").strip()
+        if repository_id and full_name:
+            unique.setdefault(repository_id, row)
+    count = len(unique)
+    noun = "repository" if count == 1 else "repositories"
+    return {
+        "answer": f"{count} connected {noun} are registered for this company.",
+        "confidence": "high",
+        "sources": [
+            {"source": "repositories", "record_id": repository_id,
+             "file_path": str(row.get("full_name") or "")}
+            for repository_id, row in sorted(
+                unique.items(),
+                key=lambda item: str(item[1].get("full_name") or ""),
+            )
+        ][:8],
+        "owners": [],
+        "abstain_reason": None,
+    }
+
+
 def _repository_list_answer(repositories: list[dict[str, Any]]) -> dict[str, Any]:
     """List the company's connected repositories."""
     names = sorted({str(row.get("full_name")).strip() for row in repositories if row.get("full_name")})
@@ -365,6 +399,9 @@ def answer_structured_question(
                             for row in selected[:8]],
                 "owners": [], "abstain_reason": None,
             }
+
+    if re.search(r"\b(how many|count|number of)\b.*\b(connected )?repositories\b|\b(repository|repositories)\s+(are|is)\s+connected\b", q):
+        return _repository_count_answer(supabase, company_id)
 
     if re.search(r"\b(list|show|what are)\b.*\b(all )?(connected )?repositories\b|\bconnected repositories\b", q):
         repositories, _ = _company_inventory(supabase, company_id)
