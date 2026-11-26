@@ -28,6 +28,7 @@ def test_capture_writes_hashes_and_metadata_without_content(tmp_path, monkeypatc
         prompt="private prompt text",
         output="private generated answer",
         model="model-a",
+        prompt_version="unit-v2",
         temperature=0.0,
         max_tokens=100,
         duration_ms=12.3456,
