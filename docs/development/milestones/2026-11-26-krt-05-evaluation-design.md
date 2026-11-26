@@ -1,6 +1,6 @@
 # KRT-05 — Evaluation and Observability
 
-**Status:** IN_PROGRESS — KRT-05.1 through KRT-05.3 implemented and locally verified; KRT-05.4 instrumentation implemented, pending local verification  
+**Status:** IMPLEMENTED — KRT-05.1 through KRT-05.4 implemented and locally verified; acceptance review remains  
 **Date:** 2026-11-26  
 **Branch:** `feat/krt-05-evaluation`  
 **Base:** merged `feat/ramp` after KRT-04 PR #29
@@ -222,7 +222,7 @@ Human claim/evidence annotations have a strict versioned contract and aggregate 
 
 ### KRT-05.4 — query-stage observability
 
-**Status: IMPLEMENTED — pending local verification**
+**Status: VERIFIED**
 
 Added correlation by existing query ID and structured, content-free timing logs at:
 - API repository verification, job publication, worker round trip, and timeout;
@@ -232,3 +232,15 @@ Added correlation by existing query ID and structured, content-free timing logs 
 The planned route also emits bounded outcome events for answered and abstained queries, including intent, reason category, and evidence count. The planned-query observer is optional and isolated: observer failures cannot alter query execution. Query text was removed from the API/NLP query-received logs touched by this slice. Existing analytics persistence remains unchanged. These are structured application logs, not a metrics backend or distributed tracing system. Stage/outcome coverage is currently strongest for the KRT-04 planned route; legacy adaptive/structured routes do not yet expose equivalent per-stage breakdowns.
 
 **Explicitly not claimed:** p50/p95 latency, cost estimates, production traffic metrics, full distributed traces, or semantic claim-support quality. Those require adequate sample sizes, configured pricing data, deployment telemetry infrastructure, and independently reviewed labels.
+
+
+### KRT-05.4 verification — 2026-11-26
+
+User-reported verification after the latest observability and planned-route changes:
+
+- NLP focused query-engine tests: **9 passed**.
+- Full NLP suite: **442 passed, 8 skipped, 6 warnings, 4 subtests passed**.
+- API Go suite after the API handler changes: **all packages passed** (`go test ./...`).
+- The warnings are existing `pythonjsonlogger` and PyGithub deprecations.
+
+This verifies the implemented test coverage, not production telemetry behavior. No production traffic, p50/p95, cost, or semantic claim-support quality is asserted. The initial 24-case seed still has no independently reviewed end-to-end cases, and the claim-review fixture is empty; those remain explicit quality-evidence gaps.
