@@ -223,7 +223,7 @@ def test_thank_you_followup_does_not_query_knowledge_graph():
 
 
 
-def test_supported_code_query_uses_verified_repository_and_planned_executor():
+def test_supported_code_query_uses_verified_repository_and_planned_executor(caplog):
     engine = _make_engine()
     engine.repository_scope_resolver.resolve = Mock(return_value=SimpleNamespace(
         resolved=True, repository_id="repo-1", reason=None,
@@ -245,14 +245,20 @@ def test_supported_code_query_uses_verified_repository_and_planned_executor():
     core_module.retrieve_source_chunks = Mock(return_value=[])
     core_module.answer_structured_question = Mock(return_value=None)
     try:
-        result = engine.handle_query({
+        with caplog.at_level("INFO", logger="kms.core"):
+            result = engine.handle_query({
             "record_id": "q-planned",
             "company_id": "company-a",
             "repository": "acme/billing",
             "content": "Explain billing in billing/tax.py",
-        })
+            })
         payload = json.loads(result)
         assert payload["claims"][0]["evidence_ids"] == ["evidence-1"]
+        assert any(
+            "kms_query_outcome query_id=q-planned route=planned intent=PASSAGE_RETRIEVAL "
+            "outcome=answered reason=none evidence_count=0" in record.getMessage()
+            for record in caplog.records
+        )
         engine.repository_scope_resolver.resolve.assert_called_once_with(
             "company-a", repository_id="acme/billing",
         )
@@ -265,7 +271,7 @@ def test_supported_code_query_uses_verified_repository_and_planned_executor():
         core_module.answer_structured_question = original_structured
 
 
-def test_ambiguous_repository_scope_abstains_without_legacy_broad_retrieval():
+def test_ambiguous_repository_scope_abstains_without_legacy_broad_retrieval(caplog):
     engine = _make_engine()
     engine.repository_scope_resolver.resolve = Mock(return_value=SimpleNamespace(
         resolved=False, repository_id=None, reason="multiple_active_repositories",
@@ -276,13 +282,19 @@ def test_ambiguous_repository_scope_abstains_without_legacy_broad_retrieval():
     core_module.retrieve_source_chunks = Mock(return_value=[])
     core_module.answer_structured_question = Mock(return_value=None)
     try:
-        result = engine.handle_query({
+        with caplog.at_level("INFO", logger="kms.core"):
+            result = engine.handle_query({
             "record_id": "q-ambiguous-repo",
             "company_id": "company-a",
             "content": "Explain billing in billing/tax.py",
-        })
+            })
         payload = json.loads(result)
         assert payload["abstain_reason"] == "repository_scope_multiple_active_repositories"
+        assert any(
+            "kms_query_outcome query_id=q-ambiguous-repo route=planned outcome=abstained "
+            "reason=repository_scope_multiple_active_repositories evidence_count=0" in record.getMessage()
+            for record in caplog.records
+        )
         engine.planned_executor.execute.assert_not_called()
         engine.retriever.retrieve.assert_not_called()
     finally:
