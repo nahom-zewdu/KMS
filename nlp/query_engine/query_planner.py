@@ -20,7 +20,12 @@ _BARE_CLARIFICATIONS = {"what", "huh", "which one", "what do you mean"}
 _FOLLOW_UP_START = re.compile(
     r"^(?:and|also|what about|how about|show me more|tell me more)\b", re.IGNORECASE)
 _FOLLOW_UP_REFERENCE = re.compile(
-    r"\b(?:it|that|this|they|them|those|the same one|the previous one)\b", re.IGNORECASE)
+    r"\b(?:it|that|this|they|them|those|the same one|the previous one)\b"
+    r"(?!\s+(?:company|organization|repository|repo|project|codebase|file|"
+    r"function|class|method|symbol|branch|plan|ramp|step|task|question|"
+    r"query|team|user|engineer)\b)",
+    re.IGNORECASE,
+)
 _CALL_SITE = re.compile(
     r"\b(?:where\s+(?:is|are)\s+.+\s+called|who\s+calls|call\s+sites?|"
     r"callers?\s+of|references?\s+to|find\s+(?:all\s+)?calls\s+to)\b", re.IGNORECASE)
