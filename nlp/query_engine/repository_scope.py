@@ -35,10 +35,10 @@ class TrustedRepositoryScopeResolver:
         company_id: str,
         repository_id: str | None = None,
     ) -> RepositoryScopeResolution:
-        """Resolve a requested repository or the sole active repository for a company.
+        """Resolve a requested repository ID/full name or the sole active repository for a company.
 
         The company ID must come from the authenticated job boundary. A supplied
-        repository ID is never accepted by itself: both IDs are applied as database
+        repository selector is never accepted by itself: both IDs are applied as database
         predicates, and the returned row is checked again before it is trusted.
         Without an explicit selector, the query is bounded to two active rows so
         multiple repositories are detected rather than silently choosing one.
@@ -54,7 +54,8 @@ class TrustedRepositoryScopeResolver:
             .eq("company_id", company)
         )
         if requested_repository:
-            query = query.eq("id", requested_repository)
+            selector_field = "full_name" if "/" in requested_repository else "id"
+            query = query.eq(selector_field, requested_repository)
         else:
             query = query.not_.is_("active_snapshot_id", "null")
 
@@ -79,7 +80,7 @@ class TrustedRepositoryScopeResolver:
 
         row = valid_rows[0]
         resolved_id = str(row["id"]).strip()
-        if requested_repository and resolved_id != requested_repository:
+        if requested_repository and "/" not in requested_repository and resolved_id != requested_repository:
             return RepositoryScopeResolution(None, None, "repository_scope_mismatch")
 
         return RepositoryScopeResolution(
