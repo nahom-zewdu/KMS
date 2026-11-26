@@ -115,13 +115,23 @@ def test_duplicate_fixture_declarations_abstain_through_planned_query_pipeline()
 
 
 def test_explicit_file_path_disambiguates_duplicate_fixture_declarations():
+    rows = _fixture_declarations()
+    rows.append({
+        **rows[0],
+        "id": "decl-worker-a-cleanup",
+        "symbol_id": "symbol-worker-a-cleanup",
+        "name": "cleanup",
+        "qualified_name": "worker_a.cleanup",
+        "start_line": 1,
+        "end_line": 1,
+    })
     db = _FixtureSupabase({
         "repositories": [{
             "id": "benchmark-repository",
             "company_id": "benchmark-company",
             "active_snapshot_id": "benchmark-snapshot-v1",
         }],
-        "code_symbols": _fixture_declarations(),
+        "code_symbols": rows,
     })
     declarations = CodeSymbolRetriever(db)
     occurrences = _UnusedOccurrences()
