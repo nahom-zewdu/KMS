@@ -10,7 +10,7 @@ class _Query:
         self.rows = rows
         self.filters = []
         self.limit_value = None
-        self.not_ = self
+        self._negate_next_is = False
 
     def select(self, *_args):
         return self
@@ -19,8 +19,17 @@ class _Query:
         self.filters.append((field, value))
         return self
 
+    @property
+    def not_(self):
+        self._negate_next_is = True
+        return self
+
     def is_(self, field, value):
-        self.filters.append((field, None if value == "null" else value))
+        if self._negate_next_is:
+            self.filters.append(("not_is", field, value))
+            self._negate_next_is = False
+        else:
+            self.filters.append(("is", field, value))
         return self
 
     def limit(self, value):
@@ -28,10 +37,26 @@ class _Query:
         return self
 
     def execute(self):
-        rows = [
-            row for row in self.rows
-            if all(row.get(field) == value for field, value in self.filters)
-        ]
+        def matches(row):
+            for condition in self.filters:
+                if len(condition) == 2:
+                    field, value = condition
+                    if row.get(field) != value:
+                        return False
+                    continue
+
+                operator, field, value = condition
+                if operator == "not_is" and value == "null":
+                    if row.get(field) is None:
+                        return False
+                elif operator == "is" and value == "null":
+                    if row.get(field) is not None:
+                        return False
+                else:
+                    raise AssertionError(f"unsupported filter: {condition!r}")
+            return True
+
+        rows = [row for row in self.rows if matches(row)]
         return SimpleNamespace(data=rows[:self.limit_value])
 
 
@@ -64,7 +89,7 @@ def test_resolves_the_only_active_repository_for_company():
     assert result.full_name == "acme/repo-1"
     assert result.reason is None
     assert ("company_id", "company-a") in db.last_query.filters
-    assert ("active_snapshot_id", None) in db.last_query.filters
+    assert ("not_is", "active_snapshot_id", "null") in db.last_query.filters
     assert db.last_query.limit_value == 2
 
 
@@ -84,7 +109,7 @@ def test_explicit_repository_is_still_verified_against_company_and_snapshot():
     assert result.resolved
     assert ("company_id", "company-a") in db.last_query.filters
     assert ("id", "repo-1") in db.last_query.filters
-    assert ("active_snapshot_id", None) not in db.last_query.filters
+    assert ("not_is", "active_snapshot_id", "null") not in db.last_query.filters
 
 
 @pytest.mark.parametrize("company_id", ["", "default", "  DEFAULT  "])
