@@ -7,9 +7,9 @@
 > Scoring spec vs implemented subset: `docs/product/ramp-candidate-scoring.md`.
 
 **Last updated:** 2026-11-26
-**Current branch:** `feat/krt-04-evidence-gathering`
-**Current milestone:** KRT-04 — Typed Query Planning and Grounded Synthesis
-**Current objective:** Complete final KRT-04 review and submit one consolidated PR for user review.
+**Current branch:** `feat/ramp`
+**Current milestone:** KRT-05 — Evaluation and Observability (planning)
+**Current objective:** Specify representative end-to-end retrieval and grounded-answer evaluation before expanding retrieval or adding ranking complexity.
 
 ---
 
@@ -837,7 +837,7 @@ Do not implement KRT-04 on the current KRT-03 branch. Merge and review the KRT-0
 
 The benchmarks establish a useful baseline, not broad natural-language relevance, production performance, or generalization across repositories. A future semantic retrieval proposal must include a reviewed natural-language benchmark, multiple repositories/languages, no-evidence cases, independent lexical/semantic baselines, fusion comparison, and latency/cost measurement before implementation.
 
-KRT-04 consumes the existing retrievers and owns typed intent planning, conservative query-to-symbol resolution, bounded evidence gathering, provenance-preserving plans, claim-level citations, and abstention. It does not own embeddings or rank fusion. KRT-04 is specified but implementation has not started. See the KRT-03 design note for the acceptance matrix and detailed boundary.
+KRT-04 consumed the existing retrievers and delivered typed intent planning, conservative query-to-symbol resolution, bounded evidence gathering, provenance-preserving plans, claim-level citations, and abstention. It did not add embeddings or rank fusion. KRT-04 is now merged; see the dated acceptance record below.
 
 
 ### KRT-04.1 implementation checkpoint — 2026-11-26
@@ -939,3 +939,34 @@ The authenticated `POST /query` endpoint now accepts an optional `repository` se
 `QueryEngine` now routes supported passage, declaration, and call-site questions through the KRT-04 planned executor before the legacy source-code retrieval route. It resolves either the explicitly verified repository or the sole active repository for the company. If the repository is missing or ambiguous, the query abstains rather than falling back to company-wide legacy retrieval. Structured-fact, courtesy, and conversation-control handling remain on their existing paths. Claim-level citations are now passed through the Go query response.
 
 Added/extended tests for API repository ownership enforcement, top-level-only worker propagation, full-name-to-ID resolution, planned query integration, and ambiguous-repository abstention. User-reported verification: focused repository/worker/QueryEngine tests **20 passed in 0.97s**; full NLP suite **413 passed, 8 skipped, 6 warnings, 4 subtests passed in 12.32s**; Go API `go test ./...` passed across all packages. The legacy adaptive retrieval route remains available for query types not routed by KRT-04; this is not a full replacement of all legacy query behavior.
+
+
+
+### KRT-04 acceptance — 2026-11-26
+
+**Status: MERGED — PR #29**  
+**Base:** `feat/ramp`  
+**Head:** `feat/krt-04-evidence-gathering`  
+**Merge commit:** `bf9ff2823ed316e4c17cf8fdb5815ccdba48ee4a`
+
+The consolidated KRT-04 implementation is merged. It includes the typed query-plan contract, deterministic classification, conservative SCIP symbol resolution, bounded evidence gathering, claim-level grounded synthesis with citation-membership validation, planned-query orchestration, trusted repository-scope resolution, authenticated repository propagation through the Go API/Redis worker boundary, and production routing for supported query classes.
+
+Developer-reported verification before merge: focused repository/worker/QueryEngine tests **20 passed**; full NLP suite **413 passed, 8 skipped, 6 warnings, 4 subtests passed**; Go API `go test ./...` passed across all packages.
+
+Acceptance is limited to the delivered implementation and its tests. Citation validation checks evidence-ID membership, not semantic entailment. Intent classification remains a deterministic lexical baseline. Unsupported query classes continue through legacy adaptive retrieval. Supabase RLS/security reconciliation remains a separate release gate.
+
+### KRT-05 — Evaluation and observability — PLANNED
+
+**Objective:** Establish whether KRT-04 improves answer quality safely and consistently before adding semantic embeddings, rank fusion, rerankers, or more classifier complexity.
+
+**Initial scope to specify:**
+
+1. Build a versioned, representative query/evidence benchmark covering passage retrieval, declaration discovery, call-site navigation, structured facts, follow-ups, ambiguous scope, no-evidence cases, and unsupported questions.
+2. Record expected evidence and answer properties, not only exact answer strings. Include tenant/repository/snapshot scope assertions.
+3. Measure retrieval recall/precision at bounded cutoffs, evidence provenance validity, citation membership, claim-evidence relevance, abstention correctness, and answer usefulness judged against a rubric.
+4. Capture latency and token/cost measurements by pipeline stage without logging secrets or unrestricted source content.
+5. Establish deterministic baseline reports and regression thresholds before considering retrieval or ranking changes.
+
+**Out of scope initially:** adding embeddings, RRF, cross-encoder reranking, or broad query-engine rewrites. Those require benchmark evidence that the current deterministic retrieval path is insufficient.
+
+**First deliverable:** a benchmark design and evaluation harness proposal, with a small manually reviewed seed set and explicit limitations. Do not claim broad relevance from synthetic fixtures alone.
