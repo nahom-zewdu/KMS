@@ -126,6 +126,8 @@ def evaluate_planned_queries(
         failures: list[str] = []
         if route != case.expected_route:
             failures.append("route_mismatch")
+        if plan.intent.value != case.expected_intent:
+            failures.append("intent_mismatch")
         if not provenance_valid:
             failures.append("evidence_provenance_mismatch")
         if not citation_valid:
