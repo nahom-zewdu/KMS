@@ -70,6 +70,7 @@ func (h *QueryHandler) HandleQuery(c *gin.Context) {
 
 	verifiedRepository := ""
 	if repository := strings.TrimSpace(req.Repository); repository != "" {
+		repositoryStarted := time.Now()
 		resolved, resolveErr := h.storage.ResolveRepositoryForCompany(
 			c.Request.Context(), normalizeCompanyID(companyID), repository,
 		)
@@ -83,6 +84,7 @@ func (h *QueryHandler) HandleQuery(c *gin.Context) {
 			return
 		}
 		verifiedRepository = resolved
+		log.Printf("kms_query_stage stage=repository_verification duration_ms=%.3f", float64(time.Since(repositoryStarted).Microseconds())/1000)
 	}
 
 	content := question
@@ -98,6 +100,7 @@ func (h *QueryHandler) HandleQuery(c *gin.Context) {
 		return
 	}
 
+	publishStarted := time.Now()
 	err = h.redis.Publish(c.Request.Context(), "query_jobs", domain.JobPayload{
 		ID:        "*",
 		RecordID:  queryID,
@@ -114,14 +117,17 @@ func (h *QueryHandler) HandleQuery(c *gin.Context) {
 		},
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	})
+	log.Printf("kms_query_stage query_id=%s stage=job_publish duration_ms=%.3f", queryID, float64(time.Since(publishStarted).Microseconds())/1000)
 	if err != nil {
 		log.Printf("QueryID: %s - publish failed in %.3fs: %v", queryID, time.Since(start).Seconds(), err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process query"})
 		return
 	}
 
+	waitStarted := time.Now()
 	select {
 	case raw := <-answerChan:
+		log.Printf("kms_query_stage query_id=%s stage=worker_round_trip duration_ms=%.3f", queryID, float64(time.Since(waitStarted).Microseconds())/1000)
 		resp := gin.H{
 			"answer": raw,
 		}
