@@ -129,3 +129,13 @@ def test_report_writer_emits_stable_sorted_json(tmp_path):
     assert content.endswith("\n")
     assert '"report_schema_version": 1' in content
     assert '"dataset_sha256"' in content
+
+
+
+def test_dataset_carries_bounded_follow_up_context():
+    dataset = load_benchmark(_FIXTURES / "evaluation" / "krt05_seed_v1.json")
+    case = next(case for case in dataset.cases if case.task_type == "conversation_control")
+
+    assert case.expected_intent == "follow_up"
+    assert case.conversation_history
+    assert case.conversation_refs
