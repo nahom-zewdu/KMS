@@ -78,6 +78,7 @@ def _gatherer(source=None, symbols=None, occurrences=None, **kwargs):
 
 def _symbol_row(**overrides):
     row = {
+        "company_id": "company-a", "repository_id": "repo-a",
         "symbol_id": "symbol-1", "name": "calculate_tax",
         "qualified_name": "billing.calculate_tax", "kind": "function",
         "snapshot_id": "snapshot-current", "source_revision": "rev-a",
@@ -89,6 +90,7 @@ def _symbol_row(**overrides):
 
 def _occurrence_row(**overrides):
     row = {
+        "company_id": "company-a", "repository_id": "repo-a",
         "occurrence_id": "occ-1", "symbol": "scip-python billing.calculate_tax",
         "role": "reference", "snapshot_id": "snapshot-current",
         "source_revision": "rev-a", "file_path": "billing/routes.py",
@@ -237,3 +239,37 @@ def test_multiple_declaration_targets_abstain_instead_of_fanning_out():
     )
     assert result.reason == "multiple_symbol_candidates"
     assert symbols.calls == []
+
+
+
+def test_declaration_discovery_does_not_fall_back_from_ambiguous_qualified_names():
+    symbols = Symbols()
+    result = _gatherer(symbols=symbols).gather(
+        _plan(
+            QueryIntent.DECLARATION_DISCOVERY,
+            qualified_names=("billing.calculate_tax", "billing.calculate_total"),
+            identifiers=("calculate_tax",),
+        )
+    )
+    assert result.reason == "multiple_symbol_candidates"
+    assert symbols.calls == []
+
+
+def test_symbol_and_occurrence_rows_must_match_trusted_tenant_scope():
+    symbols = Symbols([_symbol_row(company_id="company-b")])
+    declaration_result = _gatherer(symbols=symbols).gather(
+        _plan(QueryIntent.DECLARATION_DISCOVERY, qualified_names=("billing.calculate_tax",))
+    )
+    assert declaration_result.evidence == ()
+
+    occurrences = Occurrences([_occurrence_row(repository_id="repo-b")])
+    call_plan = _plan(
+        QueryIntent.CALL_SITE_NAVIGATION,
+        resolved_symbol=ResolvedScipSymbol(
+            symbol="scip-python billing.calculate_tax",
+            method=SymbolResolutionMethod.EXACT_QUALIFIED_NAME,
+            source_value="billing.calculate_tax",
+        ),
+    )
+    call_result = _gatherer(occurrences=occurrences).gather(call_plan)
+    assert call_result.evidence == ()
