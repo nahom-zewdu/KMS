@@ -35,14 +35,16 @@ The seed's ambiguous-symbol case is now backed by a dedicated two-file ambiguity
 - **Case:** `seed-ambiguous-symbol`
 - **Question:** “Find the declaration of `process_task` where multiple declarations share that identifier.”
 - **Correction:** Added two separate evaluation-only Python modules defining `process_task`. Contract tests assert that both declarations exist. These files are deliberately separate from the retrieval corpus so they do not silently alter the KRT-03 retrieval benchmark.
-- **Remaining limitation:** The fixture establishes a valid ambiguity scenario, but production resolver behavior must still be exercised by a dedicated integration test before this case can be approved.
+- **Implementation follow-up:** Added a production-path regression test that parses both fixture modules into scoped declaration rows, uses the real `CodeSymbolRetriever`, and executes the real planner/evidence-gatherer/orchestrator path. The bare identifier must abstain with `ambiguous_declaration` before synthesis. A second case verifies that an explicit file path selects only the matching declaration, even when unrelated declarations exist in that file.
+- **Remaining limitation:** The database boundary is an in-memory PostgREST-shaped adapter, not a live Supabase instance or a freshly generated SCIP index. The test validates routing, exact filtering, and fail-closed behavior; it does not establish end-to-end indexing correctness.
 
 ### F-05 — Structured repository-count case lacked authoritative fixture data — FIXED AT FIXTURE LEVEL
 
 - **Case:** `seed-structured-count`
 - **Question:** “How many repositories are connected to this company?”
 - **Correction:** Added a versioned synthetic structured-data fixture containing exactly two repository records for `benchmark-company`. The seed's required fact now states that expected count.
-- **Remaining limitation:** The fixture is ground truth for the benchmark only; it does not prove the live structured handler reads equivalent authoritative records. That route needs an injected integration test before approval.
+- **Implementation follow-up:** Added a deterministic repository-count handler backed by company-filtered `repositories` rows. Tests exercise the handler against the versioned fixture, verify tenant isolation and empty results, and exercise `QueryEngine.handle_query` to prove structured facts are handled before source retrieval or synthesis. If authoritative handling fails, the query now abstains rather than falling through to model retrieval.
+- **Remaining limitation:** The integration uses an in-memory PostgREST-shaped adapter, not a live Supabase project. It verifies the production query/handler contract and tenant predicate, not remote database policy execution.
 
 ### F-06 — Ambiguous-repository scope mixes an absent repository with snapshot metadata — FIXED
 
@@ -58,6 +60,7 @@ The seed's ambiguous-symbol case is now backed by a dedicated two-file ambiguity
 - The call-site range for `call-03` is valid: `catalog/search.py:14-15` includes the normalization assignment and actual `find_alternatives` call.
 - The duplicate-symbol fixture contains two declarations by construction and is excluded from the retrieval corpus.
 - The structured count fixture contains two records for the benchmark company.
+- Production-path tests cover duplicate-symbol abstention, explicit file disambiguation, repository count, company isolation, empty counts, and fail-closed structured routing.
 - All cases remain draft; this audit does not create reviewer identity, review date, or claim-support grades.
 
 ## Approval decision
