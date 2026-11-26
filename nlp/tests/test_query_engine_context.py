@@ -230,6 +230,7 @@ def test_supported_code_query_uses_verified_repository_and_planned_executor(capl
     ))
     engine.planned_executor.execute = Mock(return_value=SimpleNamespace(
         deferred=False,
+        reason=None,
         plan=SimpleNamespace(intent=QueryIntent.PASSAGE_RETRIEVAL),
         evidence=(),
         answer={
