@@ -171,8 +171,12 @@ class QueryEngine:
                 query_id, (time.perf_counter() - repository_started) * 1000,
             )
             if not repository_resolution.resolved:
-                answer_json = abstain(
-                    f"repository_scope_{repository_resolution.reason or 'unresolved'}"
+                scope_reason = repository_resolution.reason or "unresolved"
+                answer_json = abstain(f"repository_scope_{scope_reason}")
+                logger.info(
+                    "kms_query_outcome query_id=%s route=planned outcome=abstained "
+                    "reason=repository_scope_%s evidence_count=0",
+                    query_id, scope_reason,
                 )
                 final_answer = json.dumps(answer_json, indent=2)
                 self.redis.publish(f"query_results:{query_id}", final_answer)
@@ -201,6 +205,13 @@ class QueryEngine:
             if not planned.deferred and planned.answer is not None:
                 final_answer = json.dumps(dict(planned.answer), indent=2)
                 self.redis.publish(f"query_results:{query_id}", final_answer)
+                outcome = "abstained" if planned.answer.get("abstain_reason") else "answered"
+                reason = planned.reason or planned.answer.get("abstain_reason") or "none"
+                logger.info(
+                    "kms_query_outcome query_id=%s route=planned intent=%s outcome=%s "
+                    "reason=%s evidence_count=%d",
+                    query_id, planned.plan.intent.value, outcome, reason, len(planned.evidence),
+                )
                 logger.info(
                     "KRT-04 planned answer sent | %s | company=%s | repository=%s | "
                     "intent=%s | abstain=%s",
