@@ -127,13 +127,22 @@ class ConservativeScipSymbolResolver:
         if not occurrences:
             return SymbolResolutionResult(None, "definition_occurrence_not_found")
 
-        matching_definitions = [
+        file_definitions = [
             occurrence for occurrence in occurrences
             if occurrence.get("role") == "definition"
             and occurrence.get("file_path") == file_path
-            and self._same_source_range(declaration, occurrence)
+        ]
+        if not file_definitions:
+            return SymbolResolutionResult(None, "definition_occurrence_not_found")
+
+        matching_definitions = [
+            occurrence for occurrence in file_definitions
+            if self._same_source_range(declaration, occurrence)
             and occurrence.get("snapshot_id") == declaration.get("snapshot_id")
         ]
+        if not matching_definitions:
+            return SymbolResolutionResult(None, "source_range_mismatch")
+
         symbols = self._unique(
             occurrence.get("symbol", "")
             for occurrence in matching_definitions
