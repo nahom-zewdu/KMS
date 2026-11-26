@@ -211,13 +211,13 @@ def test_missing_scip_definition_is_reported():
 def test_mismatched_source_range_is_not_accepted():
     occurrences = FakeOccurrences([_occurrence(start_byte=11)])
     result = _resolver(FakeDeclarations(names=[_declaration()]), occurrences).resolve(_plan())
-    assert result.reason == "definition_occurrence_not_found"
+    assert result.reason == "source_range_mismatch"
 
 
 def test_snapshot_mismatch_is_not_accepted():
     occurrences = FakeOccurrences([_occurrence(snapshot_id="snapshot-old")])
     result = _resolver(FakeDeclarations(names=[_declaration()]), occurrences).resolve(_plan())
-    assert result.reason == "definition_occurrence_not_found"
+    assert result.reason == "source_range_mismatch"
 
 
 def test_multiple_distinct_scip_symbols_for_same_definition_are_ambiguous():
