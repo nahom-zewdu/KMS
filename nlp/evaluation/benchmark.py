@@ -23,6 +23,10 @@ TaskType = Literal[
     "conversation_control",
 ]
 Answerability = Literal["answerable", "partially_answerable", "unanswerable"]
+ExpectedIntent = Literal[
+    "courtesy", "structured_fact", "declaration_discovery", "call_site_navigation",
+    "passage_retrieval", "follow_up", "clarification", "unsupported",
+]
 ExpectedRoute = Literal[
     "planned_query",
     "abstain",
@@ -73,6 +77,7 @@ class BenchmarkCase(BenchmarkModel):
 
     id: str = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9][a-z0-9-]+$")
     task_type: TaskType
+    expected_intent: ExpectedIntent
     question: str = Field(min_length=1, max_length=1_000)
     scope: BenchmarkScope
     answerability: Answerability
