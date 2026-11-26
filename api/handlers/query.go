@@ -157,6 +157,7 @@ func (h *QueryHandler) HandleQuery(c *gin.Context) {
 		c.JSON(http.StatusOK, resp)
 
 	case <-time.After(45 * time.Second):
+		log.Printf("kms_query_stage query_id=%s stage=worker_timeout duration_ms=%.3f", queryID, float64(time.Since(waitStarted).Microseconds())/1000)
 		log.Printf("QueryID: %s - timeout after %.3fs", queryID, time.Since(start).Seconds())
 		c.JSON(http.StatusGatewayTimeout, gin.H{"error": "Query timeout after 45 seconds"})
 	}
