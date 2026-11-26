@@ -24,6 +24,7 @@ def record_llm_run(
     prompt: str,
     output: str | None,
     model: str,
+    prompt_version: str = "unspecified",
     temperature: float,
     max_tokens: int,
     duration_ms: float,
@@ -50,6 +51,7 @@ def record_llm_run(
         "schema_version": 1,
         "recorded_at": datetime.now(timezone.utc).isoformat(),
         "model": str(model)[:128],
+        "prompt_version": str(prompt_version)[:128],
         "temperature": float(temperature),
         "max_tokens": int(max_tokens),
         "duration_ms": round(max(0.0, float(duration_ms)), 3),
@@ -62,7 +64,13 @@ def record_llm_run(
     path = Path(configured_path).expanduser()
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
     try:
-        os.write(descriptor, encoded)
+        os.fchmod(descriptor, 0o600)
+        remaining = memoryview(encoded)
+        while remaining:
+            written = os.write(descriptor, remaining)
+            if written <= 0:
+                raise OSError("could not append complete LLM run record")
+            remaining = remaining[written:]
     finally:
         os.close(descriptor)
     return True
