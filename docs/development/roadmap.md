@@ -9,7 +9,7 @@
 **Last updated:** 2026-11-26
 **Current branch:** `feat/krt-04-evidence-gathering`
 **Current milestone:** KRT-04 — Typed Query Planning and Grounded Synthesis
-**Current objective:** Verify KRT-04.8 authenticated repository propagation and planned-query production routing; then complete end-to-end tests and submit one consolidated KRT-04 PR.
+**Current objective:** Complete final KRT-04 review and submit one consolidated PR for user review.
 
 ---
 
@@ -27,7 +27,9 @@
 | `docs/decisions/ADR-004-imports-are-not-workflows.md` | Import edges are structural, not behavioral proof |
 | `docs/architecture/knowledge-reliability.md` | Current knowledge-pipeline audit and target architecture |
 | `docs/development/milestones/2026-11-22-krt-03-hybrid-retrieval-design.md` | KRT-03 retrieval design, sequence, and acceptance criteria |
-| `docs/development/milestones/2026-11-26-krt-04-authenticated-repository-routing.md` | KRT-04.8 authenticated repository propagation and production routing |\n| `docs/development/milestones/2026-11-14-knowledge-reliability.md` | Specified implementation milestone and acceptance criteria |\n| this file | Task state, verified status, selected next work |
+| `docs/development/milestones/2026-11-26-krt-04-authenticated-repository-routing.md` | KRT-04.8 authenticated repository propagation and production routing |
+| `docs/development/milestones/2026-11-14-knowledge-reliability.md` | Specified implementation milestone and acceptance criteria |
+| this file | Task state, verified status, selected next work |
 
 Do not copy pipeline diagrams into every document. Link here or to the intelligence model.
 
@@ -929,11 +931,11 @@ Focused test verification: **8 passed**; full NLP suite before KRT-04.8: **408 p
 
 ### KRT-04.8 authenticated repository propagation and production routing — 2026-11-26
 
-**Status: IMPLEMENTED — pending local verification**  
+**Status: VERIFIED — user-reported tests (413 passed, 8 skipped)**  
 **Branch:** `feat/krt-04-evidence-gathering`
 
 The authenticated `POST /query` endpoint now accepts an optional `repository` selector. When supplied, the API resolves it using the authenticated company scope through the existing `ResolveRepositoryForCompany` storage boundary. The canonical verified repository full name is carried in a dedicated top-level Redis job field; it is not copied from arbitrary nested payload data. Worker normalization preserves only that top-level field. The Python repository resolver accepts the canonical full name and resolves it to the internal repository ID using a company predicate and active-snapshot check.
 
 `QueryEngine` now routes supported passage, declaration, and call-site questions through the KRT-04 planned executor before the legacy source-code retrieval route. It resolves either the explicitly verified repository or the sole active repository for the company. If the repository is missing or ambiguous, the query abstains rather than falling back to company-wide legacy retrieval. Structured-fact, courtesy, and conversation-control handling remain on their existing paths. Claim-level citations are now passed through the Go query response.
 
-Added/extended tests for API repository ownership enforcement, top-level-only worker propagation, full-name-to-ID resolution, planned query integration, and ambiguous-repository abstention. Local verification is pending. The legacy adaptive retrieval route remains available for query types not routed by KRT-04; this is not a full replacement of all legacy query behavior.
+Added/extended tests for API repository ownership enforcement, top-level-only worker propagation, full-name-to-ID resolution, planned query integration, and ambiguous-repository abstention. User-reported verification: focused repository/worker/QueryEngine tests **20 passed in 0.97s**; full NLP suite **413 passed, 8 skipped, 6 warnings, 4 subtests passed in 12.32s**; Go API `go test ./...` passed across all packages. The legacy adaptive retrieval route remains available for query types not routed by KRT-04; this is not a full replacement of all legacy query behavior.
