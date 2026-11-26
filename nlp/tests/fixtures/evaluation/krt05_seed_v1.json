@@ -37,7 +37,8 @@
       "review_status": "draft",
       "reviewer": null,
       "reviewed_on": null,
-      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring."
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring.",
+      "expected_intent": "declaration_discovery"
     },
     {
       "id": "seed-decl-02",
@@ -65,7 +66,8 @@
       "review_status": "draft",
       "reviewer": null,
       "reviewed_on": null,
-      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring."
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring.",
+      "expected_intent": "declaration_discovery"
     },
     {
       "id": "seed-decl-03",
@@ -93,7 +95,8 @@
       "review_status": "draft",
       "reviewer": null,
       "reviewed_on": null,
-      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring."
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring.",
+      "expected_intent": "declaration_discovery"
     },
     {
       "id": "seed-decl-04",
@@ -121,7 +124,8 @@
       "review_status": "draft",
       "reviewer": null,
       "reviewed_on": null,
-      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring."
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring.",
+      "expected_intent": "declaration_discovery"
     },
     {
       "id": "seed-decl-05",
@@ -149,7 +153,8 @@
       "review_status": "draft",
       "reviewer": null,
       "reviewed_on": null,
-      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring."
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring.",
+      "expected_intent": "declaration_discovery"
     },
     {
       "id": "seed-call-01",
@@ -177,7 +182,8 @@
       "review_status": "draft",
       "reviewer": null,
       "reviewed_on": null,
-      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring."
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring.",
+      "expected_intent": "call_site_navigation"
     },
     {
       "id": "seed-call-02",
@@ -205,7 +211,8 @@
       "review_status": "draft",
       "reviewer": null,
       "reviewed_on": null,
-      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring."
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring.",
+      "expected_intent": "call_site_navigation"
     },
     {
       "id": "seed-call-03",
@@ -233,7 +240,8 @@
       "review_status": "draft",
       "reviewer": null,
       "reviewed_on": null,
-      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring."
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring.",
+      "expected_intent": "call_site_navigation"
     },
     {
       "id": "seed-call-04",
@@ -261,7 +269,8 @@
       "review_status": "draft",
       "reviewer": null,
       "reviewed_on": null,
-      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring."
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring.",
+      "expected_intent": "call_site_navigation"
     },
     {
       "id": "seed-call-05",
@@ -289,7 +298,8 @@
       "review_status": "draft",
       "reviewer": null,
       "reviewed_on": null,
-      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring."
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring.",
+      "expected_intent": "call_site_navigation"
     },
     {
       "id": "seed-passage-01",
@@ -317,7 +327,8 @@
       "review_status": "draft",
       "reviewer": null,
       "reviewed_on": null,
-      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring."
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring.",
+      "expected_intent": "passage_retrieval"
     },
     {
       "id": "seed-passage-02",
@@ -345,7 +356,8 @@
       "review_status": "draft",
       "reviewer": null,
       "reviewed_on": null,
-      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring."
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring.",
+      "expected_intent": "passage_retrieval"
     },
     {
       "id": "seed-passage-03",
@@ -373,7 +385,8 @@
       "review_status": "draft",
       "reviewer": null,
       "reviewed_on": null,
-      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring."
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring.",
+      "expected_intent": "passage_retrieval"
     },
     {
       "id": "seed-passage-04",
@@ -401,7 +414,8 @@
       "review_status": "draft",
       "reviewer": null,
       "reviewed_on": null,
-      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring."
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring.",
+      "expected_intent": "passage_retrieval"
     },
     {
       "id": "seed-passage-05",
@@ -429,7 +443,8 @@
       "review_status": "draft",
       "reviewer": null,
       "reviewed_on": null,
-      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring."
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring.",
+      "expected_intent": "passage_retrieval"
     },
     {
       "id": "seed-no-evidence-1",
@@ -450,7 +465,8 @@
       "review_status": "draft",
       "reviewer": null,
       "reviewed_on": null,
-      "rationale": "Draft no-evidence case; expected to abstain after the fixture retrievers return no relevant evidence."
+      "rationale": "Draft no-evidence case; expected to abstain after the fixture retrievers return no relevant evidence.",
+      "expected_intent": "passage_retrieval"
     },
     {
       "id": "seed-no-evidence-2",
@@ -471,7 +487,8 @@
       "review_status": "draft",
       "reviewer": null,
       "reviewed_on": null,
-      "rationale": "Draft no-evidence case; expected to abstain after the fixture retrievers return no relevant evidence."
+      "rationale": "Draft no-evidence case; expected to abstain after the fixture retrievers return no relevant evidence.",
+      "expected_intent": "passage_retrieval"
     },
     {
       "id": "seed-no-evidence-3",
@@ -492,7 +509,8 @@
       "review_status": "draft",
       "reviewer": null,
       "reviewed_on": null,
-      "rationale": "Draft no-evidence case; expected to abstain after the fixture retrievers return no relevant evidence."
+      "rationale": "Draft no-evidence case; expected to abstain after the fixture retrievers return no relevant evidence.",
+      "expected_intent": "passage_retrieval"
     },
     {
       "id": "seed-ambiguous-repository",
@@ -513,12 +531,13 @@
       "review_status": "draft",
       "reviewer": null,
       "reviewed_on": null,
-      "rationale": "Draft ambiguity case; multiple active repositories must not be silently selected."
+      "rationale": "Draft ambiguity case; multiple active repositories must not be silently selected.",
+      "expected_intent": "passage_retrieval"
     },
     {
       "id": "seed-ambiguous-symbol",
       "task_type": "ambiguous_scope",
-      "question": "Find the declaration of process in the repository where multiple declarations share that identifier.",
+      "question": "Find the declaration of `process_task` where multiple declarations share that identifier.",
       "scope": {
         "company_id": "benchmark-company",
         "repository_id": "benchmark-repository",
@@ -534,7 +553,8 @@
       "review_status": "draft",
       "reviewer": null,
       "reviewed_on": null,
-      "rationale": "Draft ambiguity case; symbol resolution must not choose among multiple exact candidates."
+      "rationale": "Draft ambiguity case; symbol resolution must not choose among multiple exact candidates.",
+      "expected_intent": "declaration_discovery"
     },
     {
       "id": "seed-unsupported-ownership",
@@ -555,7 +575,8 @@
       "review_status": "draft",
       "reviewer": null,
       "reviewed_on": null,
-      "rationale": "Ownership/approval claim has no labeled evidence in this synthetic source fixture."
+      "rationale": "Ownership/approval claim has no labeled evidence in this synthetic source fixture.",
+      "expected_intent": "unsupported"
     },
     {
       "id": "seed-unsupported-runtime",
@@ -576,7 +597,8 @@
       "review_status": "draft",
       "reviewer": null,
       "reviewed_on": null,
-      "rationale": "Runtime behavior is not established by the static source evidence in this fixture."
+      "rationale": "Runtime behavior is not established by the static source evidence in this fixture.",
+      "expected_intent": "unsupported"
     },
     {
       "id": "seed-structured-count",
@@ -599,7 +621,8 @@
       "review_status": "draft",
       "reviewer": null,
       "reviewed_on": null,
-      "rationale": "Draft routing control case; should use structured data rather than code retrieval."
+      "rationale": "Draft routing control case; should use structured data rather than code retrieval.",
+      "expected_intent": "structured_fact"
     },
     {
       "id": "seed-followup-context",
@@ -635,7 +658,8 @@
       ],
       "conversation_refs": [
         "seed-context-billing"
-      ]
+      ],
+      "expected_intent": "follow_up"
     }
   ]
 }
