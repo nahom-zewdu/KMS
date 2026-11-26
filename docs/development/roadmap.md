@@ -888,7 +888,7 @@ Added `nlp/query_engine/evidence_gatherer.py` and focused tests in `nlp/tests/te
 
 The gatherer routes ready passage, declaration-discovery, and resolved call-site plans to one existing KRT-03 retriever each. It forwards trusted company/repository scope, checks optional source-revision constraints, validates returned code-evidence provenance, preserves the shared `EvidenceCandidate` contract, and caps result count/content size. It fails closed for non-ready plans, courtesy/follow-up/clarification/unsupported intents, structured facts (not yet connected), missing repository scope, unsupported time constraints, ambiguous declaration targets, and unresolved call-site symbols.
 
-No QueryEngine behavior, synthesis, citation validation, schema, migration, embeddings, or RRF changes are included. Run the focused test file and full NLP suite before treating this slice as verified.
+No QueryEngine behavior, synthesis, citation validation, schema, migration, embeddings, or RRF changes are included. User-reported full-suite verification is recorded under KRT-04.6 below.
 
 
 ### KRT-04.5 claim-level grounded synthesis and citation validation — 2026-11-26
