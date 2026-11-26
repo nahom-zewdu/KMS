@@ -8,8 +8,8 @@
 
 **Last updated:** 2026-11-26
 **Current branch:** `feat/krt-05-evaluation`
-**Current milestone:** KRT-05.4 — Query-stage observability
-**Current objective:** Complete correlated, content-free query-stage instrumentation and review KRT-05 acceptance boundaries.
+**Current milestone:** KRT-05 acceptance review
+**Current objective:** Close KRT-05 with an evidence-based acceptance review; preserve explicit limits where human-reviewed quality labels and production telemetry are absent.
 
 ---
 
@@ -78,7 +78,7 @@ An `IMPORTS` edge (`A imports B`) is a structural dependency. It does not, by it
 | KRT-02 code intelligence | VERIFIED | Tree-sitter declarations and persisted SCIP occurrences; Python, Go, and TypeScript integrations exercised separately. See `docs/development/milestones/2026-11-22-krt-02-code-intelligence.md`. |
 | KRT-03 hybrid retrieval | VERIFIED — bounded deterministic retrieval foundation; semantic/fusion scope deferred | Task-aware routing, snapshot-scoped lexical source chunks, symbol lookup, SCIP occurrence retrieval, and Supabase tenant/snapshot integration are verified. Latest full NLP suite: **310 passed, 8 skipped, 6 warnings, 4 subtests passed**; router Supabase integration: **1 passed**. See the acceptance review in the KRT-03 design note. The original semantic-code-retrieval + RRF acceptance criteria were not implemented and are explicitly deferred; this milestone does not claim a complete semantic hybrid retriever. |
 | KRT-04 typed query planning and grounded synthesis | MERGED — PR #29 | Typed query planning, bounded evidence gathering, claim-level citation membership validation, and authenticated repository routing; semantic claim support remains unevaluated. |
-| KRT-05 evaluation and observability | IN_PROGRESS — KRT-05.4 | KRT-05.1–.3 locally verified; KRT-05.4 API/worker/planned-route timing logs implemented, pending local verification. Human-reviewed claim labels remain empty; no live quality claim. |
+| KRT-05 evaluation and observability | IMPLEMENTED — pending acceptance review | KRT-05.1–.4 verified by local NLP and API test suites. Human-reviewed claim labels remain empty; no live quality claim or production telemetry claim. See the KRT-05 design note for exact limits. |
 | Reliability Batch 1 | ACCEPTED | Tenant/failure semantics hardened. Unchanged by this branch; not re-verified on 2026-09-21. |
 | Reliability Batch 2 | ACCEPTED | Redis pending-message recovery/ACK semantics hardened. Not re-verified on 2026-09-21. |
 | Reliability Batch 3 | ACCEPTED | Durable codebase-analysis lifecycle and failure propagation. Not re-verified on 2026-09-21. |
@@ -1025,6 +1025,17 @@ Pending user-reported verification: `uv run pytest -q tests/test_krt05_planned_q
 - **KRT-05.1 benchmark contract + seed:** VERIFIED. 24 cases, explicit scope, draft labels excluded from scoring.
 - **KRT-05.2 offline planned-query evaluator:** VERIFIED. Deterministic test doubles; synthetic fixture only.
 - **KRT-05.3 claim-support review + LLM run capture:** VERIFIED at contract/unit-test level. Review fixture currently contains zero reviewed annotations. LLM run capture is opt-in, content-free, local JSONL; live provider evaluation not yet run.
-- **KRT-05.4 query-stage observability:** IMPLEMENTED, pending local verification. Correlated stage timing logs span API, worker, repository resolution, and planned-query stages. These are logs, not distributed tracing or a metrics backend. Legacy route stage coverage remains incomplete.
+- **KRT-05.4 query-stage observability:** VERIFIED. Correlated stage timing logs span API, worker, repository resolution, and planned-query stages. NLP full suite: 442 passed, 8 skipped, 6 warnings, 4 subtests passed; API `go test ./...` passed. These are logs, not distributed tracing or a metrics backend. Legacy route stage coverage remains incomplete.
 
 **Latest user-reported full NLP suite before KRT-05.4 stage instrumentation:** 438 passed, 8 skipped, 6 warnings, 4 subtests passed. Re-run required after current changes. No consolidated KRT-05 PR has been opened.
+
+
+### KRT-05.4 verification — 2026-11-26
+
+Latest user-reported validation after the observability integration:
+
+- NLP full suite: **442 passed, 8 skipped, 6 warnings, 4 subtests passed**.
+- API Go suite: **all packages passed**.
+- Existing deprecation warnings remain non-blocking.
+
+KRT-05 implementation is complete for the scoped harness and instrumentation. Acceptance is still gated on the quality evidence described in the milestone: the seed dataset's 24 cases are still draft unless independently reviewed, the claim-support annotation fixture is empty, and no live LLM evaluation or production telemetry run has been performed. Do not describe KRT-05 as proving answer quality or production readiness.
