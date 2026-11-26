@@ -606,9 +606,9 @@
       "question": "How many repositories are connected to this company?",
       "scope": {
         "company_id": "benchmark-company",
-        "repository_id": "benchmark-repository",
-        "snapshot_id": "benchmark-snapshot-v1",
-        "source_revision": "benchmark-revision-v1"
+        "repository_id": null,
+        "snapshot_id": null,
+        "source_revision": null
       },
       "answerability": "answerable",
       "expected_route": "structured_handler",
