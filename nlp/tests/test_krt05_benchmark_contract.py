@@ -154,3 +154,19 @@ def test_ambiguous_repository_scope_has_no_snapshot_metadata():
     assert case.scope.repository_id is None
     assert case.scope.snapshot_id is None
     assert case.scope.source_revision is None
+
+
+def test_expected_intent_must_match_expected_route_and_task():
+    payload = json.loads(_DATASET_PATH.read_text(encoding="utf-8"))
+    payload["cases"][0]["expected_intent"] = "unsupported"
+
+    with pytest.raises(ValidationError, match="expected_intent is inconsistent"):
+        BenchmarkDataset.model_validate_json(json.dumps(payload))
+
+
+def test_task_type_cannot_be_paired_with_an_unrelated_intent():
+    payload = json.loads(_DATASET_PATH.read_text(encoding="utf-8"))
+    payload["cases"][0]["task_type"] = "call_site_navigation"
+
+    with pytest.raises(ValidationError, match="expected_intent is inconsistent with task_type"):
+        BenchmarkDataset.model_validate_json(json.dumps(payload))
