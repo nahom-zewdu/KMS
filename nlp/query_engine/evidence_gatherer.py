@@ -201,6 +201,8 @@ class BoundedEvidenceGatherer:
                     "start_line", "end_line", "start_byte", "end_byte", "symbol")
         if any(row.get(key) is None for key in required):
             return None
+        if not self._row_scope_matches(plan, repository_id, row):
+            return None
         if not self._revision_matches(plan, row.get("source_revision")):
             return None
         symbol = str(row["symbol"])
