@@ -122,6 +122,19 @@ class BoundedEvidenceGatherer:
             return EvidenceGatheringResult(plan, reason="multiple_file_paths_require_clarification")
         if plan.file_paths:
             rows = self.symbols.list_file_symbols(**kwargs, file_path=plan.file_paths[0])
+            if len(plan.qualified_names) > 1 or (
+                not plan.qualified_names and len(plan.identifiers) > 1
+            ):
+                return EvidenceGatheringResult(plan, reason="multiple_symbol_candidates")
+            if plan.qualified_names:
+                target = plan.qualified_names[0]
+                rows = [row for row in rows if row.get("qualified_name") == target]
+            elif plan.identifiers:
+                target = plan.identifiers[0]
+                rows = [
+                    row for row in rows
+                    if row.get("name") == target or row.get("qualified_name") == target
+                ]
         elif plan.qualified_names:
             if len(plan.qualified_names) != 1:
                 return EvidenceGatheringResult(plan, reason="multiple_symbol_candidates")
