@@ -206,7 +206,7 @@ Implement KRT-05.1 and KRT-05.2 in order. Keep all seed labels in draft until in
 
 **Status: VERIFIED**
 
-Typed benchmark contracts and the 24-case seed dataset are implemented. Cases without independent review remain draft and are excluded from scored aggregates. The dataset uses explicit case-level scope; the earlier uniform-default-scope assumption was corrected.
+Typed benchmark contracts and the 24-case seed dataset are implemented. All 24 seed case contracts were reviewed by Nahom on 2026-11-26 and are eligible for deterministic evaluation. This is a compact synthetic regression seed, not a representative production benchmark. The dataset uses explicit case-level scope.
 
 ### KRT-05.2 — offline planned-query evaluator
 
@@ -218,7 +218,7 @@ The deterministic evaluator exercises the planned-query executor with injected r
 
 **Status: VERIFIED**
 
-Human claim/evidence annotations have a strict versioned contract and aggregate report. The checked-in annotation fixture is intentionally empty: no claims are represented as independently reviewed yet. Opt-in local JSONL LLM capture records model/prompt version, token limits, latency, status, prompt/output hashes, and allowlisted provider token usage. It stores no prompt, output, or source content and enforces owner-only file permissions. Live provider evaluation remains opt-in and has not been reported as a benchmark result.
+Human claim/evidence annotations have a strict versioned contract and aggregate report. The checked-in annotation fixture remains intentionally empty: no generated claims are represented as independently reviewed yet. Opt-in local JSONL LLM capture records model/prompt version, token limits, latency, status, prompt/output hashes, and allowlisted provider token usage. It stores no prompt, output, or source content and enforces owner-only file permissions. Live provider evaluation remains opt-in and has not been reported as a benchmark result.
 
 ### KRT-05.4 — query-stage observability
 
@@ -243,7 +243,7 @@ User-reported verification after the latest observability and planned-route chan
 - API Go suite after the API handler changes: **all packages passed** (`go test ./...`).
 - The warnings are existing `pythonjsonlogger` and PyGithub deprecations.
 
-This verifies the implemented test coverage, not production telemetry behavior. No production traffic, p50/p95, cost, or semantic claim-support quality is asserted. The initial 24-case seed still has no independently reviewed end-to-end cases, and the claim-review fixture is empty; those remain explicit quality-evidence gaps.
+This verifies the implemented test coverage, not production telemetry behavior. No production traffic, p50/p95, cost, or semantic claim-support quality is asserted. All 24 seed case contracts have since been reviewed by Nahom. The claim-review fixture remains empty, and actual end-to-end execution against the 24 cases has not yet been recorded; semantic claim-support and end-to-end quality evidence remain open.
 
 
 ## 11. Human review execution protocol
@@ -261,3 +261,16 @@ A review of the evaluator found that a reviewed `no_evidence` case could pass wh
 ### Evaluation report reproducibility — 2026-11-26
 
 The offline planned-query report now includes a SHA-256 fingerprint of the exact retrieval-label fixture bytes, alongside the benchmark dataset fingerprint. This makes a report identify both the reviewed case set and the retrieval ground-truth artifact used to score evidence recall. Regression coverage asserts that the fingerprint is emitted. Pending local verification.
+
+
+### KRT-05 human case review — 2026-11-26
+
+**Status: COMPLETE — 24/24 case contracts reviewed**
+
+Nahom reviewed and approved all 24 seed cases. The fixture records reviewer identity and review date. Unit tests that need draft-only datasets now construct those states explicitly rather than relying on the canonical seed remaining draft.
+
+**Still open before milestone closure:**
+- Run the focused and full NLP suites against the reviewed fixture and record exact results.
+- Execute the 24 cases through the appropriate deterministic production components / harness and preserve a sanitized report. Existing evaluator unit tests use fake executors; they are not end-to-end execution evidence.
+- Review generated claims against their exact cited evidence. Do not invent annotations; cases producing no claims do not need claim annotations.
+- Keep semantic claim support marked not evaluated until real generated claims have been assessed.
