@@ -80,7 +80,11 @@ def _extract(
     query: str,
 ) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
     paths = _unique_bounded(_PATH.findall(query), MAX_PATH_COUNT)
-    qualified = _unique_bounded(_QUALIFIED.findall(query), MAX_IDENTIFIER_COUNT)
+    path_keys = {path.casefold() for path in paths}
+    qualified = _unique_bounded(
+        (value for value in _QUALIFIED.findall(query) if value.casefold() not in path_keys),
+        MAX_IDENTIFIER_COUNT,
+    )
     explicit = [match.group(1).strip() for match in _BACKTICK.finditer(query)]
     identifiers = _unique_bounded(
         [*explicit, *qualified, *(token for token in _IDENTIFIER.findall(query)
