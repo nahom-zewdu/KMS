@@ -28,6 +28,7 @@ type JobPayload struct {
 	EventType string                 `json:"event_type" binding:"required"`
 	Content   string                 `json:"content" binding:"required"`
 	CompanyID string                 `json:"company_id"`
+	Repository string                 `json:"repository,omitempty"` // Canonical company-verified full name for query jobs.
 	Payload   map[string]interface{} `json:"payload"` // Raw JSON payload
 	CreatedAt string                 `json:"created_at" binding:"required"`
 }
