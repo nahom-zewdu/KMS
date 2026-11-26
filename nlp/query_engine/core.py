@@ -251,8 +251,8 @@ class QueryEngine:
             final_answer = json.dumps(structured, indent=2)
             self.redis.publish(f"query_results:{query_id}", final_answer)
             logger.info(
-                "Structured answer sent | %s | company=%s | question=%s",
-                query_id, company_id, effective_question,
+                "Structured answer sent | query_id=%s | company=%s",
+                query_id, company_id,
             )
             return final_answer
 
