@@ -124,6 +124,15 @@ def test_returns_no_active_repository_when_inventory_is_empty():
     assert result.reason == "no_active_repository"
 
 
+def test_resolves_company_verified_full_name_to_internal_repository_id():
+    db = _Supabase([_repo("repo-1")])
+    result = TrustedRepositoryScopeResolver(db).resolve("company-a", "acme/repo-1")
+
+    assert result.resolved
+    assert result.repository_id == "repo-1"
+    assert ("full_name", "acme/repo-1") in db.last_query.filters
+
+
 def test_requested_repository_must_be_owned_by_the_authenticated_company():
     db = _Supabase([_repo("repo-1", company="company-b")])
     result = TrustedRepositoryScopeResolver(db).resolve("company-a", "repo-1")
