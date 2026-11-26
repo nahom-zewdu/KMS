@@ -78,8 +78,8 @@ class BenchmarkCase(BenchmarkModel):
     answerability: Answerability
     expected_route: ExpectedRoute
     evidence: tuple[BenchmarkEvidenceReference, ...] = Field(max_length=8)
-    conversation_history: tuple[ConversationTurn, ...] = Field(max_length=8)
-    conversation_refs: tuple[str, ...] = Field(max_length=10)
+    conversation_history: tuple[ConversationTurn, ...] = Field(default=(), max_length=8)
+    conversation_refs: tuple[str, ...] = Field(default=(), max_length=10)
     required_facts: tuple[str, ...] = Field(max_length=8)
     forbidden_claims: tuple[str, ...] = Field(max_length=8)
     expected_abstention: AbstentionCategory | None = None
