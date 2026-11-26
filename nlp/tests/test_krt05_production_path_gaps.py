@@ -103,12 +103,56 @@ def test_duplicate_fixture_declarations_abstain_through_planned_query_pipeline()
         "company_id": "benchmark-company",
         "repository_id": "benchmark-repository",
         "snapshot_id": "benchmark-snapshot-v1",
+        "ilike:qualified_name": "%process_task%",
     }
     assert symbol_query.pattern == "%process_task%"
     assert result.reason == "ambiguous_declaration"
     assert result.answer["abstain_reason"] == "ambiguous_declaration"
     assert result.evidence == ()
     assert synthesis_calls == []
+
+
+
+def test_explicit_file_path_disambiguates_duplicate_fixture_declarations():
+    db = _FixtureSupabase({
+        "repositories": [{
+            "id": "benchmark-repository",
+            "company_id": "benchmark-company",
+            "active_snapshot_id": "benchmark-snapshot-v1",
+        }],
+        "code_symbols": _fixture_declarations(),
+    })
+    declarations = CodeSymbolRetriever(db)
+    occurrences = _UnusedOccurrences()
+    gatherer = BoundedEvidenceGatherer(
+        source_chunks=_UnusedSourceChunks(),
+        symbols=declarations,
+        occurrences=occurrences,
+    )
+    executor = PlannedQueryExecutor(
+        evidence_gatherer=gatherer,
+        symbol_resolver=ConservativeScipSymbolResolver(declarations, occurrences),
+        synthesizer=lambda _query, evidence: {
+            "claims": [{
+                "text": "The declaration is in worker_a.py.",
+                "evidence_ids": [evidence[0].evidence_id],
+            }],
+        },
+    )
+
+    result = executor.execute(
+        "Find the declaration of process_task in worker_a.py.",
+        scope=QueryScope(
+            company_id="benchmark-company",
+            repository_id="benchmark-repository",
+        ),
+    )
+
+    assert result.completed
+    assert result.reason is None
+    assert len(result.evidence) == 1
+    assert result.evidence[0].file_path == "worker_a.py"
+    assert result.answer["abstain_reason"] is None
 
 
 class _TableQuery:
