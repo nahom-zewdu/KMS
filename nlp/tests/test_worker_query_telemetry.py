@@ -28,7 +28,8 @@ def test_worker_emits_correlated_content_free_lifecycle_logs(caplog):
 
 
 def test_worker_failure_logs_type_and_reraises_without_error_text(caplog):
-    handler = QueryHandler.__new__(QueryHandler)
+    query_handler = _query_handler_class()
+    handler = query_handler.__new__(query_handler)
 
     def fail(_job):
         raise RuntimeError("private provider response")
