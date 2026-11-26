@@ -156,6 +156,29 @@ class QueryEngine:
             query_id, (time.perf_counter() - route_classification_started) * 1000,
         )
 
+        # Structured facts must be answered from authoritative records before
+        # source retrieval or model synthesis can pre-empt the deterministic route.
+        structured_attempted = bool(
+            candidate_plan and candidate_plan.intent is QueryIntent.STRUCTURED_FACT
+        )
+        if structured_attempted:
+            try:
+                structured_result = answer_structured_question(
+                    self.supabase, effective_question, company_id, ramp_context,
+                    conversation_history=conversation_history,
+                )
+            except Exception:
+                logger.exception("Structured query failed | company=%s", company_id)
+                structured_result = None
+            if structured_result is not None:
+                final_answer = json.dumps(structured_result, indent=2)
+                self.redis.publish(f"query_results:{query_id}", final_answer)
+                logger.info(
+                    "Structured answer sent | query_id=%s | company=%s",
+                    query_id, company_id,
+                )
+                return final_answer
+
         if candidate_plan and candidate_plan.intent in {
             QueryIntent.PASSAGE_RETRIEVAL,
             QueryIntent.DECLARATION_DISCOVERY,
@@ -254,15 +277,18 @@ class QueryEngine:
                 )
                 return final_answer
 
-        # Structured company facts must come from authoritative tables, not vector top-k.
-        try:
-            structured = answer_structured_question(
-                self.supabase, effective_question, company_id, ramp_context,
-                conversation_history=conversation_history,
-            )
-        except Exception:
-            logger.exception("Structured query failed | company=%s", company_id)
-            structured = None
+        # Non-structured routes retain the legacy structured fallback. A
+        # STRUCTURED_FACT plan was already checked before source retrieval above.
+        structured = None
+        if not structured_attempted:
+            try:
+                structured = answer_structured_question(
+                    self.supabase, effective_question, company_id, ramp_context,
+                    conversation_history=conversation_history,
+                )
+            except Exception:
+                logger.exception("Structured query failed | company=%s", company_id)
+                structured = None
         if structured is not None:
             final_answer = json.dumps(structured, indent=2)
             self.redis.publish(f"query_results:{query_id}", final_answer)
