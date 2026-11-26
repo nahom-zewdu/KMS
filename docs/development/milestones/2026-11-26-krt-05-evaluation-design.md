@@ -256,3 +256,8 @@ The checked-in seed currently contains 24 cases distributed as 5 declaration, 5 
 **Status: IMPLEMENTED — pending local verification**
 
 A review of the evaluator found that a reviewed `no_evidence` case could pass while the executor returned evidence, provided the answer abstained and the returned candidate did not violate the scope checks. Added an explicit hard failure for any evidence returned on a no-evidence case, plus a regression test. This is a benchmark correctness guard; it does not change query runtime behavior or create human-reviewed labels.
+
+
+### Evaluation report reproducibility — 2026-11-26
+
+The offline planned-query report now includes a SHA-256 fingerprint of the exact retrieval-label fixture bytes, alongside the benchmark dataset fingerprint. This makes a report identify both the reviewed case set and the retrieval ground-truth artifact used to score evidence recall. Regression coverage asserts that the fingerprint is emitted. Pending local verification.
