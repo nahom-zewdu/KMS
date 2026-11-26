@@ -1,8 +1,8 @@
 """Conservative orchestration boundary for KRT-04 planned queries.
 
-This executor is intentionally not wired into QueryEngine yet. It composes the
-validated planning, resolution, evidence, and grounded-answer contracts so the
-complete route can be tested before changing production routing behavior.
+Composes validated planning, symbol resolution, bounded evidence gathering,
+and grounded-answer validation. Optional stage observation is content-free and
+must not affect query behavior.
 """
 from __future__ import annotations
 
