@@ -137,8 +137,9 @@ class BenchmarkDataset(BenchmarkModel):
 
 def load_benchmark(path: str | Path) -> BenchmarkDataset:
     """Load and strictly validate a versioned JSON benchmark fixture."""
-    payload = json.loads(Path(path).read_text(encoding="utf-8"))
-    return BenchmarkDataset.model_validate(payload)
+    return BenchmarkDataset.model_validate_json(
+        Path(path).read_text(encoding="utf-8")
+    )
 
 
 def validate_retrieval_references(
