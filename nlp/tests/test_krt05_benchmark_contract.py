@@ -60,10 +60,12 @@ def test_seed_dataset_reuses_existing_retrieval_labels_without_copying_them():
     }
 
 
-def test_draft_cases_are_never_counted_as_scored_cases():
+def test_human_reviewed_seed_cases_are_counted_as_scored_cases():
     dataset = load_benchmark(_DATASET_PATH)
-    assert all(case.review_status == "draft" for case in dataset.cases)
-    assert dataset.scored_cases == ()
+    assert len(dataset.scored_cases) == 24
+    assert all(case.review_status == "reviewed" for case in dataset.cases)
+    assert all(case.reviewer == "Nahom" for case in dataset.cases)
+    assert all(case.reviewed_on == "2026-11-26" for case in dataset.cases)
 
 
 def test_duplicate_case_ids_are_rejected():
