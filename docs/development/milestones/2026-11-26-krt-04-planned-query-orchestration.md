@@ -1,6 +1,6 @@
 # KRT-04.6 — Planned Query Orchestration Boundary
 
-**Status:** IMPLEMENTED — PENDING LOCAL VERIFICATION  
+**Status:** VERIFIED — USER-REPORTED LOCAL TESTS  
 **Date:** 2026-11-26  
 **Branch:** `feat/krt-04-evidence-gathering`
 
@@ -32,12 +32,11 @@ The existing QueryEngine also has distinct structured-fact and conversation path
 
 ## Verification
 
-Pending local execution:
+User-reported local verification on 2026-11-26:
 
-```bash
-uv run pytest -q tests/test_planned_query.py
-uv run pytest -q
-```
+- `uv run pytest -q tests/test_planned_query.py` — **7 passed in 1.68s**.
+- `uv run pytest -q` — **400 passed, 8 skipped, 6 warnings, 4 subtests passed in 15.63s**.
+- The six warnings are existing python-json-logger and PyGithub deprecations.
 
 ## Boundaries
 
