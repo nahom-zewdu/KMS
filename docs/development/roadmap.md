@@ -8,8 +8,8 @@
 
 **Last updated:** 2026-11-26
 **Current branch:** `feat/krt-05-evaluation`
-**Current milestone:** KRT-05.1 — Benchmark contract and reviewed seed dataset
-**Current objective:** Implement the versioned benchmark schema and a small reviewed seed set that reuses existing retrieval fixtures without duplicating their source of truth.
+**Current milestone:** KRT-05.2 — Offline planned-query evaluator
+**Current objective:** Verify routing, evidence recall, provenance, citation membership, and abstention with deterministic offline execution.
 
 ---
 
