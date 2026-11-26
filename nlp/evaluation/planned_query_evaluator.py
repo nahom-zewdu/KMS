@@ -87,8 +87,12 @@ def _load_retrieval_labels(dataset: BenchmarkDataset, path: str | Path | None):
     fixture_path = Path(path) if path is not None else (
         Path(__file__).resolve().parents[1] / dataset.retrieval_fixture
     )
-    payload = json.loads(fixture_path.read_text(encoding="utf-8"))
-    return {item["id"]: item for item in payload.get("queries", [])}
+    fixture_bytes = fixture_path.read_bytes()
+    payload = json.loads(fixture_bytes)
+    return (
+        {item["id"]: item for item in payload.get("queries", [])},
+        hashlib.sha256(fixture_bytes).hexdigest(),
+    )
 
 
 def _evidence_recall(case: BenchmarkCase, evidence: tuple[Any, ...], labels: Mapping[str, Any]):
@@ -150,7 +154,9 @@ def evaluate_planned_queries(
     if not environment or len(environment) > 128:
         raise ValueError("environment must be a non-empty bounded label")
 
-    labels = _load_retrieval_labels(dataset, retrieval_fixture_path)
+    labels, retrieval_fixture_sha256 = _load_retrieval_labels(
+        dataset, retrieval_fixture_path,
+    )
     outcomes: list[EvaluationOutcome] = []
     excluded = Counter()
     for case in dataset.cases:
@@ -256,6 +262,7 @@ def evaluate_planned_queries(
             "dataset_sha256": hashlib.sha256(
                 dataset.model_dump_json().encode("utf-8")
             ).hexdigest(),
+            "retrieval_fixture_sha256": retrieval_fixture_sha256,
         },
         "execution": {
             "commit": commit,
