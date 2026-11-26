@@ -30,6 +30,8 @@ def _review(**overrides):
     values.update(overrides)
     if isinstance(values.get("assessments"), list):
         values["assessments"] = tuple(values["assessments"])
+    if isinstance(values.get("cited_evidence_ids"), list):
+        values["cited_evidence_ids"] = tuple(values["cited_evidence_ids"])
     return ClaimReview.model_validate(values)
 
 
