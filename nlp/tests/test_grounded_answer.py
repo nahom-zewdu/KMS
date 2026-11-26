@@ -125,3 +125,20 @@ def test_no_claims_means_explicit_abstention():
     assert not result.accepted
     assert result.abstain_reason == "no_grounded_claims"
     assert result.answer == "Not enough validated evidence to answer that yet."
+
+
+
+def test_validator_accepts_json_string_from_grounded_synthesizer():
+    import json
+
+    candidate = _evidence()
+    payload = json.dumps({
+        "confidence": "medium",
+        "claims": [{
+            "text": "The handler calls the billing service.",
+            "evidence_ids": [candidate.evidence_id],
+        }],
+    })
+    result = GroundedAnswerValidator().validate(payload, [candidate])
+    assert result.accepted
+    assert result.confidence == "medium"
