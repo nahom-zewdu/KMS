@@ -28,8 +28,23 @@ def _evidence(*, company="benchmark-company", repository="benchmark-repository",
     )
 
 
-def _reviewed_dataset():
+def _draft_dataset():
     dataset = load_benchmark(_FIXTURES / "evaluation" / "krt05_seed_v1.json")
+    from evaluation.benchmark import BenchmarkCase
+    cases = tuple(
+        BenchmarkCase.model_validate({
+            **case.model_dump(),
+            "review_status": "draft",
+            "reviewer": None,
+            "reviewed_on": None,
+        })
+        for case in dataset.cases
+    )
+    return dataset.model_copy(update={"cases": cases})
+
+
+def _reviewed_dataset():
+    dataset = _draft_dataset()
     first = dataset.cases[0].model_dump()
     first.update({
         "review_status": "reviewed",
@@ -115,7 +130,7 @@ def test_evaluator_fails_closed_on_wrong_provenance_and_unknown_citation():
 
 
 def test_draft_only_dataset_is_reported_as_excluded_without_running_executor():
-    dataset = load_benchmark(_FIXTURES / "evaluation" / "krt05_seed_v1.json")
+    dataset = _draft_dataset()
     executor = FakeExecutor(result=None, calls=[])
 
     report = evaluate_planned_queries(dataset, executor, commit="abc123")
@@ -148,7 +163,7 @@ def test_report_writer_emits_stable_sorted_json(tmp_path):
 
 
 def test_no_evidence_case_fails_if_executor_returns_any_candidate():
-    dataset = load_benchmark(_FIXTURES / "evaluation" / "krt05_seed_v1.json")
+    dataset = _draft_dataset()
     raw = next(
         case.model_dump() for case in dataset.cases
         if case.id == "seed-no-evidence-1"
@@ -199,7 +214,7 @@ def test_dataset_carries_bounded_follow_up_context():
 
 
 def test_call_site_recall_requires_occurrence_evidence_at_labeled_range():
-    dataset = load_benchmark(_FIXTURES / "evaluation" / "krt05_seed_v1.json")
+    dataset = _draft_dataset()
     raw = next(case.model_dump() for case in dataset.cases if case.id == "seed-call-01")
     raw.update({
         "review_status": "reviewed",
