@@ -994,6 +994,13 @@ Added `nlp/evaluation/benchmark.py` with strict Pydantic contracts, dataset load
 User-reported verification: `uv run pytest -q tests/test_krt05_benchmark_contract.py` — **9 passed**; full NLP suite — **422 passed, 8 skipped, 6 warnings, 4 subtests passed**.
 
 
+### KRT-05.4 opt-in LLM run capture — 2026-11-26
+
+**Status: IMPLEMENTED — pending local verification**  
+**Branch:** `feat/krt-05-evaluation`
+
+Added opt-in local JSONL capture of model ID, prompt-version label, temperature, token limit, latency, outcome, prompt/output hashes, and provider token usage when available. Capture is disabled unless `KMS_LLM_RUN_CAPTURE_PATH` is set. Raw prompts, responses, source content, and credentials are never persisted. File permissions are enforced as owner-only (0600). Capture errors are best-effort and do not break inference. Unit coverage includes provider success and Groq JSON-mode fallback metadata paths.
+
 ### KRT-05.3 human claim-support review contract — 2026-11-26
 
 **Status: IMPLEMENTED — pending local verification**  
