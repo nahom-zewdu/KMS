@@ -46,12 +46,9 @@ class EvaluationOutcome:
 
 
 def _observed_route(result: Any) -> str:
+    # A deferral records that this executor handed responsibility elsewhere.
+    # It does not prove that QueryEngine or another production handler ran.
     if getattr(result, "deferred", False):
-        reason = getattr(result, "reason", "") or ""
-        if reason == "legacy_structured_route":
-            return "structured_handler"
-        if reason == "conversation_context_route":
-            return "conversation_handler"
         return "deferred"
     answer = getattr(result, "answer", None) or {}
     if answer.get("abstain_reason"):
