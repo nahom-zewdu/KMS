@@ -119,3 +119,22 @@ def test_wrong_retrieval_task_type_is_rejected(tmp_path):
             validate_retrieval_references(dataset, temporary_fixture)
     finally:
         temporary_fixture.unlink(missing_ok=True)
+
+
+
+def test_ambiguous_symbol_case_has_two_exact_declarations():
+    root = _FIXTURE_ROOT / "evaluation" / "ambiguous_symbols"
+    sources = [
+        (root / "worker_a.py").read_text(encoding="utf-8"),
+        (root / "worker_b.py").read_text(encoding="utf-8"),
+    ]
+    assert all("def process_task(" in source for source in sources)
+    assert sum(source.count("def process_task(") for source in sources) == 2
+
+
+def test_structured_repository_count_case_has_authoritative_fixture():
+    path = _FIXTURE_ROOT / "evaluation" / "structured_company_repositories_v1.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    repositories = payload["companies"]["benchmark-company"]["repositories"]
+    assert len(repositories) == 2
+    assert len({item["id"] for item in repositories}) == 2
