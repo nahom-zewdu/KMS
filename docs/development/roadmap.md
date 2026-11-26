@@ -7,9 +7,9 @@
 > Scoring spec vs implemented subset: `docs/product/ramp-candidate-scoring.md`.
 
 **Last updated:** 2026-11-26
-**Current branch:** `feat/krt-04-query-classification`
+**Current branch:** `feat/krt-04-symbol-resolution`
 **Current milestone:** KRT-04 — Typed Query Planning and Grounded Synthesis
-**Current objective:** Implement and evaluate conservative deterministic query classification against the KRT-04.1 typed query-plan contract, without changing production QueryEngine routing.
+**Current objective:** Resolve explicitly named call-site symbols to exact SCIP identifiers using tenant- and active-snapshot-scoped declaration/occurrence evidence; do not integrate production QueryEngine routing yet.
 
 ---
 
@@ -851,10 +851,21 @@ This slice is contract-only. It does not classify queries, resolve symbols, exec
 
 ### KRT-04.2 deterministic query classification — 2026-11-26
 
-**Status: VERIFIED — submitted for review**  
+**Status: ACCEPTED — merged in PR #27**  
 **Branch:** `feat/krt-04-query-classification`  
 **Base:** KRT-04.1 merge commit `54a0acaf7c69fecc6fc610dbc25effb750501ae3`
 
 Added `nlp/query_engine/query_planner.py` and focused tests in `nlp/tests/test_query_planner.py`. The classifier uses ordered lexical rules to produce the existing typed query-plan contract, extracts bounded paths/identifiers/terms, preserves caller-supplied trusted scope, and requires explicit conversation references before accepting a follow-up. It never resolves SCIP symbols or executes retrieval.
 
-This is a deliberately small deterministic baseline, not broad natural-language understanding. It does not change QueryEngine behavior or call external services. Developer-reported verification: focused contract + planner tests **49 passed in 1.23s**; full NLP suite **359 passed, 8 skipped, 6 warnings, 4 subtests passed in 18.70s**. The six warnings are existing python-json-logger and PyGithub deprecations. A duplicate parameterized test fixture was removed after the full-suite run; no implementation code changed. These tests verify the deterministic baseline, not broad natural-language quality. See `docs/development/milestones/2026-11-26-krt-04-query-classification.md`.
+This is a deliberately small deterministic baseline, not broad natural-language understanding. It does not change QueryEngine behavior or call external services. Developer-reported verification: focused contract + planner tests **49 passed in 1.23s**; full NLP suite **359 passed, 8 skipped, 6 warnings, 4 subtests passed in 18.70s**. The six warnings are existing python-json-logger and PyGithub deprecations. A duplicate parameterized test fixture was removed after the full-suite run; no implementation code changed. These tests verify the deterministic baseline, not broad natural-language quality. PR [#27](https://github.com/nahom-zewdu/KMS/pull/27) merged at `0334cff51a72d788137b1346827df60eaab7dc92`. See `docs/development/milestones/2026-11-26-krt-04-query-classification.md`.
+
+
+### KRT-04.3 conservative SCIP symbol resolution — 2026-11-26
+
+**Status: SPECIFIED — implementation in progress**  
+**Branch:** `feat/krt-04-symbol-resolution`  
+**Base:** KRT-04.2 merge commit `0334cff51a72d788137b1346827df60eaab7dc92`
+
+Resolve only one explicitly named declaration to one exact SCIP symbol. Use the existing company/repository/active-snapshot-scoped `CodeSymbolRetriever` and `ScipOccurrenceRetriever`; verify the declaration and SCIP definition share the same source file and range. Reject substring-only matches, multiple candidates, duplicate declarations, missing definitions, and range mismatches. No SCIP identifier is synthesized from source text.
+
+This slice is a pure resolver over injected retriever dependencies. It does not change QueryEngine, retrieval routing, synthesis, citations, or persistence. See `docs/development/milestones/2026-11-26-krt-04-symbol-resolution.md`.
