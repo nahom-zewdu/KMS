@@ -136,6 +136,14 @@ class BenchmarkCase(BenchmarkModel):
                 raise ValueError("abstention cases require unanswerable status and a reason")
         elif self.expected_abstention is not None:
             raise ValueError("expected_abstention is only valid for abstain route")
+        if self.task_type == "structured_fact" and any((
+            self.scope.repository_id,
+            self.scope.snapshot_id,
+            self.scope.source_revision,
+        )):
+            raise ValueError(
+                "company-level structured facts must not carry repository snapshot scope"
+            )
         if self.task_type == "conversation_control":
             if not self.conversation_history or not self.conversation_refs:
                 raise ValueError("conversation-control cases require history and references")
