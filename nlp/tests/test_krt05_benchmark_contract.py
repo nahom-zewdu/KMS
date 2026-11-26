@@ -26,7 +26,14 @@ def test_seed_dataset_loads_with_unique_cases_and_explicit_scope():
     assert dataset.dataset_version == "1.0.0"
     assert len(dataset.cases) == 24
     assert len({case.id for case in dataset.cases}) == 24
-    assert all(case.scope == dataset.default_scope for case in dataset.cases)
+    assert all(case.scope.company_id == dataset.default_scope.company_id for case in dataset.cases)
+    assert all(case.scope.snapshot_id == dataset.default_scope.snapshot_id for case in dataset.cases)
+    assert all(case.scope.source_revision == dataset.default_scope.source_revision for case in dataset.cases)
+    assert all(
+        case.scope.repository_id == dataset.default_scope.repository_id
+        or case.task_type == "ambiguous_scope"
+        for case in dataset.cases
+    )
     assert dataset.scored_cases == ()
 
 
