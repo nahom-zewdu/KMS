@@ -2,7 +2,7 @@
   "schema_version": 1,
   "dataset_id": "kms-krt05-end-to-end-seed",
   "dataset_version": "1.0.0",
-  "description": "Draft end-to-end KRT-04 evaluation seed. Cases are excluded from aggregate scoring until independently reviewed and approved.",
+  "description": "Human-reviewed KRT-05 end-to-end evaluation seed. Cases are eligible for deterministic evaluation; semantic claim support still requires separate human annotation.",
   "retrieval_fixture": "tests/fixtures/retrieval/retrieval_tasks_v1.json",
   "default_scope": {
     "company_id": "benchmark-company",
@@ -34,10 +34,10 @@
       ],
       "forbidden_claims": [],
       "expected_abstention": null,
-      "review_status": "draft",
-      "reviewer": null,
-      "reviewed_on": null,
-      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring.",
+      "review_status": "reviewed",
+      "reviewer": "Nahom",
+      "reviewed_on": "2026-11-26",
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring. Human review by Nahom confirmed the case question, scope, answerability, expected route, evidence mapping, and required/forbidden facts.",
       "expected_intent": "declaration_discovery"
     },
     {
@@ -63,10 +63,10 @@
       ],
       "forbidden_claims": [],
       "expected_abstention": null,
-      "review_status": "draft",
-      "reviewer": null,
-      "reviewed_on": null,
-      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring.",
+      "review_status": "reviewed",
+      "reviewer": "Nahom",
+      "reviewed_on": "2026-11-26",
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring. Human review by Nahom confirmed the case question, scope, answerability, expected route, evidence mapping, and required/forbidden facts.",
       "expected_intent": "declaration_discovery"
     },
     {
@@ -92,10 +92,10 @@
       ],
       "forbidden_claims": [],
       "expected_abstention": null,
-      "review_status": "draft",
-      "reviewer": null,
-      "reviewed_on": null,
-      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring.",
+      "review_status": "reviewed",
+      "reviewer": "Nahom",
+      "reviewed_on": "2026-11-26",
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring. Human review by Nahom confirmed the case question, scope, answerability, expected route, evidence mapping, and required/forbidden facts.",
       "expected_intent": "declaration_discovery"
     },
     {
@@ -121,10 +121,10 @@
       ],
       "forbidden_claims": [],
       "expected_abstention": null,
-      "review_status": "draft",
-      "reviewer": null,
-      "reviewed_on": null,
-      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring.",
+      "review_status": "reviewed",
+      "reviewer": "Nahom",
+      "reviewed_on": "2026-11-26",
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring. Human review by Nahom confirmed the case question, scope, answerability, expected route, evidence mapping, and required/forbidden facts.",
       "expected_intent": "declaration_discovery"
     },
     {
@@ -150,10 +150,10 @@
       ],
       "forbidden_claims": [],
       "expected_abstention": null,
-      "review_status": "draft",
-      "reviewer": null,
-      "reviewed_on": null,
-      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring.",
+      "review_status": "reviewed",
+      "reviewer": "Nahom",
+      "reviewed_on": "2026-11-26",
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring. Human review by Nahom confirmed the case question, scope, answerability, expected route, evidence mapping, and required/forbidden facts.",
       "expected_intent": "declaration_discovery"
     },
     {
@@ -179,10 +179,10 @@
       ],
       "forbidden_claims": [],
       "expected_abstention": null,
-      "review_status": "draft",
-      "reviewer": null,
-      "reviewed_on": null,
-      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring.",
+      "review_status": "reviewed",
+      "reviewer": "Nahom",
+      "reviewed_on": "2026-11-26",
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring. Human review by Nahom confirmed the case question, scope, answerability, expected route, evidence mapping, and required/forbidden facts.",
       "expected_intent": "call_site_navigation"
     },
     {
@@ -208,10 +208,10 @@
       ],
       "forbidden_claims": [],
       "expected_abstention": null,
-      "review_status": "draft",
-      "reviewer": null,
-      "reviewed_on": null,
-      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring.",
+      "review_status": "reviewed",
+      "reviewer": "Nahom",
+      "reviewed_on": "2026-11-26",
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring. Human review by Nahom confirmed the case question, scope, answerability, expected route, evidence mapping, and required/forbidden facts.",
       "expected_intent": "call_site_navigation"
     },
     {
@@ -237,10 +237,10 @@
       ],
       "forbidden_claims": [],
       "expected_abstention": null,
-      "review_status": "draft",
-      "reviewer": null,
-      "reviewed_on": null,
-      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring.",
+      "review_status": "reviewed",
+      "reviewer": "Nahom",
+      "reviewed_on": "2026-11-26",
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring. Human review by Nahom confirmed the case question, scope, answerability, expected route, evidence mapping, and required/forbidden facts.",
       "expected_intent": "call_site_navigation"
     },
     {
@@ -266,10 +266,10 @@
       ],
       "forbidden_claims": [],
       "expected_abstention": null,
-      "review_status": "draft",
-      "reviewer": null,
-      "reviewed_on": null,
-      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring.",
+      "review_status": "reviewed",
+      "reviewer": "Nahom",
+      "reviewed_on": "2026-11-26",
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring. Human review by Nahom confirmed the case question, scope, answerability, expected route, evidence mapping, and required/forbidden facts.",
       "expected_intent": "call_site_navigation"
     },
     {
@@ -295,10 +295,10 @@
       ],
       "forbidden_claims": [],
       "expected_abstention": null,
-      "review_status": "draft",
-      "reviewer": null,
-      "reviewed_on": null,
-      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring.",
+      "review_status": "reviewed",
+      "reviewer": "Nahom",
+      "reviewed_on": "2026-11-26",
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring. Human review by Nahom confirmed the case question, scope, answerability, expected route, evidence mapping, and required/forbidden facts.",
       "expected_intent": "call_site_navigation"
     },
     {
@@ -324,10 +324,10 @@
       ],
       "forbidden_claims": [],
       "expected_abstention": null,
-      "review_status": "draft",
-      "reviewer": null,
-      "reviewed_on": null,
-      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring.",
+      "review_status": "reviewed",
+      "reviewer": "Nahom",
+      "reviewed_on": "2026-11-26",
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring. Human review by Nahom confirmed the case question, scope, answerability, expected route, evidence mapping, and required/forbidden facts.",
       "expected_intent": "passage_retrieval"
     },
     {
@@ -353,10 +353,10 @@
       ],
       "forbidden_claims": [],
       "expected_abstention": null,
-      "review_status": "draft",
-      "reviewer": null,
-      "reviewed_on": null,
-      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring.",
+      "review_status": "reviewed",
+      "reviewer": "Nahom",
+      "reviewed_on": "2026-11-26",
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring. Human review by Nahom confirmed the case question, scope, answerability, expected route, evidence mapping, and required/forbidden facts.",
       "expected_intent": "passage_retrieval"
     },
     {
@@ -382,10 +382,10 @@
       ],
       "forbidden_claims": [],
       "expected_abstention": null,
-      "review_status": "draft",
-      "reviewer": null,
-      "reviewed_on": null,
-      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring.",
+      "review_status": "reviewed",
+      "reviewer": "Nahom",
+      "reviewed_on": "2026-11-26",
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring. Human review by Nahom confirmed the case question, scope, answerability, expected route, evidence mapping, and required/forbidden facts.",
       "expected_intent": "passage_retrieval"
     },
     {
@@ -411,10 +411,10 @@
       ],
       "forbidden_claims": [],
       "expected_abstention": null,
-      "review_status": "draft",
-      "reviewer": null,
-      "reviewed_on": null,
-      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring.",
+      "review_status": "reviewed",
+      "reviewer": "Nahom",
+      "reviewed_on": "2026-11-26",
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring. Human review by Nahom confirmed the case question, scope, answerability, expected route, evidence mapping, and required/forbidden facts.",
       "expected_intent": "passage_retrieval"
     },
     {
@@ -440,10 +440,10 @@
       ],
       "forbidden_claims": [],
       "expected_abstention": null,
-      "review_status": "draft",
-      "reviewer": null,
-      "reviewed_on": null,
-      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring.",
+      "review_status": "reviewed",
+      "reviewer": "Nahom",
+      "reviewed_on": "2026-11-26",
+      "rationale": "Draft mapping to the existing KRT-03 retrieval task; requires independent human review before scoring. Human review by Nahom confirmed the case question, scope, answerability, expected route, evidence mapping, and required/forbidden facts.",
       "expected_intent": "passage_retrieval"
     },
     {
@@ -462,10 +462,10 @@
       "required_facts": [],
       "forbidden_claims": [],
       "expected_abstention": "no_evidence",
-      "review_status": "draft",
-      "reviewer": null,
-      "reviewed_on": null,
-      "rationale": "Draft no-evidence case; expected to abstain after the fixture retrievers return no relevant evidence.",
+      "review_status": "reviewed",
+      "reviewer": "Nahom",
+      "reviewed_on": "2026-11-26",
+      "rationale": "Draft no-evidence case; expected to abstain after the fixture retrievers return no relevant evidence. Human review by Nahom confirmed the case question, scope, answerability, expected route, evidence mapping, and required/forbidden facts.",
       "expected_intent": "passage_retrieval"
     },
     {
@@ -484,10 +484,10 @@
       "required_facts": [],
       "forbidden_claims": [],
       "expected_abstention": "no_evidence",
-      "review_status": "draft",
-      "reviewer": null,
-      "reviewed_on": null,
-      "rationale": "Draft no-evidence case; expected to abstain after the fixture retrievers return no relevant evidence.",
+      "review_status": "reviewed",
+      "reviewer": "Nahom",
+      "reviewed_on": "2026-11-26",
+      "rationale": "Draft no-evidence case; expected to abstain after the fixture retrievers return no relevant evidence. Human review by Nahom confirmed the case question, scope, answerability, expected route, evidence mapping, and required/forbidden facts.",
       "expected_intent": "passage_retrieval"
     },
     {
@@ -506,10 +506,10 @@
       "required_facts": [],
       "forbidden_claims": [],
       "expected_abstention": "no_evidence",
-      "review_status": "draft",
-      "reviewer": null,
-      "reviewed_on": null,
-      "rationale": "Draft no-evidence case; expected to abstain after the fixture retrievers return no relevant evidence.",
+      "review_status": "reviewed",
+      "reviewer": "Nahom",
+      "reviewed_on": "2026-11-26",
+      "rationale": "Draft no-evidence case; expected to abstain after the fixture retrievers return no relevant evidence. Human review by Nahom confirmed the case question, scope, answerability, expected route, evidence mapping, and required/forbidden facts.",
       "expected_intent": "passage_retrieval"
     },
     {
@@ -528,10 +528,10 @@
       "required_facts": [],
       "forbidden_claims": [],
       "expected_abstention": "ambiguous_repository",
-      "review_status": "draft",
-      "reviewer": null,
-      "reviewed_on": null,
-      "rationale": "Draft ambiguity case: company scope is known, but no repository is selected; the system must request repository clarification rather than choose one.",
+      "review_status": "reviewed",
+      "reviewer": "Nahom",
+      "reviewed_on": "2026-11-26",
+      "rationale": "Draft ambiguity case: company scope is known, but no repository is selected; the system must request repository clarification rather than choose one. Human review by Nahom confirmed the case question, scope, answerability, expected route, evidence mapping, and required/forbidden facts.",
       "expected_intent": "passage_retrieval"
     },
     {
@@ -550,10 +550,10 @@
       "required_facts": [],
       "forbidden_claims": [],
       "expected_abstention": "ambiguous_symbol",
-      "review_status": "draft",
-      "reviewer": null,
-      "reviewed_on": null,
-      "rationale": "Draft ambiguity case grounded by the two same-name declarations in evaluation/ambiguous_symbols; requires independent human review.",
+      "review_status": "reviewed",
+      "reviewer": "Nahom",
+      "reviewed_on": "2026-11-26",
+      "rationale": "Draft ambiguity case grounded by the two same-name declarations in evaluation/ambiguous_symbols; requires independent human review. Human review by Nahom confirmed the case question, scope, answerability, expected route, evidence mapping, and required/forbidden facts.",
       "expected_intent": "declaration_discovery"
     },
     {
@@ -574,10 +574,10 @@
         "Do not infer code ownership or approval authority from implementation files."
       ],
       "expected_abstention": "unsupported_intent",
-      "review_status": "draft",
-      "reviewer": null,
-      "reviewed_on": null,
-      "rationale": "Draft unsupported-ownership case: the synthetic source fixture contains implementation code but no ownership or approval records.",
+      "review_status": "reviewed",
+      "reviewer": "Nahom",
+      "reviewed_on": "2026-11-26",
+      "rationale": "Draft unsupported-ownership case: the synthetic source fixture contains implementation code but no ownership or approval records. Human review by Nahom confirmed the case question, scope, answerability, expected route, evidence mapping, and required/forbidden facts.",
       "expected_intent": "unsupported"
     },
     {
@@ -596,10 +596,10 @@
       "required_facts": [],
       "forbidden_claims": [],
       "expected_abstention": "unsupported_intent",
-      "review_status": "draft",
-      "reviewer": null,
-      "reviewed_on": null,
-      "rationale": "Runtime behavior is not established by the static source evidence in this fixture.",
+      "review_status": "reviewed",
+      "reviewer": "Nahom",
+      "reviewed_on": "2026-11-26",
+      "rationale": "Runtime behavior is not established by the static source evidence in this fixture. Human review by Nahom confirmed the case question, scope, answerability, expected route, evidence mapping, and required/forbidden facts.",
       "expected_intent": "unsupported"
     },
     {
@@ -620,10 +620,10 @@
       ],
       "forbidden_claims": [],
       "expected_abstention": null,
-      "review_status": "draft",
-      "reviewer": null,
-      "reviewed_on": null,
-      "rationale": "Draft routing and answer case grounded by structured_company_repositories_v1.json; requires independent human review.",
+      "review_status": "reviewed",
+      "reviewer": "Nahom",
+      "reviewed_on": "2026-11-26",
+      "rationale": "Draft routing and answer case grounded by structured_company_repositories_v1.json; requires independent human review. Human review by Nahom confirmed the case question, scope, answerability, expected route, evidence mapping, and required/forbidden facts.",
       "expected_intent": "structured_fact"
     },
     {
@@ -644,10 +644,10 @@
       ],
       "forbidden_claims": [],
       "expected_abstention": null,
-      "review_status": "draft",
-      "reviewer": null,
-      "reviewed_on": null,
-      "rationale": "Draft conversation-control case; requires a preceding turn to be included in the final harness.",
+      "review_status": "reviewed",
+      "reviewer": "Nahom",
+      "reviewed_on": "2026-11-26",
+      "rationale": "Draft conversation-control case; requires a preceding turn to be included in the final harness. Human review by Nahom confirmed the case question, scope, answerability, expected route, evidence mapping, and required/forbidden facts.",
       "conversation_history": [
         {
           "role": "user",
