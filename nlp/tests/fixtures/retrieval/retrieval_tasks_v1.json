@@ -386,8 +386,8 @@
       "expected_ranges": [
         {
           "file_path": "billing/payment.py",
-          "start_line": 3,
-          "end_line": 7
+          "start_line": 5,
+          "end_line": 6
         }
       ]
     },
@@ -402,8 +402,8 @@
       "expected_ranges": [
         {
           "file_path": "billing/payment.py",
-          "start_line": 13,
-          "end_line": 17
+          "start_line": 15,
+          "end_line": 16
         }
       ]
     },
