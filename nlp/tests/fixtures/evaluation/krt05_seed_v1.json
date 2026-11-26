@@ -175,7 +175,7 @@
         }
       ],
       "required_facts": [
-        "Identify the call-site context overlapping the expected range in catalog/products.py."
+        "reserve calls find_available(sku) before adding the SKU to reserved_skus; it returns False when the SKU is unavailable."
       ],
       "forbidden_claims": [],
       "expected_abstention": null,
@@ -204,7 +204,7 @@
         }
       ],
       "required_facts": [
-        "Identify the call-site context overlapping the expected range in catalog/search.py."
+        "search_catalog normalizes the SKU with normalize_sku, then passes the normalized value to find_available."
       ],
       "forbidden_claims": [],
       "expected_abstention": null,
@@ -233,7 +233,7 @@
         }
       ],
       "required_facts": [
-        "Identify the call-site context overlapping the expected range in catalog/search.py."
+        "recommend_alternatives normalizes the SKU with normalize_sku, then passes the normalized value to find_alternatives."
       ],
       "forbidden_claims": [],
       "expected_abstention": null,
@@ -262,7 +262,7 @@
         }
       ],
       "required_facts": [
-        "Identify the call-site context overlapping the expected range in billing/invoice.py."
+        "build_invoice calls calculate_subtotal with order[\"items\"] and stores the returned subtotal."
       ],
       "forbidden_claims": [],
       "expected_abstention": null,
@@ -291,7 +291,7 @@
         }
       ],
       "required_facts": [
-        "Identify the call-site context overlapping the expected range in billing/invoice.py."
+        "build_invoice passes the computed subtotal and tax_rate to calculate_tax."
       ],
       "forbidden_claims": [],
       "expected_abstention": null,
@@ -320,7 +320,7 @@
         }
       ],
       "required_facts": [
-        "Explain the behavior supported by the labeled range in catalog/products.py."
+        "reserve returns False when find_available(sku) is false; it does not add the SKU to reserved_skus in that branch."
       ],
       "forbidden_claims": [],
       "expected_abstention": null,
@@ -349,7 +349,7 @@
         }
       ],
       "required_facts": [
-        "Explain the behavior supported by the labeled range in catalog/search.py."
+        "normalize_sku removes leading/trailing whitespace with strip() and converts the remaining SKU to uppercase."
       ],
       "forbidden_claims": [],
       "expected_abstention": null,
@@ -378,7 +378,7 @@
         }
       ],
       "required_facts": [
-        "Explain the behavior supported by the labeled range in billing/invoice.py."
+        "calculate_subtotal sums each item's price multiplied by its quantity."
       ],
       "forbidden_claims": [],
       "expected_abstention": null,
@@ -407,7 +407,7 @@
         }
       ],
       "required_facts": [
-        "Explain the behavior supported by the labeled range in billing/invoice.py."
+        "calculate_tax multiplies subtotal by rate and returns round(tax_amount)."
       ],
       "forbidden_claims": [],
       "expected_abstention": null,
@@ -436,7 +436,7 @@
         }
       ],
       "required_facts": [
-        "Explain the behavior supported by the labeled range in billing/payment.py."
+        "authorize_payment returns the status string invalid_amount when amount is less than or equal to zero."
       ],
       "forbidden_claims": [],
       "expected_abstention": null,
@@ -515,7 +515,7 @@
     {
       "id": "seed-ambiguous-repository",
       "task_type": "ambiguous_scope",
-      "question": "Explain the billing workflow without selecting which active repository contains it.",
+      "question": "Where is the billing workflow implemented?",
       "scope": {
         "company_id": "benchmark-company",
         "repository_id": null,
@@ -531,7 +531,7 @@
       "review_status": "draft",
       "reviewer": null,
       "reviewed_on": null,
-      "rationale": "Draft ambiguity case; repository selection must fail closed. Snapshot and revision are absent because no repository has been selected.",
+      "rationale": "Draft ambiguity case: company scope is known, but no repository is selected; the system must request repository clarification rather than choose one.",
       "expected_intent": "passage_retrieval"
     },
     {
@@ -559,7 +559,7 @@
     {
       "id": "seed-unsupported-ownership",
       "task_type": "unsupported",
-      "question": "What is the meaning of life?",
+      "question": "Who owns the billing module and approves changes to it?",
       "scope": {
         "company_id": "benchmark-company",
         "repository_id": "benchmark-repository",
@@ -570,12 +570,14 @@
       "expected_route": "abstain",
       "evidence": [],
       "required_facts": [],
-      "forbidden_claims": [],
+      "forbidden_claims": [
+        "Do not infer code ownership or approval authority from implementation files."
+      ],
       "expected_abstention": "unsupported_intent",
       "review_status": "draft",
       "reviewer": null,
       "reviewed_on": null,
-      "rationale": "Ownership/approval claim has no labeled evidence in this synthetic source fixture.",
+      "rationale": "Draft unsupported-ownership case: the synthetic source fixture contains implementation code but no ownership or approval records.",
       "expected_intent": "unsupported"
     },
     {
