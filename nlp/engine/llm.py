@@ -141,7 +141,8 @@ def llm_infer(
             content = content.strip()
             json.loads(content)
             _capture_run(
-                prompt=prompt, output=content, model=model, temperature=temperature,
+                prompt=prompt, output=content, model=model,
+                prompt_version=os.getenv("KMS_LLM_PROMPT_VERSION", "unspecified"), temperature=temperature,
                 max_tokens=max_tokens, duration_ms=(time.perf_counter() - started_at) * 1000,
                 status="success", usage=_usage_metadata(response),
             )
@@ -158,7 +159,8 @@ def llm_infer(
 
     except Exception as e:
         _capture_run(
-            prompt=prompt, output=None, model=model, temperature=temperature,
+            prompt=prompt, output=None, model=model,
+            prompt_version=os.getenv("KMS_LLM_PROMPT_VERSION", "unspecified"), temperature=temperature,
             max_tokens=max_tokens, duration_ms=(time.perf_counter() - started_at) * 1000,
             status="error",
         )
