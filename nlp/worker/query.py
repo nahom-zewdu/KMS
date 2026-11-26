@@ -3,6 +3,7 @@
 Handles query_jobs → search KG → LLM answer.
 """
 import logging
+import time
 from query_engine.core import QueryEngine
 from utils.supabase import init_supabase
 from utils.redis import init_redis
