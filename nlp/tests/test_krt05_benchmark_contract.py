@@ -148,6 +148,28 @@ def test_structured_repository_count_case_has_authoritative_fixture():
     assert len({item["id"] for item in repositories}) == 2
 
 
+
+def test_company_level_structured_fact_uses_company_only_scope():
+    dataset = load_benchmark(_DATASET_PATH)
+    case = next(case for case in dataset.cases if case.id == "seed-structured-count")
+
+    assert case.scope.company_id == "benchmark-company"
+    assert case.scope.repository_id is None
+    assert case.scope.snapshot_id is None
+    assert case.scope.source_revision is None
+
+
+def test_structured_fact_rejects_repository_specific_scope():
+    payload = json.loads(_DATASET_PATH.read_text(encoding="utf-8"))
+    case = next(item for item in payload["cases"] if item["id"] == "seed-structured-count")
+    case["scope"]["repository_id"] = "benchmark-repository"
+    case["scope"]["snapshot_id"] = "benchmark-snapshot-v1"
+    case["scope"]["source_revision"] = "benchmark-revision-v1"
+
+    with pytest.raises(ValidationError, match="company-level structured facts"):
+        BenchmarkDataset.model_validate_json(json.dumps(payload))
+
+
 def test_ambiguous_repository_scope_has_no_snapshot_metadata():
     dataset = load_benchmark(_DATASET_PATH)
     case = next(case for case in dataset.cases if case.id == "seed-ambiguous-repository")
