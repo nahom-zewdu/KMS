@@ -30,9 +30,12 @@ _CALL_SITE = re.compile(
     r"\b(?:where\s+(?:is|are)\s+.+\s+called|who\s+calls|call\s+sites?|"
     r"callers?\s+of|references?\s+to|find\s+(?:all\s+)?calls\s+to)\b", re.IGNORECASE)
 _DECLARATION = re.compile(
-    r"\b(?:where\s+(?:is|are)\s+.+\s+defined|(?:find|locate|show)\s+(?:the\s+)?"
-    r"(?:definition|declaration|function|class|method|symbol)|definition\s+of|"
-    r"declaration\s+of)\b", re.IGNORECASE)
+    r"\b(?:where\s+(?:is|are)\s+.+\s+(?:defined|checked|calculated|normalized)|"
+    r"where\s+is\s+.+\bnormalization\s+implemented|"
+    r"(?:find|locate|show)\s+(?:the\s+)?(?:definition|declaration|function|class|method|symbol)|"
+    r"definition\s+of|declaration\s+of)\b",
+    re.IGNORECASE,
+)
 _STRUCTURED = re.compile(
     r"\b(?:how\s+many|count|number\s+of|who\s+(?:owns|is responsible)|owner|owners|"
     r"maintainer|maintainers|repository\s+metadata|repo(?:sitory)?\s+"
