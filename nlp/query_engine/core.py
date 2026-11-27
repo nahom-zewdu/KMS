@@ -43,11 +43,13 @@ class QueryEngine:
         outcome_observer=None,
         planned_synthesizer=None,
         legacy_synthesizer=None,
+        offline_evaluation: bool = False,
     ):
         self.supabase = supabase
         self.redis = redis
         self.outcome_observer = outcome_observer
         self.legacy_synthesizer = legacy_synthesizer
+        self.offline_evaluation = bool(offline_evaluation)
         self.cache = QueryCache(redis)
         self.retriever = AdaptiveRetriever(supabase)
         self.repository_scope_resolver = TrustedRepositoryScopeResolver(supabase)
@@ -328,6 +330,17 @@ class QueryEngine:
             )
             return final_answer
 
+        if candidate_plan and candidate_plan.intent is QueryIntent.UNSUPPORTED:
+            answer_json = abstain(candidate_plan.abstention_reason or "unsupported_query")
+            final_answer = json.dumps(answer_json, indent=2)
+            self.redis.publish(f"query_results:{query_id}", final_answer)
+            self._observe_outcome(
+                query_id=query_id, route="abstain", outcome="abstained",
+                reason=answer_json.get("abstain_reason"),
+                intent=candidate_plan.intent.value, evidence_count=0,
+            )
+            return final_answer
+
         if candidate_plan and candidate_plan.intent in {
             QueryIntent.PASSAGE_RETRIEVAL,
             QueryIntent.DECLARATION_DISCOVERY,
@@ -403,6 +416,30 @@ class QueryEngine:
                     evidence_items=planned.evidence,
                 )
                 return final_answer
+
+            if self.offline_evaluation:
+                answer_json = abstain("planned_query_deferred_in_offline_evaluation")
+                final_answer = json.dumps(answer_json, indent=2)
+                self.redis.publish(f"query_results:{query_id}", final_answer)
+                self._observe_outcome(
+                    query_id=query_id, route="planned_query", outcome="abstained",
+                    reason=answer_json.get("abstain_reason"),
+                    intent=planned.plan.intent.value, evidence_count=len(planned.evidence),
+                    evidence_items=planned.evidence,
+                )
+                return final_answer
+
+        if self.offline_evaluation:
+            answer_json = abstain("evaluation_route_unavailable")
+            final_answer = json.dumps(answer_json, indent=2)
+            self.redis.publish(f"query_results:{query_id}", final_answer)
+            self._observe_outcome(
+                query_id=query_id, route="abstain", outcome="abstained",
+                reason=answer_json.get("abstain_reason"),
+                intent=candidate_plan.intent.value if candidate_plan else None,
+                evidence_count=0,
+            )
+            return final_answer
 
         # For file-explanation questions, retrieve bounded source text from files
         # already indexed under this company before asking the model to explain them.
