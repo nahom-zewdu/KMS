@@ -1,6 +1,4 @@
 """Tests for conservative descriptive declaration candidate discovery."""
-from types import SimpleNamespace
-
 from query_engine.evidence import EvidenceCandidate
 from query_engine.query_plan import QueryIntent, QueryPlan, QueryScope
 from query_engine.target_discovery import DescriptiveSymbolCandidateRetriever
@@ -167,11 +165,22 @@ def test_discovery_does_not_invent_candidates_when_source_has_no_match():
 def test_discovery_rejects_evidence_from_another_tenant_or_repository():
     foreign = _chunk("catalog/products.py", "availability checked product")
     foreign = EvidenceCandidate(
-        **{
-            **foreign.to_dict(),
-            "evidence_id": None,
-            "company_id": "company-b",
-        }
+        company_id="company-b",
+        evidence_type="code_chunk",
+        source=foreign.source,
+        record_id=foreign.record_id,
+        content=foreign.content,
+        retriever=foreign.retriever,
+        rank=foreign.rank,
+        repository_id=foreign.repository_id,
+        snapshot_id=foreign.snapshot_id,
+        source_revision=foreign.source_revision,
+        file_path=foreign.file_path,
+        content_hash=foreign.content_hash,
+        start_line=foreign.start_line,
+        end_line=foreign.end_line,
+        start_byte=foreign.start_byte,
+        end_byte=foreign.end_byte,
     )
     chunks = _Chunks([foreign])
     symbols = _Symbols({})
