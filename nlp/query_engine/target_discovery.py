@@ -230,8 +230,14 @@ class DescriptiveSymbolCandidateRetriever:
             for suffix, replacement in suffixes:
                 if len(term) > len(suffix) + 3 and term.endswith(suffix):
                     stem = term[:-len(suffix)] + replacement
-                    if len(stem) >= 4 and stem not in expanded:
-                        expanded.append(stem)
+                    variants = [stem]
+                    if stem.endswith(("reserv", "defin", "calculat")):
+                        variants.append(stem + "e")
+                    if stem.endswith("calcul"):
+                        variants.append(stem + "ate")
+                    for variant in variants:
+                        if len(variant) >= 4 and variant not in expanded:
+                            expanded.append(variant)
                     break
         return expanded[: _MAX_QUERY_TERMS * 2]
 
