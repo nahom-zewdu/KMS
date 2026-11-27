@@ -20,7 +20,9 @@ def _observed_route(event: Mapping[str, Any]) -> str:
     outcome = str(event.get("outcome") or "unknown")
     if handler_route == "conversation_guard":
         return handler_route
-    if outcome == "abstained":
+    # Route and disposition are independent measurements. A planned handler
+    # that abstains still executed the planned route; score abstention separately.
+    if handler_route == "adaptive" and outcome == "abstained":
         return "abstain"
     return handler_route
 
@@ -144,6 +146,7 @@ def evaluate_production_path(
             "task_type": case.task_type,
             "answerability": case.answerability,
             "expected_route": case.expected_route,
+            "expected_intent": case.expected_intent,
             "observed_route": route,
             "observed_handler_route": handler_route,
             "observed_intent": observed_intent,
