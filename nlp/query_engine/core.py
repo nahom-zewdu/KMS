@@ -141,6 +141,10 @@ class QueryEngine:
             answer_json = abstain("empty_question")
             final_answer = json.dumps(answer_json)
             self.redis.publish(f"query_results:{query_id}", final_answer)
+            self._observe_outcome(
+                query_id=query_id, route="input_guard", outcome="abstained",
+                reason="empty_question", intent=None, evidence_count=0,
+            )
             return final_answer
 
         # Resolve short acknowledgements against the immediately preceding user turn.
@@ -169,6 +173,10 @@ class QueryEngine:
             }
             final_answer = json.dumps(answer_json, indent=2)
             self.redis.publish(f"query_results:{query_id}", final_answer)
+            self._observe_outcome(
+                query_id=query_id, route="conversation_guard", outcome="abstained",
+                reason="ambiguous_follow_up", intent="clarification", evidence_count=0,
+            )
             return final_answer
 
         if question.lower().strip(" .!?") in {"thank you", "thanks", "thx"}:
@@ -181,6 +189,10 @@ class QueryEngine:
             }
             final_answer = json.dumps(answer_json, indent=2)
             self.redis.publish(f"query_results:{query_id}", final_answer)
+            self._observe_outcome(
+                query_id=query_id, route="conversation_control", outcome="answered",
+                reason=None, intent="courtesy", evidence_count=0,
+            )
             return final_answer
 
         # Route supported code-intelligence questions through KRT-04 only after
