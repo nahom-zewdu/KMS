@@ -153,7 +153,9 @@ class DescriptiveSymbolCandidateRetriever:
                         chunk.start_line,
                     )
                 )
-                context = " ".join(chunk.content for chunk in local_chunks[:2])
+                context = self._declaration_context(
+                    row, local_chunks, start_line, end_line
+                )
                 candidate = self._score(row, terms, context)
                 if candidate.score >= self.minimum_score:
                     ranked.append(candidate)
@@ -179,6 +181,32 @@ class DescriptiveSymbolCandidateRetriever:
             candidates=tuple(ranked),
             selected=ranked[0],
         )
+
+    @staticmethod
+    def _declaration_context(
+        declaration: dict[str, Any],
+        chunks: list[EvidenceCandidate],
+        start_line: int,
+        end_line: int,
+    ) -> str:
+        """Extract only source lines belonging to this declaration.
+
+        Class ranges often contain every method in a file. Restrict class
+        context to its header and leading docstring so it cannot inherit the
+        lexical score of unrelated nested declarations.
+        """
+        selected: list[str] = []
+        kind = str(declaration.get("kind") or "").casefold()
+        effective_end = min(end_line, start_line + 5) if kind == "class" else end_line
+        for chunk in chunks:
+            lines = chunk.content.splitlines()
+            first = max(start_line, chunk.start_line)
+            last = min(effective_end, chunk.end_line)
+            if first > last:
+                continue
+            offset = first - chunk.start_line
+            selected.extend(lines[offset: offset + (last - first + 1)])
+        return "\\n".join(selected)
 
     @staticmethod
     def _query_terms(plan: QueryPlan) -> list[str]:
@@ -249,7 +277,7 @@ class DescriptiveSymbolCandidateRetriever:
             min(len(term), len(candidate)) >= 5
             and term[:5] == candidate[:5]
             and (term.startswith(candidate) or candidate.startswith(term)
-                 or min(len(term), len(candidate)) / max(len(term), len(candidate)) >= 0.65)
+                 or min(len(term), len(candidate)) / max(len(term), len(candidate)) >= 0.60)
             for candidate in candidates
         )
 
