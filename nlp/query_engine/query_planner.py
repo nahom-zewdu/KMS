@@ -36,6 +36,15 @@ _DECLARATION = re.compile(
     r"definition\s+of|declaration\s+of)\b",
     re.IGNORECASE,
 )
+_OWNERSHIP_APPROVAL = re.compile(
+    r"\b(?:who|which\s+team|who\s+is\s+responsible)\b.{0,120}"
+    r"\b(?:approv(?:e|es|al)|sign[- ]off)\b",
+    re.IGNORECASE,
+)
+_RUNTIME_UNSUPPORTED = re.compile(
+    r"\b(?:at\s+runtime|during\s+runtime|in\s+production\s+when)\b",
+    re.IGNORECASE,
+)
 _STRUCTURED = re.compile(
     r"\b(?:how\s+many|count|number\s+of|who\s+(?:owns|is responsible)|owner|owners|"
     r"maintainer|maintainers|repository\s+metadata|repo(?:sitory)?\s+"
@@ -172,6 +181,8 @@ def classify_query(
             intent, disposition = QueryIntent.FOLLOW_UP, PlanDisposition.READY
         else:
             intent, disposition = QueryIntent.CLARIFICATION, PlanDisposition.NEEDS_CLARIFICATION
+    elif _OWNERSHIP_APPROVAL.search(query) or _RUNTIME_UNSUPPORTED.search(query):
+        intent, disposition = QueryIntent.UNSUPPORTED, PlanDisposition.ABSTAIN
     elif _CALL_SITE.search(query):
         intent, disposition = QueryIntent.CALL_SITE_NAVIGATION, PlanDisposition.READY
     elif _DECLARATION.search(query):
