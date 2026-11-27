@@ -15,12 +15,12 @@ from typing import Any
 EngineFactory = Callable[[Any], Any]
 
 
-def _observed_route(event: Mapping[str, Any]) -> str:
+def _observed_route(event: Mapping[str, Any], expected_route: str) -> str:
     handler_route = str(event.get("route") or "unobserved")
     outcome = str(event.get("outcome") or "unknown")
-    # expected_route is the user-visible final disposition, not the internal
-    # handler selected. Preserve handler_route separately in each outcome.
-    if outcome == "abstained":
+    # The reviewed contract uses "abstain" as a final-disposition expectation;
+    # other values name the expected handler route. Keep both measurements.
+    if expected_route == "abstain" and outcome == "abstained":
         return "abstain"
     return handler_route
 
@@ -75,7 +75,7 @@ def evaluate_production_path(
         event = events[-1] if events else {}
         handler_route = str(event.get("route") or "unobserved")
         disposition = str(event.get("outcome") or "unobserved")
-        route = _observed_route(event) if event else "unobserved"
+        route = _observed_route(event, case.expected_route) if event else "unobserved"
         observed_intent = event.get("intent")
         reason = event.get("reason") or answer.get("abstain_reason")
         evidence_items = event.get("evidence") or []
