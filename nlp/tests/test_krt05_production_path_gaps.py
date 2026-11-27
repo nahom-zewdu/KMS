@@ -403,3 +403,38 @@ def test_query_engine_outcome_observer_failure_does_not_change_query_result():
     payload = json.loads(result)
     assert payload["answer"] == "2 connected repositories are registered for this company."
     assert payload["abstain_reason"] is None
+
+
+
+def test_query_engine_reports_follow_up_guard_without_claiming_handler_execution():
+    observed = []
+    engine = QueryEngine(
+        supabase=_FixtureSupabase({}),
+        redis=_FakeRedis(),
+        outcome_observer=observed.append,
+    )
+
+    result = engine.handle_query({
+        "record_id": "krt05-follow-up-guard",
+        "company_id": "benchmark-company",
+        "content": "And where is that implemented?",
+        "payload": {
+            "question": "And where is that implemented?",
+            "conversation_history": [
+                {"role": "user", "content": "Explain the billing module."},
+                {"role": "assistant", "content": "The billing module calculates invoice totals."},
+            ],
+            "conversation_refs": ["seed-context-billing"],
+        },
+    })
+
+    payload = json.loads(result)
+    assert payload["abstain_reason"] == "conversation_context_unresolved"
+    assert observed == [{
+        "query_id": "krt05-follow-up-guard",
+        "route": "conversation_guard",
+        "outcome": "abstained",
+        "reason": "conversation_context_unresolved",
+        "intent": "follow_up",
+        "evidence_count": 0,
+    }]
