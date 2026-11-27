@@ -292,14 +292,19 @@ def test_query_engine_routes_repository_count_before_source_retrieval(monkeypatc
     assert payload["answer"] == "2 connected repositories are registered for this company."
     assert payload["abstain_reason"] is None
     assert engine.redis.messages[0][0] == "query_results:krt05-structured-count"
-    assert observed == [{
+    assert len(observed) == 1
+    assert {
+        key: observed[0][key]
+        for key in ("query_id", "route", "outcome", "reason", "intent", "evidence_count")
+    } == {
         "query_id": "krt05-structured-count",
         "route": "structured_handler",
         "outcome": "answered",
         "reason": None,
         "intent": "structured_fact",
         "evidence_count": 2,
-    }]
+    }
+    assert observed[0]["evidence"] == []
 
 
 
@@ -430,14 +435,19 @@ def test_query_engine_reports_follow_up_guard_without_claiming_handler_execution
 
     payload = json.loads(result)
     assert payload["abstain_reason"] == "conversation_context_unresolved"
-    assert observed == [{
+    assert len(observed) == 1
+    assert {
+        key: observed[0][key]
+        for key in ("query_id", "route", "outcome", "reason", "intent", "evidence_count")
+    } == {
         "query_id": "krt05-follow-up-guard",
         "route": "conversation_guard",
         "outcome": "abstained",
         "reason": "conversation_context_unresolved",
         "intent": "follow_up",
         "evidence_count": 0,
-    }]
+    }
+    assert observed[0]["evidence"] == []
 
 
 
