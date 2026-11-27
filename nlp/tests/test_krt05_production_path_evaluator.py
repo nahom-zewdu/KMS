@@ -206,3 +206,37 @@ def test_production_evaluator_checks_observed_evidence_scope_and_citations():
     assert "citation_membership_mismatch" in outcome["failures"]
     assert report["summary"]["evidence_provenance_violations"] == 1
     assert report["summary"]["citation_membership_violations"] == 1
+
+
+
+def test_production_evaluator_validates_structured_source_tenant_scope():
+    dataset, case = _one_case("seed-structured-count")
+
+    def factory(observer):
+        return _FakeEngine(
+            observer,
+            {
+                "query_id": f"krt05:{case.id}",
+                "route": "structured_handler",
+                "outcome": "answered",
+                "reason": None,
+                "intent": "structured_fact",
+                "evidence_count": 2,
+                "source_company_id": "another-company",
+                "source_records": [
+                    {"source": "repositories", "record_id": "repo-1"},
+                    {"source": "repositories", "record_id": "repo-2"},
+                ],
+            },
+            {
+                "answer": "2 connected repositories are registered for this company.",
+                "sources": [{"record_id": "repo-1"}, {"record_id": "repo-2"}],
+                "abstain_reason": None,
+            },
+        )
+
+    report = evaluate_production_path(dataset, factory, commit="abc123")
+    outcome = report["outcomes"][0]
+
+    assert outcome["evidence_provenance"] == "mismatch"
+    assert "evidence_provenance_mismatch" in outcome["failures"]
