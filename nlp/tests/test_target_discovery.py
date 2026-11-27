@@ -286,5 +286,5 @@ def test_normalization_query_expands_terms_for_literal_chunk_retrieval():
     assert result.discovered
     assert result.selected.declaration["name"] == "normalize_sku"
     assert chunks.calls[0]["terms"] == [
-        "SKU", "normalization", "normalize",
+        "sku", "normalization", "normalize",
     ]
