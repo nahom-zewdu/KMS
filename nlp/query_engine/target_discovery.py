@@ -95,6 +95,8 @@ class DescriptiveSymbolCandidateRetriever:
         repository_id = plan.scope.repository_id
         if not repository_id:
             return CandidateDiscoveryResult(reason="repository_scope_required")
+        if len(plan.file_paths) > 1:
+            return CandidateDiscoveryResult(reason="multiple_file_paths_require_clarification")
 
         terms = self._query_terms(plan)
         if len(terms) < 2:
@@ -128,7 +130,18 @@ class DescriptiveSymbolCandidateRetriever:
             )
             file_chunks = chunks_by_file[file_path]
             for row in rows:
-                if row.get("file_path") != file_path:
+                if (
+                    row.get("file_path") != file_path
+                    or row.get("company_id") != plan.scope.company_id
+                    or row.get("repository_id") != repository_id
+                    or row.get("snapshot_id") not in {
+                        chunk.snapshot_id for chunk in file_chunks
+                    }
+                    or (
+                        plan.constraints.source_revision is not None
+                        and row.get("source_revision") != plan.constraints.source_revision
+                    )
+                ):
                     continue
                 start_line = row.get("start_line")
                 end_line = row.get("end_line")
