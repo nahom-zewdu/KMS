@@ -58,7 +58,7 @@ def test_production_evaluator_records_actual_structured_route():
     assert outcome["passed"]
     assert report["summary"]["passed_cases"] == 1
     assert report["semantic_claim_support"]["status"] == "not_evaluated"
-    assert outcome["evidence_provenance"] == "not_observable"
+    assert outcome["evidence_provenance"] == "not_available_for_route"
 
 
 def test_production_evaluator_does_not_promote_follow_up_guard_to_handler():
