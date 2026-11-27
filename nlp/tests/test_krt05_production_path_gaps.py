@@ -438,3 +438,53 @@ def test_query_engine_reports_follow_up_guard_without_claiming_handler_execution
         "intent": "follow_up",
         "evidence_count": 0,
     }]
+
+
+
+def test_query_engine_reports_early_conversation_control_outcomes():
+    observed = []
+    engine = QueryEngine(
+        supabase=_FixtureSupabase({}),
+        redis=_FakeRedis(),
+        outcome_observer=observed.append,
+    )
+
+    empty = engine.handle_query({
+        "record_id": "krt05-empty",
+        "company_id": "benchmark-company",
+        "content": "",
+    })
+    ambiguous = engine.handle_query({
+        "record_id": "krt05-what",
+        "company_id": "benchmark-company",
+        "content": "What?",
+    })
+    courtesy = engine.handle_query({
+        "record_id": "krt05-thanks",
+        "company_id": "benchmark-company",
+        "content": "Thanks",
+    })
+
+    assert json.loads(empty)["abstain_reason"] == "empty_question"
+    assert json.loads(ambiguous)["abstain_reason"] == "ambiguous_follow_up"
+    assert json.loads(courtesy)["abstain_reason"] is None
+    assert [event["route"] for event in observed] == [
+        "input_guard", "conversation_guard", "conversation_control",
+    ]
+    assert [event["intent"] for event in observed] == [
+        None, "clarification", "courtesy",
+    ]
+
+
+def test_query_engine_supports_deterministic_synthesizer_injection():
+    planned = lambda _question, _evidence: {"claims": []}
+    legacy = lambda *_args, **_kwargs: '{"answer":"fixture","confidence":"low","sources":[],"owners":[],"abstain_reason":"no_relevant_evidence"}'
+    engine = QueryEngine(
+        supabase=_FixtureSupabase({}),
+        redis=_FakeRedis(),
+        planned_synthesizer=planned,
+        legacy_synthesizer=legacy,
+    )
+
+    assert engine.planned_executor.synthesizer is planned
+    assert engine.legacy_synthesizer is legacy
