@@ -88,6 +88,7 @@ class QueryEngine:
             "evidence": [
                 {
                     "evidence_id": item.evidence_id,
+                    "evidence_id": item.evidence_id,
                     "evidence_type": item.evidence_type,
                     "company_id": item.company_id,
                     "repository_id": item.repository_id,
