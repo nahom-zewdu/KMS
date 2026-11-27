@@ -1,4 +1,6 @@
 """Tests for conservative KRT-04 planned-query orchestration."""
+from types import SimpleNamespace
+
 from query_engine.evidence import EvidenceCandidate
 from query_engine.planned_query import PlannedQueryExecutor
 from query_engine.query_plan import (
@@ -220,3 +222,102 @@ def test_stage_observer_failure_does_not_change_query_result():
 
     assert result.completed
     assert result.answer["claims"][0]["text"] == "Tax calculation is defined."
+
+class TargetDiscovery:
+    def __init__(self, declaration):
+        self.declaration = declaration
+        self.calls = []
+
+    def discover(self, plan):
+        self.calls.append(plan)
+        return SimpleNamespace(
+            selected=SimpleNamespace(declaration=self.declaration),
+            reason=None,
+        )
+
+
+def test_declaration_query_uses_discovered_target_before_gathering():
+    evidence = _evidence()
+    gatherer = Gatherer([evidence])
+    discovery = TargetDiscovery({
+        "name": "find_available",
+        "qualified_name": "ProductCatalog.find_available",
+        "file_path": "catalog/products.py",
+    })
+    executor = PlannedQueryExecutor(
+        evidence_gatherer=gatherer,
+        symbol_resolver=Resolver(),
+        target_discovery=discovery,
+        synthesizer=lambda *_: {
+            "claims": [{
+                "text": "Availability is checked by find_available.",
+                "evidence_ids": [evidence.evidence_id],
+            }]
+        },
+    )
+
+    result = executor.execute(
+        "Where is product availability checked?", scope=SCOPE
+    )
+
+    assert result.completed
+    assert len(discovery.calls) == 1
+    assert gatherer.calls[0].file_paths == ("catalog/products.py",)
+    assert gatherer.calls[0].identifiers == ("find_available",)
+
+
+def test_call_site_query_resolves_discovered_target_with_candidate_file_scope():
+    evidence = _evidence()
+    gatherer = Gatherer([evidence])
+    discovery = TargetDiscovery({
+        "name": "reserve",
+        "qualified_name": "ProductCatalog.reserve",
+        "file_path": "catalog/products.py",
+    })
+    resolver = Resolver()
+    executor = PlannedQueryExecutor(
+        evidence_gatherer=gatherer,
+        symbol_resolver=resolver,
+        target_discovery=discovery,
+        synthesizer=lambda *_: {
+            "claims": [{
+                "text": "A reference to reserve exists.",
+                "evidence_ids": [evidence.evidence_id],
+            }]
+        },
+    )
+
+    result = executor.execute(
+        "Which code checks availability before reserving a product?",
+        scope=SCOPE,
+    )
+
+    assert result.completed
+    assert resolver.calls[0].file_paths == ("catalog/products.py",)
+    assert resolver.calls[0].identifiers == ("reserve",)
+    assert gatherer.calls[0].resolved_symbol.symbol == "scip-python billing.calculate_tax"
+
+
+def test_descriptive_target_ambiguity_abstains_before_symbol_resolution():
+    gatherer = Gatherer()
+    resolver = Resolver()
+    discovery = SimpleNamespace(
+        discover=lambda _plan: SimpleNamespace(
+            selected=None,
+            reason="ambiguous_descriptive_symbol_candidates",
+        )
+    )
+    executor = PlannedQueryExecutor(
+        evidence_gatherer=gatherer,
+        symbol_resolver=resolver,
+        target_discovery=discovery,
+        synthesizer=lambda *_: "",
+    )
+
+    result = executor.execute(
+        "Where is product availability checked?", scope=SCOPE
+    )
+
+    assert result.answer["abstain_reason"] == "ambiguous_descriptive_symbol_candidates"
+    assert resolver.calls == []
+    assert gatherer.calls == []
