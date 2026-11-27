@@ -146,3 +146,19 @@ def test_conversation_reference_input_must_be_a_sequence_of_strings():
 )
 def test_krt05_declaration_query_shapes_have_expected_intent(query):
     assert classify_query(query, scope=SCOPE).intent is QueryIntent.DECLARATION_DISCOVERY
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "What happens when a product is unavailable for reservation?",
+        "How is an SKU normalized?",
+        "How is the invoice subtotal computed?",
+        "How is tax rounded for an invoice?",
+        "What condition makes a payment authorization invalid?",
+        "Where is the Kubernetes deployment reconciler implemented?",
+        "Where is the invoice chargeback dispute workflow implemented?",
+        "Where is the password reset email token expiry policy implemented?",
+    ],
+)
+def test_krt05_passage_query_shapes_have_expected_intent(query):
+    assert classify_query(query, scope=SCOPE).intent is QueryIntent.PASSAGE_RETRIEVAL
