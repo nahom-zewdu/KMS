@@ -133,3 +133,16 @@ def test_conversation_reference_input_must_be_a_sequence_of_strings():
         classify_query("yes", scope=SCOPE, conversation_refs="not-a-reference-list")
     with pytest.raises(ValueError, match="only strings"):
         classify_query("yes", scope=SCOPE, conversation_refs=("valid", 42))
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "Where is product availability checked?",
+        "Where is the product reservation operation defined?",
+        "Where is SKU normalization implemented?",
+        "Where is the invoice subtotal calculated?",
+        "Where is invoice tax calculated?",
+    ],
+)
+def test_krt05_declaration_query_shapes_have_expected_intent(query):
+    assert classify_query(query, scope=SCOPE).intent is QueryIntent.DECLARATION_DISCOVERY
