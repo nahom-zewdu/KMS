@@ -331,7 +331,7 @@ class QueryEngine:
             return final_answer
 
         if candidate_plan and candidate_plan.intent is QueryIntent.UNSUPPORTED:
-            answer_json = abstain(candidate_plan.abstention_reason or "unsupported_query")
+            answer_json = abstain(getattr(candidate_plan, "abstention_reason", None) or "unsupported_query")
             final_answer = json.dumps(answer_json, indent=2)
             self.redis.publish(f"query_results:{query_id}", final_answer)
             self._observe_outcome(
