@@ -68,7 +68,7 @@ class DescriptiveSymbolCandidateRetriever:
         max_files: int = 20,
         max_candidates: int = 30,
         minimum_score: int = 4,
-        minimum_margin: int = 2,
+        minimum_margin: int = 1,
     ) -> None:
         if not 1 <= max_files <= 50:
             raise ValueError("max_files must be between 1 and 50")
