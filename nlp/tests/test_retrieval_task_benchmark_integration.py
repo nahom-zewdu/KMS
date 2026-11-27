@@ -368,8 +368,8 @@ def test_task_separated_retrieval_benchmark_reports_per_query_results():
 
 
 
-def test_reviewed_krt05_cases_execute_through_real_query_engine_on_synthetic_repository():
-    """Run every reviewed contract against indexed fixture data and real routing."""
+def test_reviewed_krt05_cases_produce_offline_production_path_report():
+    """Capture a baseline report; a passing test does not imply benchmark acceptance."""
     evaluation_root = Path(__file__).parent / "fixtures" / "evaluation"
     dataset = load_benchmark(evaluation_root / "krt05_seed_v1.json")
     repositories = [
@@ -440,21 +440,28 @@ def test_reviewed_krt05_cases_execute_through_real_query_engine_on_synthetic_rep
             }],
         }
 
+    forbidden_calls = {"adaptive_retrieval": 0, "legacy_synthesis": 0}
+
+    def forbidden_fallback(*_args, **_kwargs):
+        forbidden_calls["legacy_synthesis"] += 1
+        raise AssertionError("offline KRT-05 attempted legacy synthesis/retrieval")
+
     def engine_factory(observer):
-        return QueryEngine(
+        engine = QueryEngine(
             supabase=database,
             redis=OfflineRedis(),
             outcome_observer=observer,
             planned_synthesizer=deterministic_synthesizer,
-            legacy_synthesizer=lambda *_args, **_kwargs: {
-                "answer": "Legacy synthesis is disabled in this fixture.",
-                "confidence": "low",
-                "sources": [],
-                "owners": [],
-                "abstain_reason": "legacy_synthesis_disabled",
-            },
+            legacy_synthesizer=forbidden_fallback,
             offline_evaluation=True,
         )
+
+        def forbidden_adaptive_retrieval(*_args, **_kwargs):
+            forbidden_calls["adaptive_retrieval"] += 1
+            raise AssertionError("offline KRT-05 attempted adaptive retrieval")
+
+        engine.retriever.retrieve = forbidden_adaptive_retrieval
+        return engine
 
     commit = subprocess.run(
         ["git", "rev-parse", "HEAD"],
@@ -494,4 +501,8 @@ def test_reviewed_krt05_cases_execute_through_real_query_engine_on_synthetic_rep
     assert "route_mismatch" in by_id["seed-followup-context"]["failures"]
     assert database.rpc_calls == 0
     assert database.write_attempts == 0
+    assert forbidden_calls == {"adaptive_retrieval": 0, "legacy_synthesis": 0}
+    assert report["summary"]["acceptance_passed"] is (
+        report["summary"]["failed_cases"] == 0
+    )
     assert report["semantic_claim_support"]["status"] == "not_evaluated"
