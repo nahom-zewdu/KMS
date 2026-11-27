@@ -127,7 +127,7 @@ def _extract(
             *(
                 token for token in _IDENTIFIER.findall(query)
                 if token.casefold() not in path_tokens
-                and ("_" in token or any(char.isupper() for char in token[1:]))
+                and ("_" in token or re.search(r"(?:[a-z][A-Z]|[A-Z]{2,}[a-z])", token))
             ),
         ],
         MAX_IDENTIFIER_COUNT,
