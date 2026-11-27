@@ -240,7 +240,7 @@ class DescriptiveSymbolCandidateRetriever:
         """Add bounded morphological forms for literal source-chunk lookup."""
         suffixes = (
             ("ization", "ize"), ("isation", "ise"),
-            ("ation", "ate"), ("ment", ""),
+            ("ation", ""), ("ment", ""),
             ("ing", ""), ("ed", ""), ("s", ""),
         )
         expanded = list(terms)
