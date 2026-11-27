@@ -1,7 +1,7 @@
 """Production QueryEngine execution adapter for KRT-05.
 
-Records observable production routing and disposition. Evidence provenance and
-semantic claim support remain explicitly unmeasured by this adapter.
+Records observable production routing, disposition, evidence provenance, and
+citation membership. Semantic claim support remains a separate human review.
 """
 from __future__ import annotations
 
@@ -195,6 +195,12 @@ def evaluate_production_path(
             ),
             "execution_errors": sum(
                 item["execution_error"] is not None for item in outcomes
+            ),
+            "evidence_provenance_violations": sum(
+                "evidence_provenance_mismatch" in item["failures"] for item in outcomes
+            ),
+            "citation_membership_violations": sum(
+                "citation_membership_mismatch" in item["failures"] for item in outcomes
             ),
         },
         "measurement_limits": [
