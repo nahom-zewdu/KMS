@@ -221,7 +221,7 @@ class QueryEngine:
                 query_id, reason,
             )
             self._observe_outcome(
-                query_id=query_id, route="conversation_handler", outcome="abstained",
+                query_id=query_id, route="conversation_guard", outcome="abstained",
                 reason=reason, intent=candidate_plan.intent.value, evidence_count=0,
             )
             return final_answer
