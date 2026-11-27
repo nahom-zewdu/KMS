@@ -91,3 +91,55 @@ def test_retriever_returns_empty_for_wrong_tenant_or_missing_terms():
     assert retriever.retrieve(
         company_id="company-a", repository_id="repo-a", terms=[],
     ) == []
+
+def test_retriever_rejects_chunks_matching_only_one_broad_query_term():
+    database = Database()
+    database.rows["source_code_chunks"].append(
+        Database.chunk(
+            "chunk-invoice-only", "company-a", "repo-a", "snap-new",
+            "Invoice generation formats the customer invoice.",
+        )
+    )
+
+    retriever = SourceChunkRetriever(database)
+    result = retriever.retrieve(
+        company_id="company-a",
+        repository_id="repo-a",
+        terms=["invoice", "chargeback", "dispute", "workflow"],
+    )
+
+    assert result == []
+
+
+def test_retriever_keeps_chunks_matching_multiple_query_concepts():
+    database = Database()
+    database.rows["source_code_chunks"].extend([
+        Database.chunk(
+            "chunk-invoice-only", "company-a", "repo-a", "snap-new",
+            "Invoice generation formats the customer invoice.",
+        ),
+        Database.chunk(
+            "chunk-dispute", "company-a", "repo-a", "snap-new",
+            "Invoice chargeback disputes enter the review workflow.",
+        ),
+    ])
+
+    retriever = SourceChunkRetriever(database)
+    result = retriever.retrieve(
+        company_id="company-a",
+        repository_id="repo-a",
+        terms=["invoice", "chargeback", "dispute", "workflow"],
+    )
+
+    assert [candidate.record_id for candidate in result] == ["chunk-dispute"]
+
+
+def test_retriever_supports_single_term_queries():
+    retriever = SourceChunkRetriever(Database())
+    result = retriever.retrieve(
+        company_id="company-a",
+        repository_id="repo-a",
+        terms=["revision"],
+    )
+
+    assert [candidate.record_id for candidate in result] == ["chunk-new"]
