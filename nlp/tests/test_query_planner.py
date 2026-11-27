@@ -162,3 +162,15 @@ def test_krt05_declaration_query_shapes_have_expected_intent(query):
 )
 def test_krt05_passage_query_shapes_have_expected_intent(query):
     assert classify_query(query, scope=SCOPE).intent is QueryIntent.PASSAGE_RETRIEVAL
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "Who owns the billing module and approves changes to it?",
+        "What happens at runtime when the payment provider is unavailable?",
+    ],
+)
+def test_krt05_unsupported_query_shapes_abstain(query):
+    plan = classify_query(query, scope=SCOPE)
+    assert plan.intent is QueryIntent.UNSUPPORTED
+    assert plan.disposition is PlanDisposition.ABSTAIN
