@@ -218,3 +218,40 @@ def test_discovery_requires_supported_navigation_intent_and_repository_scope():
     assert unsupported.reason == "intent_not_supported"
     assert no_scope.reason == "repository_scope_required"
     assert chunks.calls == []
+
+def test_reservation_description_prefers_reserve_over_other_methods_in_same_file():
+    source = (
+        '"""Product catalog operations."""\\n'
+        "class ProductCatalog:\\n"
+        '    """Provides availability and reservation operations."""\\n'
+        "    def find_available(self, sku):\\n"
+        '        """Check whether a product can be purchased."""\\n'
+        "        return sku in self.available_skus\\n"
+        "    def reserve(self, sku):\\n"
+        '        """Reserve one available product."""\\n'
+        "        if not self.find_available(sku):\\n"
+        "            return False\\n"
+        "        self.reserved_skus.add(sku)\\n"
+        "        return True\\n"
+    )
+    chunks = _Chunks([_chunk("catalog/products.py", source, 1, 12)])
+    symbols = _Symbols({
+        "catalog/products.py": [
+            _row("ProductCatalog", "ProductCatalog", "catalog/products.py", 2, 12, "class"),
+            _row("find_available", "ProductCatalog.find_available",
+                 "catalog/products.py", 4, 6, "method"),
+            _row("reserve", "ProductCatalog.reserve",
+                 "catalog/products.py", 7, 12, "method"),
+        ]
+    })
+    retriever = DescriptiveSymbolCandidateRetriever(
+        source_chunks=chunks, symbols=symbols,
+    )
+
+    result = retriever.discover(_plan(
+        "Where is the product reservation operation defined?",
+        ["product", "reservation", "operation", "defined"],
+    ))
+
+    assert result.discovered
+    assert result.selected.declaration["name"] == "reserve"
