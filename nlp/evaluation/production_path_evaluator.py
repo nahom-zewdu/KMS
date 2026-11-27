@@ -239,7 +239,6 @@ def write_report(report: Mapping[str, Any], path: str | Path) -> None:
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(
-        json.dumps(report, indent=2, sort_keys=True) + "
-",
+        json.dumps(report, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
