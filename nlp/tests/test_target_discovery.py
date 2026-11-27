@@ -48,6 +48,10 @@ class _Symbols:
 def _row(name, qualified, path, start=1, end=12, kind="function"):
     return {
         "symbol_id": f"symbol-{qualified}",
+        "company_id": "company-a",
+        "repository_id": "repo-a",
+        "snapshot_id": "snapshot-a",
+        "source_revision": "revision-a",
         "name": name,
         "qualified_name": qualified,
         "file_path": path,
@@ -221,18 +225,18 @@ def test_discovery_requires_supported_navigation_intent_and_repository_scope():
 
 def test_reservation_description_prefers_reserve_over_other_methods_in_same_file():
     source = (
-        '"""Product catalog operations."""\\n'
-        "class ProductCatalog:\\n"
-        '    """Provides availability and reservation operations."""\\n'
-        "    def find_available(self, sku):\\n"
-        '        """Check whether a product can be purchased."""\\n'
-        "        return sku in self.available_skus\\n"
-        "    def reserve(self, sku):\\n"
-        '        """Reserve one available product."""\\n'
-        "        if not self.find_available(sku):\\n"
-        "            return False\\n"
-        "        self.reserved_skus.add(sku)\\n"
-        "        return True\\n"
+        '"""Product catalog operations."""\n'
+        "class ProductCatalog:\n"
+        '    """Provides availability and reservation operations."""\n'
+        "    def find_available(self, sku):\n"
+        '        """Check whether a product can be purchased."""\n'
+        "        return sku in self.available_skus\n"
+        "    def reserve(self, sku):\n"
+        '        """Reserve one available product."""\n'
+        "        if not self.find_available(sku):\n"
+        "            return False\n"
+        "        self.reserved_skus.add(sku)\n"
+        "        return True\n"
     )
     chunks = _Chunks([_chunk("catalog/products.py", source, 1, 12)])
     symbols = _Symbols({
@@ -260,9 +264,9 @@ def test_normalization_query_expands_terms_for_literal_chunk_retrieval():
     chunks = _Chunks([
         _chunk(
             "catalog/search.py",
-            "def normalize_sku(sku):\\n"
-            '    """Normalize product identifiers for matching."""\\n'
-            "    return sku.strip().upper()\\n",
+            "def normalize_sku(sku):\n"
+            '    """Normalize product identifiers for matching."""\n'
+            "    return sku.strip().upper()\n",
         )
     ])
     symbols = _Symbols({
