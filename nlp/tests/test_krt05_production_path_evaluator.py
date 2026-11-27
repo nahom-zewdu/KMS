@@ -247,9 +247,9 @@ def test_production_evaluator_validates_structured_source_tenant_scope():
 def test_production_evaluator_scores_final_disposition_separately_from_handler_route():
     from evaluation.production_path_evaluator import _observed_route
 
-    assert _observed_route({"route": "planned_query", "outcome": "abstained"}) == "abstain"
-    assert _observed_route({"route": "conversation_guard", "outcome": "abstained"}) == "abstain"
-    assert _observed_route({"route": "planned_query", "outcome": "answered"}) == "planned_query"
+    assert _observed_route({"route": "planned_query", "outcome": "abstained"}, "abstain") == "abstain"
+    assert _observed_route({"route": "conversation_guard", "outcome": "abstained"}, "conversation_handler") == "conversation_guard"
+    assert _observed_route({"route": "planned_query", "outcome": "answered"}, "planned_query") == "planned_query"
 
 
 def test_write_report_produces_parseable_json_with_real_newline(tmp_path):
