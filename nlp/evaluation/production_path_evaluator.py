@@ -18,9 +18,10 @@ EngineFactory = Callable[[Any], Any]
 def _observed_route(event: Mapping[str, Any], expected_route: str) -> str:
     handler_route = str(event.get("route") or "unobserved")
     outcome = str(event.get("outcome") or "unknown")
-    # Score final disposition independently from the internal handler route.
-    # The handler route remains available as observed_handler_route.
-    if outcome == "abstained":
+    # "abstain" is an explicit final-route contract. Other expected routes
+    # describe the handler selected, even when that handler safely abstains.
+    # The outcome remains separately available as observed_disposition.
+    if expected_route == "abstain" and outcome == "abstained":
         return "abstain"
     return handler_route
 
