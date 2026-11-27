@@ -36,10 +36,18 @@ class QueryEngine:
     The final production query engine.
     Handles any natural language question about engineering knowledge.
     """
-    def __init__(self, supabase: Client, redis: Redis, outcome_observer=None):
+    def __init__(
+        self,
+        supabase: Client,
+        redis: Redis,
+        outcome_observer=None,
+        planned_synthesizer=None,
+        legacy_synthesizer=None,
+    ):
         self.supabase = supabase
         self.redis = redis
         self.outcome_observer = outcome_observer
+        self.legacy_synthesizer = legacy_synthesizer or reasoning_synthesize
         self.cache = QueryCache(redis)
         self.retriever = AdaptiveRetriever(supabase)
         self.repository_scope_resolver = TrustedRepositoryScopeResolver(supabase)
@@ -53,6 +61,7 @@ class QueryEngine:
                 occurrences=occurrences,
             ),
             symbol_resolver=ConservativeScipSymbolResolver(symbols, occurrences),
+            **({"synthesizer": planned_synthesizer} if planned_synthesizer is not None else {}),
         )
 
     def _observe_outcome(
@@ -358,7 +367,7 @@ class QueryEngine:
             source_chunks = []
         if source_chunks:
             try:
-                raw_source_answer = reasoning_synthesize(
+                raw_source_answer = self.legacy_synthesizer(
                     effective_question,
                     source_chunks,
                     allowed_owners=[],
@@ -462,7 +471,7 @@ class QueryEngine:
             grounded_sources = sources_from_chunks(relevant_chunks)
             grounded_owners = owners_from_chunks(relevant_chunks)
             try:
-                raw = reasoning_synthesize(
+                raw = self.legacy_synthesizer(
                     question,
                     relevant_chunks,
                     allowed_owners=grounded_owners,
