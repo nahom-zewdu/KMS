@@ -215,7 +215,7 @@ class DescriptiveSymbolCandidateRetriever:
         """
         selected: list[str] = []
         kind = str(declaration.get("kind") or "").casefold()
-        effective_end = min(end_line, start_line + 5) if kind == "class" else end_line
+        effective_end = min(end_line, start_line + 2) if kind == "class" else end_line
         for chunk in chunks:
             lines = chunk.content.splitlines()
             first = max(start_line, chunk.start_line)
