@@ -42,13 +42,18 @@ _STRUCTURED = re.compile(
     r"(?:name|url|default branch)|when\s+was\s+.+\s+(?:created|updated))\b",
     re.IGNORECASE)
 _PASSAGE = re.compile(
-    r"\b(?:explain|how\s+does|how\s+do|walk\s+me\s+through|what\s+does|"
+    r"\b(?:explain|what\s+happens|how\s+does|how\s+do|walk\s+me\s+through|what\s+does|"
     r"show\s+me\s+(?:the\s+)?(?:code|implementation)|where\s+is\s+.+\s+implemented|"
-    r"trace\s+.+)\b", re.IGNORECASE)
+    r"trace\s+.+)\b",
+    re.IGNORECASE,
+)
 _ENGINEERING_CONTEXT = re.compile(
     r"\b(?:code|codebase|repository|repo|file|function|class|method|module|api|"
     r"endpoint|handler|service|database|query|commit|pull request|bug|error|test|"
-    r"implementation|workflow|symbol)\b", re.IGNORECASE)
+    r"implementation|workflow|symbol|product|reservation|invoice|payment|sku|tax|"
+    r"subtotal|availability|chargeback|token|email|password|deployment|reconciler)\b",
+    re.IGNORECASE,
+)
 _PATH = re.compile(
     r"(?<![\w.-])(?:[\w@.+-]+/)*[\w@.+-]+\."
     r"(?:py|pyi|go|js|jsx|ts|tsx|java|rs|rb|php|sql|yaml|yml|json|toml|md)"
