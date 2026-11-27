@@ -213,6 +213,7 @@ def evaluate_production_path(
             "execution_errors": sum(
                 item["execution_error"] is not None for item in outcomes
             ),
+            "acceptance_passed": bool(outcomes) and all(item["passed"] for item in outcomes),
             "evidence_provenance_violations": sum(
                 "evidence_provenance_mismatch" in item["failures"] for item in outcomes
             ),
