@@ -73,6 +73,7 @@ class QueryEngine:
         reason: str | None = None,
         intent: str | None = None,
         evidence_count: int = 0,
+        evidence_items=None,
     ) -> None:
         """Emit structured execution telemetry for tests and offline evaluation."""
         if self.outcome_observer is None:
@@ -84,6 +85,26 @@ class QueryEngine:
             "reason": reason,
             "intent": intent,
             "evidence_count": int(evidence_count),
+            "evidence": [
+                {
+                    "evidence_id": item.evidence_id,
+                    "evidence_type": item.evidence_type,
+                    "company_id": item.company_id,
+                    "repository_id": item.repository_id,
+                    "snapshot_id": item.snapshot_id,
+                    "source_revision": item.source_revision,
+                    "file_path": item.file_path,
+                    "content_hash": item.content_hash,
+                    "start_line": item.start_line,
+                    "end_line": item.end_line,
+                    "start_byte": item.start_byte,
+                    "end_byte": item.end_byte,
+                    "source": item.source,
+                    "record_id": item.record_id,
+                    "retriever": item.retriever,
+                }
+                for item in (evidence_items or [])
+            ],
         }
         try:
             self.outcome_observer(event)
@@ -364,6 +385,7 @@ class QueryEngine:
                     query_id=query_id, route="planned_query", outcome=outcome,
                     reason=planned.answer.get("abstain_reason") or planned.reason,
                     intent=planned.plan.intent.value, evidence_count=len(planned.evidence),
+                    evidence_items=planned.evidence,
                 )
                 return final_answer
 
