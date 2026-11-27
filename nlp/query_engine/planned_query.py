@@ -6,7 +6,7 @@ must not affect query behavior.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from time import perf_counter
 from typing import Any, Callable, Mapping, Sequence
 
@@ -16,6 +16,7 @@ from .grounded_answer import GroundedAnswerValidator
 from .query_plan import QueryIntent, QueryPlan, QueryScope
 from .query_planner import classify_query
 from .symbol_resolution import ConservativeScipSymbolResolver
+from .target_discovery import DescriptiveSymbolCandidateRetriever
 from .synthesizer import reasoning_synthesize_grounded
 
 
@@ -45,11 +46,21 @@ class PlannedQueryExecutor:
         symbol_resolver: ConservativeScipSymbolResolver,
         synthesizer=reasoning_synthesize_grounded,
         validator: GroundedAnswerValidator | None = None,
+        target_discovery: DescriptiveSymbolCandidateRetriever | None = None,
     ) -> None:
         self.evidence_gatherer = evidence_gatherer
         self.symbol_resolver = symbol_resolver
         self.synthesizer = synthesizer
         self.validator = validator or GroundedAnswerValidator()
+        if target_discovery is None:
+            source_chunks = getattr(evidence_gatherer, "source_chunks", None)
+            symbols = getattr(evidence_gatherer, "symbols", None)
+            if source_chunks is not None and symbols is not None:
+                target_discovery = DescriptiveSymbolCandidateRetriever(
+                    source_chunks=source_chunks,
+                    symbols=symbols,
+                )
+        self.target_discovery = target_discovery
 
     def execute(
         self,
@@ -115,6 +126,35 @@ class PlannedQueryExecutor:
                     "claims": [],
                 },
                 reason=plan.abstention_reason or plan.ambiguity_reason,
+            )
+
+        if plan.intent in {
+            QueryIntent.DECLARATION_DISCOVERY,
+            QueryIntent.CALL_SITE_NAVIGATION,
+        } and not plan.identifiers and not plan.qualified_names:
+            if self.target_discovery is None:
+                return self._abstain(plan, "target_discovery_unavailable")
+            discovery = self._measure_stage(
+                "target_discovery",
+                lambda: self.target_discovery.discover(plan),
+                stage_observer,
+            )
+            if discovery.selected is None:
+                return self._abstain(
+                    plan, discovery.reason or "descriptive_symbol_not_found"
+                )
+            declaration = discovery.selected.declaration
+            symbol_name = declaration.get("name")
+            file_path = declaration.get("file_path")
+            if not isinstance(symbol_name, str) or not symbol_name.strip():
+                return self._abstain(plan, "discovered_symbol_name_missing")
+            if not isinstance(file_path, str) or not file_path.strip():
+                return self._abstain(plan, "discovered_symbol_path_missing")
+            plan = replace(
+                plan,
+                file_paths=(file_path,),
+                identifiers=(symbol_name,),
+                qualified_names=(),
             )
 
         if plan.intent is QueryIntent.CALL_SITE_NAVIGATION:
