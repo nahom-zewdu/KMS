@@ -158,6 +158,8 @@ def test_cache_key_changes_for_materially_different_ramp_contexts():
 
 def test_short_acknowledgement_resolves_to_previous_user_question():
     engine = _make_engine()
+    original_classifier = core_module.classify_query
+    core_module.classify_query = Mock(return_value=SimpleNamespace(intent=QueryIntent.UNSUPPORTED))
     original_synth = core_module.reasoning_synthesize
     original_structured = core_module.answer_structured_question
     core_module.answer_structured_question = Mock(return_value=None)
@@ -188,6 +190,7 @@ def test_short_acknowledgement_resolves_to_previous_user_question():
             "Can you tell me anything about those files?", company_id="company-123"
         )
     finally:
+        core_module.classify_query = original_classifier
         core_module.reasoning_synthesize = original_synth
         core_module.answer_structured_question = original_structured
 
