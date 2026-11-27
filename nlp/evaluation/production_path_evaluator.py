@@ -9,6 +9,7 @@ from collections import Counter
 from collections.abc import Callable, Mapping
 import hashlib
 import json
+from pathlib import Path
 from typing import Any
 
 EngineFactory = Callable[[Any], Any]
@@ -228,3 +229,13 @@ def evaluate_production_path(
         },
         "outcomes": outcomes,
     }
+
+
+def write_report(report: Mapping[str, Any], path: str | Path) -> None:
+    """Persist a complete evaluation report as stable, inspectable JSON."""
+    destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\\n",
+        encoding="utf-8",
+    )
