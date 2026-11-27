@@ -74,6 +74,7 @@ class MemoryQuery:
 
     def upsert(self, rows, **_kwargs):
         self.upsert_rows = rows
+        self.database.write_attempts += 1
         return self
 
     def execute(self):
