@@ -77,6 +77,11 @@ def evaluate_production_path(
         handler_route = str(event.get("route") or "unobserved")
         disposition = str(event.get("outcome") or "unobserved")
         route = _observed_route(event, case.expected_route) if event else "unobserved"
+        # A conversation guard is an internal safety path, not successful
+        # conversation-handler execution. Score its abstention as the final
+        # route while retaining the guard in observed_handler_route.
+        if handler_route == "conversation_guard" and disposition == "abstained":
+            route = "abstain"
         observed_intent = event.get("intent")
         reason = event.get("reason") or answer.get("abstain_reason")
         evidence_items = event.get("evidence") or []
