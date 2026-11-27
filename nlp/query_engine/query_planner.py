@@ -27,8 +27,14 @@ _FOLLOW_UP_REFERENCE = re.compile(
     re.IGNORECASE,
 )
 _CALL_SITE = re.compile(
-    r"\b(?:where\s+(?:is|are)\s+.+\s+called|who\s+calls|call\s+sites?|"
-    r"callers?\s+of|references?\s+to|find\s+(?:all\s+)?calls\s+to)\b", re.IGNORECASE)
+    r"\b(?:which\s+code\s+(?:checks?|calls?|invokes?|uses?)\b|"
+    r"where\s+(?:does|do)\s+.+?\s+(?:call|calls|invoke|invokes|pass|passes|"
+    r"check|checks|normalize|normalizes|calculate|calculates)\b|"
+    r"where\s+are\s+.+?\s+normalized\b|where\s+(?:is|are)\s+.+\s+called|"
+    r"who\s+calls|call\s+sites?|callers?\s+of|references?\s+to|"
+    r"find\s+(?:all\s+)?calls\s+to)\b",
+    re.IGNORECASE,
+)
 _DECLARATION = re.compile(
     r"\b(?:where\s+(?:is|are)\s+.+\s+(?:defined|checked|calculated|normalized)|"
     r"where\s+is\s+.+\bnormalization\s+implemented|"
