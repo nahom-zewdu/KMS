@@ -101,7 +101,7 @@ def test_discovery_ranks_declaration_using_name_and_local_source_context():
     assert chunks.calls == [{
         "company_id": "company-a",
         "repository_id": "repo-a",
-        "terms": ["product", "availability", "checked"],
+        "terms": ["product", "availability", "checked", "check"],
     }]
     assert symbols.calls == [{
         "company_id": "company-a",
@@ -255,3 +255,32 @@ def test_reservation_description_prefers_reserve_over_other_methods_in_same_file
 
     assert result.discovered
     assert result.selected.declaration["name"] == "reserve"
+
+def test_normalization_query_expands_terms_for_literal_chunk_retrieval():
+    chunks = _Chunks([
+        _chunk(
+            "catalog/search.py",
+            "def normalize_sku(sku):\\n"
+            '    """Normalize product identifiers for matching."""\\n'
+            "    return sku.strip().upper()\\n",
+        )
+    ])
+    symbols = _Symbols({
+        "catalog/search.py": [
+            _row("normalize_sku", "normalize_sku", "catalog/search.py", 1, 3),
+        ]
+    })
+    retriever = DescriptiveSymbolCandidateRetriever(
+        source_chunks=chunks, symbols=symbols,
+    )
+
+    result = retriever.discover(_plan(
+        "Where is SKU normalization implemented?",
+        ["SKU", "normalization", "implemented"],
+    ))
+
+    assert result.discovered
+    assert result.selected.declaration["name"] == "normalize_sku"
+    assert chunks.calls[0]["terms"] == [
+        "SKU", "normalization", "implemented", "normalize", "implement",
+    ]
