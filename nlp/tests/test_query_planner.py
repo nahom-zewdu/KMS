@@ -174,3 +174,16 @@ def test_krt05_unsupported_query_shapes_abstain(query):
     plan = classify_query(query, scope=SCOPE)
     assert plan.intent is QueryIntent.UNSUPPORTED
     assert plan.disposition is PlanDisposition.ABSTAIN
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "Which code checks availability before reserving a product?",
+        "Where does catalog search normalize an SKU before checking availability?",
+        "Where are alternative product recommendations normalized?",
+        "Where does invoice construction call the subtotal calculator?",
+        "Where does invoice construction calculate tax from the subtotal?",
+    ],
+)
+def test_krt05_call_site_query_shapes_have_expected_intent(query):
+    assert classify_query(query, scope=SCOPE).intent is QueryIntent.CALL_SITE_NAVIGATION
