@@ -149,3 +149,19 @@ def test_production_evaluator_excludes_unreviewed_cases():
     assert report["summary"]["reviewed_cases"] == 0
     assert report["summary"]["excluded_cases"] == 24
     assert report["outcomes"] == []
+
+
+
+def test_production_evaluator_records_engine_factory_failure():
+    dataset, _ = _one_case("seed-structured-count")
+
+    def broken_factory(_observer):
+        raise RuntimeError("fixture construction failed")
+
+    report = evaluate_production_path(dataset, broken_factory, commit="abc123")
+    outcome = report["outcomes"][0]
+
+    assert outcome["execution_error"] == "RuntimeError"
+    assert outcome["observed_route"] == "unobserved"
+    assert "execution_error" in outcome["failures"]
+    assert "production_outcome_unobserved" in outcome["failures"]
