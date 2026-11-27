@@ -15,6 +15,8 @@ from query_engine.planned_query import PlannedQueryExecutor
 from query_engine.query_plan import QueryScope
 from query_engine.symbol_resolution import ConservativeScipSymbolResolver
 from query_engine.structured import answer_structured_question
+from evaluation.benchmark import load_benchmark
+from evaluation.production_path_evaluator import evaluate_production_path
 
 
 _FIXTURES = Path(__file__).parent / "fixtures" / "evaluation"
@@ -498,3 +500,33 @@ def test_query_engine_supports_deterministic_synthesizer_injection():
 
     assert engine.planned_executor.synthesizer is planned
     assert engine.legacy_synthesizer is legacy
+
+
+
+def test_production_evaluator_executes_real_query_engine_structured_path():
+    dataset = load_benchmark(_FIXTURES / "krt05_seed_v1.json")
+    case = next(item for item in dataset.cases if item.id == "seed-structured-count")
+    dataset = dataset.model_copy(update={"cases": (case,)})
+    db = _FixtureSupabase({"repositories": _structured_repository_rows()})
+
+    def engine_factory(observer):
+        return QueryEngine(
+            supabase=db,
+            redis=_FakeRedis(),
+            outcome_observer=observer,
+        )
+
+    report = evaluate_production_path(
+        dataset,
+        engine_factory,
+        commit="synthetic-integration-test",
+    )
+    outcome = report["outcomes"][0]
+
+    assert outcome["passed"]
+    assert outcome["observed_route"] == "structured_handler"
+    assert outcome["evidence_provenance"] == "valid_structured_records"
+    assert {row["record_id"] for row in outcome["structured_source_records"]} == {
+        "repo-catalog", "repo-billing",
+    }
+    assert report["summary"]["evidence_provenance_violations"] == 0
