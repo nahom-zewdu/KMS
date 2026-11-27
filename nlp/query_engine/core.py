@@ -74,6 +74,8 @@ class QueryEngine:
         intent: str | None = None,
         evidence_count: int = 0,
         evidence_items=None,
+        source_records=None,
+        source_company_id: str | None = None,
     ) -> None:
         """Emit structured execution telemetry for tests and offline evaluation."""
         if self.outcome_observer is None:
@@ -85,6 +87,16 @@ class QueryEngine:
             "reason": reason,
             "intent": intent,
             "evidence_count": int(evidence_count),
+            "source_company_id": source_company_id,
+            "source_records": [
+                {
+                    "source": item.get("source"),
+                    "record_id": item.get("record_id"),
+                    "file_path": item.get("file_path"),
+                }
+                for item in (source_records or [])
+                if isinstance(item, dict)
+            ],
             "evidence": [
                 {
                     "evidence_id": item.evidence_id,
@@ -295,6 +307,8 @@ class QueryEngine:
                     reason=structured_result.get("abstain_reason"),
                     intent=candidate_plan.intent.value,
                     evidence_count=len(structured_result.get("sources") or []),
+                    source_records=structured_result.get("sources") or [],
+                    source_company_id=company_id,
                 )
                 return final_answer
 
@@ -310,6 +324,7 @@ class QueryEngine:
                 query_id=query_id, route="structured_handler", outcome="abstained",
                 reason="structured_evidence_unavailable",
                 intent=candidate_plan.intent.value, evidence_count=0,
+                source_records=[], source_company_id=company_id,
             )
             return final_answer
 
