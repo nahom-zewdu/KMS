@@ -495,7 +495,7 @@ def test_reviewed_krt05_cases_produce_offline_production_path_report():
     assert by_id["seed-ambiguous-repository"]["abstain_reason"] == (
         "repository_scope_multiple_active_repositories"
     )
-    assert by_id["seed-followup-context"]["observed_route"] == "conversation_guard"
+    assert by_id["seed-followup-context"]["observed_route"] == "abstain"
     assert by_id["seed-followup-context"]["observed_handler_route"] == "conversation_guard"
     assert by_id["seed-followup-context"]["observed_disposition"] == "abstained"
     assert "route_mismatch" in by_id["seed-followup-context"]["failures"]
