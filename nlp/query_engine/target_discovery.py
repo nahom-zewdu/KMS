@@ -103,7 +103,7 @@ class DescriptiveSymbolCandidateRetriever:
         chunks = self.source_chunks.retrieve(
             company_id=plan.scope.company_id,
             repository_id=repository_id,
-            terms=terms,
+            terms=self._retrieval_terms(terms),
         )
         scoped_chunks = [
             chunk for chunk in chunks
@@ -216,6 +216,24 @@ class DescriptiveSymbolCandidateRetriever:
             if term and term.casefold() not in _GENERIC_TERMS
         ]
         return list(dict.fromkeys(terms))[:_MAX_QUERY_TERMS]
+
+    @staticmethod
+    def _retrieval_terms(terms: list[str]) -> list[str]:
+        """Add bounded morphological forms for literal source-chunk lookup."""
+        suffixes = (
+            ("ization", "ize"), ("isation", "ise"),
+            ("ation", "ate"), ("ment", ""),
+            ("ing", ""), ("ed", ""), ("s", ""),
+        )
+        expanded = list(terms)
+        for term in terms:
+            for suffix, replacement in suffixes:
+                if len(term) > len(suffix) + 3 and term.endswith(suffix):
+                    stem = term[:-len(suffix)] + replacement
+                    if len(stem) >= 4 and stem not in expanded:
+                        expanded.append(stem)
+                    break
+        return expanded[: _MAX_QUERY_TERMS * 2]
 
     @classmethod
     def _score(
