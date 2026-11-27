@@ -187,3 +187,31 @@ def test_krt05_unsupported_query_shapes_abstain(query):
 )
 def test_krt05_call_site_query_shapes_have_expected_intent(query):
     assert classify_query(query, scope=SCOPE).intent is QueryIntent.CALL_SITE_NAVIGATION
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "Where is SKU normalization implemented?",
+        "Where is the HTTP API handler defined?",
+        "Where is OAuth token validation implemented?",
+    ],
+)
+def test_uppercase_acronyms_are_not_inferred_as_symbol_identifiers(query):
+    plan = classify_query(query, scope=SCOPE)
+
+    assert plan.identifiers == ()
+
+
+@pytest.mark.parametrize(
+    ("query", "identifier"),
+    [
+        ("Where is normalize_sku implemented?", "normalize_sku"),
+        ("Where is findAvailable defined?", "findAvailable"),
+        ("Where is HTTPParser implemented?", "HTTPParser"),
+    ],
+)
+def test_explicit_symbol_shaped_names_remain_identifiers(query, identifier):
+    plan = classify_query(query, scope=SCOPE)
+
+    assert identifier in plan.identifiers
+
