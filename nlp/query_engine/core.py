@@ -47,7 +47,7 @@ class QueryEngine:
         self.supabase = supabase
         self.redis = redis
         self.outcome_observer = outcome_observer
-        self.legacy_synthesizer = legacy_synthesizer or reasoning_synthesize
+        self.legacy_synthesizer = legacy_synthesizer
         self.cache = QueryCache(redis)
         self.retriever = AdaptiveRetriever(supabase)
         self.repository_scope_resolver = TrustedRepositoryScopeResolver(supabase)
@@ -379,7 +379,7 @@ class QueryEngine:
             source_chunks = []
         if source_chunks:
             try:
-                raw_source_answer = self.legacy_synthesizer(
+                raw_source_answer = (self.legacy_synthesizer or reasoning_synthesize)(
                     effective_question,
                     source_chunks,
                     allowed_owners=[],
@@ -483,7 +483,7 @@ class QueryEngine:
             grounded_sources = sources_from_chunks(relevant_chunks)
             grounded_owners = owners_from_chunks(relevant_chunks)
             try:
-                raw = self.legacy_synthesizer(
+                raw = (self.legacy_synthesizer or reasoning_synthesize)(
                     question,
                     relevant_chunks,
                     allowed_owners=grounded_owners,
