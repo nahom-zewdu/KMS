@@ -18,11 +18,9 @@ EngineFactory = Callable[[Any], Any]
 def _observed_route(event: Mapping[str, Any]) -> str:
     handler_route = str(event.get("route") or "unobserved")
     outcome = str(event.get("outcome") or "unknown")
-    if handler_route == "conversation_guard":
-        return handler_route
-    # Route and disposition are independent measurements. A planned handler
-    # that abstains still executed the planned route; score abstention separately.
-    if handler_route == "adaptive" and outcome == "abstained":
+    # expected_route is the user-visible final disposition, not the internal
+    # handler selected. Preserve handler_route separately in each outcome.
+    if outcome == "abstained":
         return "abstain"
     return handler_route
 
@@ -190,9 +188,11 @@ def evaluate_production_path(
             "commit": commit,
             "environment": environment,
             "entrypoint": "QueryEngine.handle_query",
-            "llm_calls": 0,
-            "database_writes": 0,
             "engine_instance_per_case": True,
+            "offline_guarantees": [
+                "QueryEngine offline_evaluation mode returns before legacy LLM retrieval/synthesis fallbacks.",
+                "The integration fixture asserts zero query-time database inserts and zero RPC calls.",
+            ],
         },
         "summary": {
             "reviewed_cases": len(outcomes),
@@ -239,6 +239,7 @@ def write_report(report: Mapping[str, Any], path: str | Path) -> None:
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(
-        json.dumps(report, indent=2, sort_keys=True) + "\n",
+        json.dumps(report, indent=2, sort_keys=True) + "
+",
         encoding="utf-8",
     )
