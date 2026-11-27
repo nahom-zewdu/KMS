@@ -32,6 +32,7 @@ class MemoryQuery:
     def __init__(self, database, table):
         self.database = database
         self.table_name = table
+        self.not_ = _MemoryNotFilter(self)
         self.filters = []
         self.orders = []
         self.maximum = None
@@ -85,6 +86,8 @@ class MemoryQuery:
         for operator, column, value in self.filters:
             if operator == "eq":
                 selected = [row for row in selected if row.get(column) == value]
+            elif operator == "not_is":
+                selected = [row for row in selected if row.get(column) is not None]
             else:
                 # Fixture terms are literal strings; this is not a SQL LIKE emulator.
                 needle = value[1:-1].replace("\\\\", "\\")
@@ -105,6 +108,15 @@ class MemoryQuery:
         if self.maximum is not None:
             selected = selected[:self.maximum]
         return SimpleNamespace(data=selected)
+
+
+class _MemoryNotFilter:
+    def __init__(self, query):
+        self.query = query
+
+    def is_(self, column, value):
+        self.query.filters.append(("not_is", column, value))
+        return self.query
 
 
 class MemorySupabase:
