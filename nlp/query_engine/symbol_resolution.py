@@ -108,6 +108,14 @@ class ConservativeScipSymbolResolver:
                 or row.get("qualified_name") == source_value
             ]
 
+        if len(plan.file_paths) > 1:
+            return SymbolResolutionResult(None, "multiple_source_paths")
+        if plan.file_paths:
+            exact_rows = [
+                row for row in exact_rows
+                if row.get("file_path") == plan.file_paths[0]
+            ]
+
         declarations = self._unique_rows(exact_rows)
         if not declarations:
             return SymbolResolutionResult(None, "declaration_not_found")
