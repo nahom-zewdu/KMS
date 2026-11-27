@@ -35,6 +35,7 @@ class MemoryQuery:
         self.not_ = _MemoryNotFilter(self)
         self.filters = []
         self.orders = []
+        self.not_ = _MemoryNotFilter(self)
         self.maximum = None
         self.upsert_rows = None
 
@@ -122,11 +123,12 @@ class _MemoryNotFilter:
 class MemorySupabase:
     """One tenant and one active snapshot for the synthetic repository."""
 
-    def __init__(self):
+    def __init__(self, repositories=None):
         self.rows = {
-            "repositories": [{
+            "repositories": list(repositories) if repositories is not None else [{
                 "id": _REPOSITORY_ID,
                 "company_id": _COMPANY_ID,
+                "full_name": "benchmark/catalog",
                 "active_snapshot_id": _SNAPSHOT_ID,
             }],
             "code_symbols": [],
