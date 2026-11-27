@@ -36,9 +36,10 @@ class QueryEngine:
     The final production query engine.
     Handles any natural language question about engineering knowledge.
     """
-    def __init__(self, supabase: Client, redis: Redis):
+    def __init__(self, supabase: Client, redis: Redis, outcome_observer=None):
         self.supabase = supabase
         self.redis = redis
+        self.outcome_observer = outcome_observer
         self.cache = QueryCache(redis)
         self.retriever = AdaptiveRetriever(supabase)
         self.repository_scope_resolver = TrustedRepositoryScopeResolver(supabase)
@@ -53,6 +54,33 @@ class QueryEngine:
             ),
             symbol_resolver=ConservativeScipSymbolResolver(symbols, occurrences),
         )
+
+    def _observe_outcome(
+        self,
+        *,
+        query_id: str,
+        route: str,
+        outcome: str,
+        reason: str | None = None,
+        intent: str | None = None,
+        evidence_count: int = 0,
+    ) -> None:
+        """Emit structured execution telemetry for tests and offline evaluation."""
+        if self.outcome_observer is None:
+            return
+        event = {
+            "query_id": str(query_id),
+            "route": route,
+            "outcome": outcome,
+            "reason": reason,
+            "intent": intent,
+            "evidence_count": int(evidence_count),
+        }
+        try:
+            self.outcome_observer(event)
+        except Exception:
+            # Evaluation/telemetry callbacks must never change query behavior.
+            logger.exception("Query outcome observer failed | query_id=%s", query_id)
 
     def _cache_key(self, question: str, company_id: str, ramp_context: str | None = None) -> str:
         normalized_question = (question or "").strip()
@@ -192,6 +220,10 @@ class QueryEngine:
                 "reason=%s evidence_count=0",
                 query_id, reason,
             )
+            self._observe_outcome(
+                query_id=query_id, route="conversation_handler", outcome="abstained",
+                reason=reason, intent=candidate_plan.intent.value, evidence_count=0,
+            )
             return final_answer
 
         # Structured facts must be answered from authoritative records before
@@ -215,6 +247,13 @@ class QueryEngine:
                     "Structured answer sent | query_id=%s | company=%s",
                     query_id, company_id,
                 )
+                self._observe_outcome(
+                    query_id=query_id, route="structured_handler",
+                    outcome="abstained" if structured_result.get("abstain_reason") else "answered",
+                    reason=structured_result.get("abstain_reason"),
+                    intent=candidate_plan.intent.value,
+                    evidence_count=len(structured_result.get("sources") or []),
+                )
                 return final_answer
 
             # Never fall through to source/LLM retrieval for a query classified
@@ -224,6 +263,11 @@ class QueryEngine:
             logger.warning(
                 "Abstained on structured fact without authoritative evidence | %s | company=%s",
                 query_id, company_id,
+            )
+            self._observe_outcome(
+                query_id=query_id, route="structured_handler", outcome="abstained",
+                reason="structured_evidence_unavailable",
+                intent=candidate_plan.intent.value, evidence_count=0,
             )
             return final_answer
 
@@ -251,6 +295,11 @@ class QueryEngine:
                 )
                 final_answer = json.dumps(answer_json, indent=2)
                 self.redis.publish(f"query_results:{query_id}", final_answer)
+                self._observe_outcome(
+                    query_id=query_id, route="planned_query", outcome="abstained",
+                    reason=f"repository_scope_{scope_reason}",
+                    intent=candidate_plan.intent.value, evidence_count=0,
+                )
                 return final_answer
 
             def observe_planned_stage(stage: str, duration_ms: float) -> None:
@@ -290,6 +339,11 @@ class QueryEngine:
                     planned.plan.intent.value,
                     planned.answer.get("abstain_reason"),
                 )
+                self._observe_outcome(
+                    query_id=query_id, route="planned_query", outcome=outcome,
+                    reason=planned.answer.get("abstain_reason") or planned.reason,
+                    intent=planned.plan.intent.value, evidence_count=len(planned.evidence),
+                )
                 return final_answer
 
         # For file-explanation questions, retrieve bounded source text from files
@@ -323,6 +377,11 @@ class QueryEngine:
                     "Source-grounded answer sent | %s | company=%s | files=%d",
                     query_id, company_id, len(source_chunks),
                 )
+                self._observe_outcome(
+                    query_id=query_id, route="source_retrieval", outcome="answered",
+                    reason=None, intent=candidate_plan.intent.value if candidate_plan else None,
+                    evidence_count=len(source_chunks),
+                )
                 return final_answer
 
         # Non-structured routes retain the legacy structured fallback. A
@@ -344,6 +403,13 @@ class QueryEngine:
                 "Structured answer sent | query_id=%s | company=%s",
                 query_id, company_id,
             )
+            self._observe_outcome(
+                query_id=query_id, route="structured_handler",
+                outcome="abstained" if structured.get("abstain_reason") else "answered",
+                reason=structured.get("abstain_reason"),
+                intent=candidate_plan.intent.value if candidate_plan else None,
+                evidence_count=len(structured.get("sources") or []),
+            )
             return final_answer
 
         requires_structured_facts = bool(re.search(
@@ -360,12 +426,26 @@ class QueryEngine:
                 "Abstained on structured fact without authoritative evidence | %s | company=%s",
                 query_id, company_id,
             )
+            self._observe_outcome(
+                query_id=query_id, route="abstain", outcome="abstained",
+                reason="structured_evidence_unavailable",
+                intent=candidate_plan.intent.value if candidate_plan else None,
+                evidence_count=0,
+            )
             return final_answer
 
         cache_key = self._cache_key(effective_question, company_id, ramp_context)
         if cached := self.cache.get(cache_key):
             logger.info(f"Cache hit for query {query_id}")
             self.redis.publish(f"query_results:{query_id}", cached)
+            cached_payload = json.loads(cached)
+            self._observe_outcome(
+                query_id=query_id, route="adaptive_cache",
+                outcome="abstained" if cached_payload.get("abstain_reason") else "answered",
+                reason=cached_payload.get("abstain_reason"),
+                intent=candidate_plan.intent.value if candidate_plan else None,
+                evidence_count=len(cached_payload.get("sources") or []),
+            )
             return cached
 
         try:
@@ -431,5 +511,12 @@ class QueryEngine:
         logger.info(
             f"Answer sent | {query_id} | {latency_ms:.1f}ms | chunks={len(relevant_chunks)} | "
             f"company={company_id} | abstain={answer_json.get('abstain_reason')}"
+        )
+        self._observe_outcome(
+            query_id=query_id, route="adaptive",
+            outcome="abstained" if answer_json.get("abstain_reason") else "answered",
+            reason=answer_json.get("abstain_reason"),
+            intent=candidate_plan.intent.value if candidate_plan else None,
+            evidence_count=len(relevant_chunks),
         )
         return final_answer
