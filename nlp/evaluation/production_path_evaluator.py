@@ -45,7 +45,6 @@ def evaluate_production_path(
             continue
 
         events: list[dict[str, Any]] = []
-        engine = engine_factory(events.append)
         job = {
             "record_id": f"krt05:{case.id}",
             "company_id": case.scope.company_id,
@@ -63,6 +62,7 @@ def evaluate_production_path(
         answer: dict[str, Any] = {}
         execution_error = None
         try:
+            engine = engine_factory(events.append)
             raw_answer = engine.handle_query(job)
             answer = json.loads(raw_answer) if isinstance(raw_answer, str) else {}
             if not isinstance(answer, dict):
