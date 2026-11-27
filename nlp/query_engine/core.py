@@ -90,6 +90,13 @@ class QueryEngine:
             item for item in conversation_history[-8:]
             if isinstance(item, dict) and item.get("role") in {"user", "assistant"}
         ]
+        conversation_refs = payload.get("conversation_refs") or []
+        if not isinstance(conversation_refs, list):
+            conversation_refs = []
+        conversation_refs = [
+            ref for ref in conversation_refs
+            if isinstance(ref, str) and ref.strip()
+        ][:10]
 
         logger.info("Query received | query_id=%s | company=%s | ramp_context_present=%s", query_id, company_id, bool(ramp_context))
 
@@ -148,6 +155,7 @@ class QueryEngine:
                 effective_question,
                 scope=QueryScope(company_id=company_id),
                 conversation_history=conversation_history,
+                conversation_refs=conversation_refs,
             )
         except ValueError:
             candidate_plan = None
@@ -155,6 +163,36 @@ class QueryEngine:
             "kms_query_stage query_id=%s stage=route_classification duration_ms=%.3f",
             query_id, (time.perf_counter() - route_classification_started) * 1000,
         )
+
+        # Follow-ups require an explicit, resolvable conversation reference.
+        # Until a reference resolver is available, fail closed instead of
+        # falling through to unrelated source or graph retrieval.
+        if candidate_plan and candidate_plan.intent in {
+            QueryIntent.FOLLOW_UP, QueryIntent.CLARIFICATION
+        }:
+            reason = (
+                "conversation_context_unresolved"
+                if candidate_plan.intent is QueryIntent.FOLLOW_UP
+                else "ambiguous_follow_up"
+            )
+            answer_json = {
+                "answer": (
+                    "I can continue, but I need the specific file, function, or symbol "
+                    "you want me to trace."
+                ),
+                "confidence": "low",
+                "sources": [],
+                "owners": [],
+                "abstain_reason": reason,
+            }
+            final_answer = json.dumps(answer_json, indent=2)
+            self.redis.publish(f"query_results:{query_id}", final_answer)
+            logger.info(
+                "kms_query_outcome query_id=%s route=conversation outcome=abstained "
+                "reason=%s evidence_count=0",
+                query_id, reason,
+            )
+            return final_answer
 
         # Structured facts must be answered from authoritative records before
         # source retrieval or model synthesis can pre-empt the deterministic route.
