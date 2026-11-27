@@ -114,6 +114,11 @@ class DescriptiveSymbolCandidateRetriever:
             and chunk.repository_id == repository_id
             and chunk.evidence_type == "code_chunk"
             and chunk.file_path
+            and (not plan.file_paths or chunk.file_path in plan.file_paths)
+            and (
+                plan.constraints.source_revision is None
+                or chunk.source_revision == plan.constraints.source_revision
+            )
             and chunk.start_line > 0
             and chunk.end_line >= chunk.start_line
         ]
@@ -219,7 +224,7 @@ class DescriptiveSymbolCandidateRetriever:
                 continue
             offset = first - chunk.start_line
             selected.extend(lines[offset: offset + (last - first + 1)])
-        return "\\n".join(selected)
+        return "\n".join(selected)
 
     @staticmethod
     def _query_terms(plan: QueryPlan) -> list[str]:
