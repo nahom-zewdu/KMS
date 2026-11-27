@@ -77,6 +77,42 @@ def evaluate_production_path(
         route = _observed_route(event) if event else "unobserved"
         observed_intent = event.get("intent")
         reason = event.get("reason") or answer.get("abstain_reason")
+        evidence_items = event.get("evidence") or []
+        expected_scope = case.scope
+        evidence_scope_violations = [
+            item for item in evidence_items
+            if (
+                item.get("company_id") != expected_scope.company_id
+                or (
+                    expected_scope.repository_id is not None
+                    and item.get("repository_id") != expected_scope.repository_id
+                )
+                or (
+                    expected_scope.snapshot_id is not None
+                    and item.get("snapshot_id") != expected_scope.snapshot_id
+                )
+                or (
+                    expected_scope.source_revision is not None
+                    and item.get("source_revision") != expected_scope.source_revision
+                )
+            )
+        ]
+        evidence_ids = {
+            str(item.get("evidence_id"))
+            for item in evidence_items if item.get("evidence_id")
+        }
+        citation_ids = {
+            str(evidence_id)
+            for claim in answer.get("claims", [])
+            if isinstance(claim, Mapping)
+            for evidence_id in (claim.get("evidence_ids") or [])
+            if isinstance(evidence_id, str)
+        }
+        unknown_citations = sorted(citation_ids - evidence_ids)
+        if evidence_scope_violations:
+            failures.append("evidence_provenance_mismatch")
+        if unknown_citations:
+            failures.append("citation_membership_mismatch")
 
         if not event:
             failures.append("production_outcome_unobserved")
@@ -103,10 +139,18 @@ def evaluate_production_path(
             "observed_disposition": disposition,
             "abstain_reason": reason,
             "evidence_count": event.get("evidence_count"),
+            "evidence_provenance": (
+                "valid" if evidence_items and not evidence_scope_violations
+                else "no_evidence" if not evidence_items and not event.get("evidence_count")
+                else "mismatch" if evidence_scope_violations
+                else "not_available_for_route"
+            ),
+            "evidence_items": evidence_items,
+            "citation_ids": sorted(citation_ids),
+            "unknown_citation_ids": unknown_citations,
             "execution_error": execution_error,
             "passed": not failures,
             "failures": failures,
-            "evidence_provenance": "not_observable",
             "semantic_claim_support": "not_evaluated",
         })
 
@@ -154,8 +198,8 @@ def evaluate_production_path(
             ),
         },
         "measurement_limits": [
-            "Evidence objects and provenance are not exposed by QueryEngine.handle_query.",
-            "Citation membership and evidence recall are not measured by this adapter.",
+            "Evidence provenance is checked only for evidence exposed through the outcome observer.",
+            "Citation membership is checked against the observed evidence IDs; evidence recall against retrieval-task labels is not measured here.",
             "Semantic claim support requires independent human review.",
             "A deterministic fixture run does not establish production database or RLS behavior.",
         ],
