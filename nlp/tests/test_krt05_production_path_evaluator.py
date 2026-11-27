@@ -81,8 +81,9 @@ def test_production_evaluator_does_not_promote_follow_up_guard_to_handler():
     report = evaluate_production_path(dataset, factory, commit="abc123")
     outcome = report["outcomes"][0]
 
-    assert outcome["observed_route"] == "conversation_guard"
+    assert outcome["observed_route"] == "abstain"
     assert outcome["observed_handler_route"] == "conversation_guard"
+    assert outcome["observed_disposition"] == "abstained"
     assert not outcome["passed"]
     assert "route_mismatch" in outcome["failures"]
 
@@ -240,3 +241,24 @@ def test_production_evaluator_validates_structured_source_tenant_scope():
 
     assert outcome["evidence_provenance"] == "mismatch"
     assert "evidence_provenance_mismatch" in outcome["failures"]
+
+
+
+def test_production_evaluator_scores_final_disposition_separately_from_handler_route():
+    from evaluation.production_path_evaluator import _observed_route
+
+    assert _observed_route({"route": "planned_query", "outcome": "abstained"}) == "abstain"
+    assert _observed_route({"route": "conversation_guard", "outcome": "abstained"}) == "abstain"
+    assert _observed_route({"route": "planned_query", "outcome": "answered"}) == "planned_query"
+
+
+def test_write_report_produces_parseable_json_with_real_newline(tmp_path):
+    import json
+    from evaluation.production_path_evaluator import write_report
+
+    path = tmp_path / "report.json"
+    write_report({"summary": {"passed_cases": 1}}, path)
+
+    raw = path.read_text(encoding="utf-8")
+    assert raw.endswith("\n")
+    assert json.loads(raw) == {"summary": {"passed_cases": 1}}
