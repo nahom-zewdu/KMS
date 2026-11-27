@@ -267,7 +267,12 @@ def test_query_engine_routes_repository_count_before_source_retrieval(monkeypatc
     db = _FixtureSupabase({
         "repositories": _structured_repository_rows(),
     })
-    engine = QueryEngine(supabase=db, redis=_FakeRedis())
+    observed = []
+    engine = QueryEngine(
+        supabase=db,
+        redis=_FakeRedis(),
+        outcome_observer=observed.append,
+    )
 
     def unexpected_source_retrieval(*_args, **_kwargs):
         raise AssertionError("structured facts must not enter source retrieval")
@@ -287,6 +292,14 @@ def test_query_engine_routes_repository_count_before_source_retrieval(monkeypatc
     assert payload["answer"] == "2 connected repositories are registered for this company."
     assert payload["abstain_reason"] is None
     assert engine.redis.messages[0][0] == "query_results:krt05-structured-count"
+    assert observed == [{
+        "query_id": "krt05-structured-count",
+        "route": "structured_handler",
+        "outcome": "answered",
+        "reason": None,
+        "intent": "structured_fact",
+        "evidence_count": 2,
+    }]
 
 
 
@@ -366,3 +379,27 @@ def test_structured_repository_count_reports_zero_without_fabricating_sources():
 
     assert result["answer"].startswith("0 connected repositories")
     assert result["sources"] == []
+
+
+
+def test_query_engine_outcome_observer_failure_does_not_change_query_result():
+    db = _FixtureSupabase({"repositories": _structured_repository_rows()})
+
+    def broken_observer(_event):
+        raise RuntimeError("telemetry unavailable")
+
+    engine = QueryEngine(
+        supabase=db,
+        redis=_FakeRedis(),
+        outcome_observer=broken_observer,
+    )
+
+    result = engine.handle_query({
+        "record_id": "krt05-observer-failure",
+        "company_id": "benchmark-company",
+        "content": "How many repositories are connected to this company?",
+    })
+
+    payload = json.loads(result)
+    assert payload["answer"] == "2 connected repositories are registered for this company."
+    assert payload["abstain_reason"] is None
