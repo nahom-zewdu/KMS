@@ -9,11 +9,20 @@ from query_engine.evidence import EvidenceCandidate
 class SourceChunkRetriever:
     """Retrieve source passages using bounded literal term matches."""
 
-    def __init__(self, supabase: Any, *, max_results: int = 50) -> None:
+    def __init__(
+        self,
+        supabase: Any,
+        *,
+        max_results: int = 50,
+        minimum_matched_terms: int = 2,
+    ) -> None:
         if max_results < 1 or max_results > 500:
             raise ValueError("max_results must be between 1 and 500")
+        if minimum_matched_terms < 1 or minimum_matched_terms > 20:
+            raise ValueError("minimum_matched_terms must be between 1 and 20")
         self.supabase = supabase
         self.max_results = max_results
+        self.minimum_matched_terms = minimum_matched_terms
 
     def retrieve(
         self,
@@ -74,7 +83,20 @@ class SourceChunkRetriever:
                 int(row.get("start_byte") or 0),
             )
 
-        ordered = sorted(rows_by_id.values(), key=relevance)[: self.max_results]
+        # A single broad token (for example, "invoice") is not enough to
+        # establish relevance for a multi-concept question. Keep single-term
+        # retrieval usable, but require independent lexical overlap once the
+        # query supplies multiple terms. This is a candidate-quality gate, not
+        # a semantic entailment check.
+        required_matches = min(self.minimum_matched_terms, len(normalized))
+        relevant_rows = [
+            row for row in rows_by_id.values()
+            if sum(
+                term.casefold() in str(row.get("content") or "").casefold()
+                for term in normalized
+            ) >= required_matches
+        ]
+        ordered = sorted(relevant_rows, key=relevance)[: self.max_results]
         candidates: list[EvidenceCandidate] = []
         for row in ordered:
             content = str(row["content"])
