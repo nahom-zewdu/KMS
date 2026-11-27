@@ -208,6 +208,29 @@ def test_ambiguous_what_followup_does_not_query_unrelated_evidence():
     engine.retriever.retrieve.assert_not_called()
 
 
+def test_followup_with_reference_fails_closed_until_context_resolver_exists():
+    engine = _make_engine()
+    result = engine.handle_query({
+        "record_id": "q-followup-reference",
+        "company_id": "company-123",
+        "content": "And where is that implemented?",
+        "payload": {
+            "question": "And where is that implemented?",
+            "conversation_history": [
+                {"role": "user", "content": "Explain the billing module."},
+                {"role": "assistant", "content": "The billing module calculates invoice totals."},
+            ],
+            "conversation_refs": ["seed-context-billing"],
+        },
+    })
+
+    payload = json.loads(result)
+    assert payload["abstain_reason"] == "conversation_context_unresolved"
+    assert payload["sources"] == []
+    engine.retriever.retrieve.assert_not_called()
+    assert engine.redis.messages[0][0] == "query_results:q-followup-reference"
+
+
 def test_thank_you_followup_does_not_query_knowledge_graph():
     engine = _make_engine()
     result = engine.handle_query({
