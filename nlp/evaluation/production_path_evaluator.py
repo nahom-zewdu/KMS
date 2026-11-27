@@ -78,6 +78,8 @@ def evaluate_production_path(
         observed_intent = event.get("intent")
         reason = event.get("reason") or answer.get("abstain_reason")
         evidence_items = event.get("evidence") or []
+        source_records = event.get("source_records") or []
+        source_company_id = event.get("source_company_id")
         expected_scope = case.scope
         evidence_scope_violations = [
             item for item in evidence_items
@@ -109,7 +111,15 @@ def evaluate_production_path(
             if isinstance(evidence_id, str)
         }
         unknown_citations = sorted(citation_ids - evidence_ids)
-        if evidence_scope_violations:
+        structured_source_scope_valid = (
+            bool(source_records)
+            and source_company_id == expected_scope.company_id
+        )
+        structured_source_scope_mismatch = (
+            bool(source_records)
+            and source_company_id != expected_scope.company_id
+        )
+        if evidence_scope_violations or structured_source_scope_mismatch:
             failures.append("evidence_provenance_mismatch")
         if unknown_citations:
             failures.append("citation_membership_mismatch")
@@ -141,11 +151,14 @@ def evaluate_production_path(
             "evidence_count": event.get("evidence_count"),
             "evidence_provenance": (
                 "valid" if evidence_items and not evidence_scope_violations
-                else "no_evidence" if not evidence_items and not event.get("evidence_count")
-                else "mismatch" if evidence_scope_violations
+                else "valid_structured_records" if structured_source_scope_valid
+                else "no_evidence" if not evidence_items and not source_records and not event.get("evidence_count")
+                else "mismatch" if evidence_scope_violations or structured_source_scope_mismatch
                 else "not_available_for_route"
             ),
             "evidence_items": evidence_items,
+            "structured_source_records": source_records,
+            "structured_source_company_id": source_company_id,
             "citation_ids": sorted(citation_ids),
             "unknown_citation_ids": unknown_citations,
             "execution_error": execution_error,
@@ -204,7 +217,7 @@ def evaluate_production_path(
             ),
         },
         "measurement_limits": [
-            "Evidence provenance is checked only for evidence exposed through the outcome observer.",
+            "Code evidence provenance is checked against bounded evidence metadata; structured source records are checked against their observed company scope.",
             "Citation membership is checked against the observed evidence IDs; evidence recall against retrieval-task labels is not measured here.",
             "Semantic claim support requires independent human review.",
             "A deterministic fixture run does not establish production database or RLS behavior.",
