@@ -165,3 +165,44 @@ def test_production_evaluator_records_engine_factory_failure():
     assert outcome["observed_route"] == "unobserved"
     assert "execution_error" in outcome["failures"]
     assert "production_outcome_unobserved" in outcome["failures"]
+
+
+
+def test_production_evaluator_checks_observed_evidence_scope_and_citations():
+    dataset, case = _one_case("seed-decl-01")
+    evidence_id = "evidence:fixture-1"
+
+    def factory(observer):
+        return _FakeEngine(
+            observer,
+            {
+                "query_id": f"krt05:{case.id}",
+                "route": "planned_query",
+                "outcome": "answered",
+                "reason": None,
+                "intent": "declaration_discovery",
+                "evidence_count": 1,
+                "evidence": [{
+                    "evidence_id": evidence_id,
+                    "company_id": "another-company",
+                    "repository_id": case.scope.repository_id,
+                    "snapshot_id": case.scope.snapshot_id,
+                    "source_revision": case.scope.source_revision,
+                }],
+            },
+            {
+                "answer": "Found it.",
+                "abstain_reason": None,
+                "claims": [{"text": "A claim.", "evidence_ids": ["unknown-evidence"]}],
+            },
+        )
+
+    report = evaluate_production_path(dataset, factory, commit="abc123")
+    outcome = report["outcomes"][0]
+
+    assert outcome["evidence_provenance"] == "mismatch"
+    assert outcome["unknown_citation_ids"] == ["unknown-evidence"]
+    assert "evidence_provenance_mismatch" in outcome["failures"]
+    assert "citation_membership_mismatch" in outcome["failures"]
+    assert report["summary"]["evidence_provenance_violations"] == 1
+    assert report["summary"]["citation_membership_violations"] == 1
