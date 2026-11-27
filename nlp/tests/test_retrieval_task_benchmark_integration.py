@@ -7,7 +7,9 @@ query planning, RLS, or production repository quality.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
+import subprocess
 from statistics import mean
 from types import SimpleNamespace
 
@@ -18,7 +20,7 @@ from codebase.symbol_indexer import CodeSymbolIndexer
 from query_engine.code_lexical import CodeLexicalRetriever
 from query_engine.core import QueryEngine
 from evaluation.benchmark import load_benchmark
-from evaluation.production_path_evaluator import evaluate_production_path
+from evaluation.production_path_evaluator import evaluate_production_path, write_report
 
 _FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "retrieval"
 _REPOSITORY_ROOT = _FIXTURE_ROOT / "mini_repo_v2"
@@ -426,16 +428,30 @@ def test_reviewed_krt05_cases_execute_through_real_query_engine_on_synthetic_rep
             },
         )
 
+    commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
     report = evaluate_production_path(
         dataset,
         engine_factory,
-        commit="synthetic-fixture-run",
+        commit=commit,
         environment="offline-multi-repository-fixture",
     )
+    report_path = os.getenv("KRT05_REPORT_PATH")
+    if report_path:
+        write_report(report, report_path)
+    print(json.dumps(report["summary"], indent=2, sort_keys=True))
     by_id = {item["case_id"]: item for item in report["outcomes"]}
 
     assert report["summary"]["reviewed_cases"] == 24
+    assert report["summary"]["executed_cases"] == 24
+    assert report["summary"]["passed_cases"] + report["summary"]["failed_cases"] == 24
     assert report["summary"]["execution_errors"] == 0
+    assert report["execution"]["commit"] == commit
+    assert len(by_id) == 24
     assert by_id["seed-structured-count"]["observed_route"] == "structured_handler"
     assert by_id["seed-structured-count"]["evidence_provenance"] == "valid_structured_records"
     assert by_id["seed-ambiguous-repository"]["observed_route"] == "abstain"
