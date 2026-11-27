@@ -16,6 +16,9 @@ from codebase.source_chunk_retriever import SourceChunkRetriever
 from codebase.source_chunker import SourceChunker
 from codebase.symbol_indexer import CodeSymbolIndexer
 from query_engine.code_lexical import CodeLexicalRetriever
+from query_engine.core import QueryEngine
+from evaluation.benchmark import load_benchmark
+from evaluation.production_path_evaluator import evaluate_production_path
 
 _FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "retrieval"
 _REPOSITORY_ROOT = _FIXTURE_ROOT / "mini_repo_v2"
@@ -32,7 +35,6 @@ class MemoryQuery:
     def __init__(self, database, table):
         self.database = database
         self.table_name = table
-        self.not_ = _MemoryNotFilter(self)
         self.filters = []
         self.orders = []
         self.not_ = _MemoryNotFilter(self)
@@ -337,3 +339,109 @@ def test_task_separated_retrieval_benchmark_reports_per_query_results():
     assert call_result["metrics"]["evaluated_queries"] == 10
     assert passage_result["metrics"]["evaluated_queries"] == 10
     assert len(empty_results) == 3
+
+
+
+def test_reviewed_krt05_cases_execute_through_real_query_engine_on_synthetic_repository():
+    """Run every reviewed contract against indexed fixture data and real routing."""
+    evaluation_root = Path(__file__).parent / "fixtures" / "evaluation"
+    dataset = load_benchmark(evaluation_root / "krt05_seed_v1.json")
+    repositories = [
+        {
+            "id": _REPOSITORY_ID,
+            "company_id": _COMPANY_ID,
+            "full_name": "benchmark/catalog",
+            "active_snapshot_id": _SNAPSHOT_ID,
+        },
+        {
+            "id": "repo-billing",
+            "company_id": _COMPANY_ID,
+            "full_name": "benchmark/billing",
+            "active_snapshot_id": "benchmark-billing-snapshot-v1",
+        },
+    ]
+    database = MemorySupabase(repositories=repositories)
+    source_files = [{
+        "path": path.relative_to(_REPOSITORY_ROOT).as_posix(),
+        "content": path.read_text(encoding="utf-8"),
+    } for path in sorted(_REPOSITORY_ROOT.rglob("*.py"))]
+
+    CodeSymbolIndexer(database).index_files(
+        source_files,
+        repository_id=_REPOSITORY_ID,
+        snapshot_id=_SNAPSHOT_ID,
+        company_id=_COMPANY_ID,
+        source_revision=_SOURCE_REVISION,
+    )
+    SourceChunkIndexer(
+        database,
+        chunker=SourceChunker(
+            max_source_bytes=1_000_000,
+            max_chunk_bytes=1_200,
+            max_lines=5,
+            overlap_lines=1,
+            chunker_version="krt05-production-line-window-v1",
+        ),
+    ).index_files(
+        source_files,
+        repository_id=_REPOSITORY_ID,
+        snapshot_id=_SNAPSHOT_ID,
+        company_id=_COMPANY_ID,
+        source_revision=_SOURCE_REVISION,
+    )
+
+    class OfflineRedis:
+        def publish(self, _channel, _message):
+            return None
+
+        def get(self, _key):
+            return None
+
+        def setex(self, *_args):
+            return None
+
+    def deterministic_synthesizer(_question, evidence):
+        first = evidence[0]
+        return {
+            "answer": f"Fixture evidence found in {first.file_path}.",
+            "confidence": "high",
+            "claims": [{
+                "text": f"Fixture evidence is present in {first.file_path}.",
+                "evidence_ids": [first.evidence_id],
+            }],
+        }
+
+    def engine_factory(observer):
+        return QueryEngine(
+            supabase=database,
+            redis=OfflineRedis(),
+            outcome_observer=observer,
+            planned_synthesizer=deterministic_synthesizer,
+            legacy_synthesizer=lambda *_args, **_kwargs: {
+                "answer": "Legacy synthesis is disabled in this fixture.",
+                "confidence": "low",
+                "sources": [],
+                "owners": [],
+                "abstain_reason": "legacy_synthesis_disabled",
+            },
+        )
+
+    report = evaluate_production_path(
+        dataset,
+        engine_factory,
+        commit="synthetic-fixture-run",
+        environment="offline-multi-repository-fixture",
+    )
+    by_id = {item["case_id"]: item for item in report["outcomes"]}
+
+    assert report["summary"]["reviewed_cases"] == 24
+    assert report["summary"]["execution_errors"] == 0
+    assert by_id["seed-structured-count"]["observed_route"] == "structured_handler"
+    assert by_id["seed-structured-count"]["evidence_provenance"] == "valid_structured_records"
+    assert by_id["seed-ambiguous-repository"]["observed_route"] == "abstain"
+    assert by_id["seed-ambiguous-repository"]["abstain_reason"] == (
+        "repository_scope_multiple_active_repositories"
+    )
+    assert by_id["seed-followup-context"]["observed_route"] == "conversation_guard"
+    assert "route_mismatch" in by_id["seed-followup-context"]["failures"]
+    assert report["semantic_claim_support"]["status"] == "not_evaluated"
