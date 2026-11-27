@@ -41,7 +41,7 @@ def _make_engine():
 def test_query_with_no_ramp_context_uses_content_question_and_keeps_behavior():
     engine = _make_engine()
     original_classifier = core_module.classify_query
-    core_module.classify_query = Mock(return_value=SimpleNamespace(intent=QueryIntent.UNSUPPORTED))
+    core_module.classify_query = Mock(return_value=None)
     engine.cache.get = Mock(return_value=None)
 
     original = core_module.reasoning_synthesize
@@ -72,7 +72,7 @@ def test_query_with_no_ramp_context_uses_content_question_and_keeps_behavior():
 def test_query_with_ramp_context_uses_question_for_retrieval_but_passes_context_to_synthesis():
     engine = _make_engine()
     original_classifier = core_module.classify_query
-    core_module.classify_query = Mock(return_value=SimpleNamespace(intent=QueryIntent.UNSUPPORTED))
+    core_module.classify_query = Mock(return_value=None)
     original = core_module.reasoning_synthesize
     core_module.reasoning_synthesize = Mock(return_value={
         "answer": "Billing is handled here.",
@@ -106,7 +106,7 @@ def test_query_with_ramp_context_uses_question_for_retrieval_but_passes_context_
 def test_company_scope_is_preserved_and_ramp_context_does_not_become_company_evidence():
     engine = _make_engine()
     original_classifier = core_module.classify_query
-    core_module.classify_query = Mock(return_value=SimpleNamespace(intent=QueryIntent.UNSUPPORTED))
+    core_module.classify_query = Mock(return_value=None)
     original = core_module.reasoning_synthesize
     captured = {}
 
@@ -159,7 +159,7 @@ def test_cache_key_changes_for_materially_different_ramp_contexts():
 def test_short_acknowledgement_resolves_to_previous_user_question():
     engine = _make_engine()
     original_classifier = core_module.classify_query
-    core_module.classify_query = Mock(return_value=SimpleNamespace(intent=QueryIntent.UNSUPPORTED))
+    core_module.classify_query = Mock(return_value=None)
     original_synth = core_module.reasoning_synthesize
     original_structured = core_module.answer_structured_question
     core_module.answer_structured_question = Mock(return_value=None)
