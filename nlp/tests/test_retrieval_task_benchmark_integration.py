@@ -42,6 +42,7 @@ class MemoryQuery:
         self.not_ = _MemoryNotFilter(self)
         self.maximum = None
         self.upsert_rows = None
+        self.insert_rows = None
 
     def select(self, _columns):
         return self
@@ -54,8 +55,17 @@ class MemoryQuery:
         self.filters.append(("ilike", column, pattern))
         return self
 
-    def order(self, column):
-        self.orders.append(column)
+    def order(self, column, desc=False):
+        self.orders.append((column, bool(desc)))
+        return self
+
+    def in_(self, column, values):
+        self.filters.append(("in", column, set(values)))
+        return self
+
+    def insert(self, rows):
+        self.insert_rows = rows if isinstance(rows, list) else [rows]
+        self.database.write_attempts += 1
         return self
 
     def limit(self, maximum):
@@ -68,6 +78,9 @@ class MemoryQuery:
 
     def execute(self):
         rows = self.database.rows.setdefault(self.table_name, [])
+        if self.insert_rows is not None:
+            rows.extend(dict(row) for row in self.insert_rows)
+            return SimpleNamespace(data=self.insert_rows)
         if self.upsert_rows is not None:
             key_fields = (
                 ("snapshot_id", "symbol_id")
@@ -93,6 +106,8 @@ class MemoryQuery:
                 selected = [row for row in selected if row.get(column) == value]
             elif operator == "not_is":
                 selected = [row for row in selected if row.get(column) is not None]
+            elif operator == "in":
+                selected = [row for row in selected if row.get(column) in value]
             else:
                 # Fixture terms are literal strings; this is not a SQL LIKE emulator.
                 needle = value[1:-1].replace("\\\\", "\\")
@@ -101,14 +116,15 @@ class MemoryQuery:
                     row for row in selected
                     if needle.casefold() in str(row.get(column) or "").casefold()
                 ]
-        for column in reversed(self.orders):
+        for column, descending in reversed(self.orders):
             # Preserve native column types (e.g. integer line/byte offsets).
             # Keep NULL values last.
             selected.sort(
                 key=lambda row: (
                     row.get(column) is None,
                     row.get(column) if row.get(column) is not None else 0,
-                )
+                ),
+                reverse=descending,
             )
         if self.maximum is not None:
             selected = selected[:self.maximum]
@@ -137,10 +153,17 @@ class MemorySupabase:
             }],
             "code_symbols": [],
             "source_code_chunks": [],
+            "codebase_files": [],
         }
+        self.write_attempts = 0
+        self.rpc_calls = 0
 
     def table(self, name):
         return MemoryQuery(self, name)
+
+    def rpc(self, *_args, **_kwargs):
+        self.rpc_calls += 1
+        raise AssertionError("RPC is forbidden in the offline KRT-05 harness")
 
 
 def _scope(candidate):
@@ -392,6 +415,9 @@ def test_reviewed_krt05_cases_execute_through_real_query_engine_on_synthetic_rep
         source_revision=_SOURCE_REVISION,
     )
 
+    # Indexing writes are fixture setup, not query-time writes.
+    database.write_attempts = 0
+
     class OfflineRedis:
         def publish(self, _channel, _message):
             return None
@@ -426,6 +452,7 @@ def test_reviewed_krt05_cases_execute_through_real_query_engine_on_synthetic_rep
                 "owners": [],
                 "abstain_reason": "legacy_synthesis_disabled",
             },
+            offline_evaluation=True,
         )
 
     commit = subprocess.run(
@@ -454,10 +481,14 @@ def test_reviewed_krt05_cases_execute_through_real_query_engine_on_synthetic_rep
     assert len(by_id) == 24
     assert by_id["seed-structured-count"]["observed_route"] == "structured_handler"
     assert by_id["seed-structured-count"]["evidence_provenance"] == "valid_structured_records"
+    assert by_id["seed-ambiguous-repository"]["observed_handler_route"] == "planned_query"
+    assert by_id["seed-ambiguous-repository"]["observed_disposition"] == "abstained"
     assert by_id["seed-ambiguous-repository"]["observed_route"] == "abstain"
     assert by_id["seed-ambiguous-repository"]["abstain_reason"] == (
         "repository_scope_multiple_active_repositories"
     )
     assert by_id["seed-followup-context"]["observed_route"] == "conversation_guard"
     assert "route_mismatch" in by_id["seed-followup-context"]["failures"]
+    assert database.rpc_calls == 0
+    assert database.write_attempts == 0
     assert report["semantic_claim_support"]["status"] == "not_evaluated"
